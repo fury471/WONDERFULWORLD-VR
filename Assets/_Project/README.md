@@ -7,23 +7,30 @@ This folder contains all team-owned game content for Wonderful World.
 - Put new team work here, not in `Assets/Samples`, `Assets/VRTemplateAssets`, `Assets/XR`, or `Assets/XRI`.
 - `Core` is for shared systems used by many features.
 - `Features` is for gameplay modules that should stay as decoupled as possible.
-- `World` is where regions and persistent scenes assemble the game world.
+- `World` is where the master park scene, zone prefabs, shared lighting, and world assembly content live.
 - `Sandbox` is for personal prototype scenes and experiments.
 - Use placeholder assets first to validate logic before final art.
+
+## Current M1 world workflow
+
+- For the current vertical slice, the team is building one master playable scene, not separate playable region scenes.
+- The master scene should live in `World/Persistent` as `World_WonderlandPark.unity`.
+- `World/Regions` should store zone blockouts, landmarks, attraction staging prefabs, and other content that gets placed into the master scene.
+- If performance or collaboration later require a scene split, that can be introduced in a later milestone.
 
 ## Suggested workflow
 
 1. Create a feature branch.
 2. Build the mechanic inside its feature folder.
 3. Test it in your personal sandbox scene.
-4. Integrate the prefab into the appropriate world region.
+4. Integrate the prefab into the appropriate park zone content under `World/Regions`, then place it into the master world scene.
 5. Merge back to `main` only after the branch is stable.
 
 ## Folder overview
 
 - `Core`: shared runtime systems, input, scene management, settings, audio, tests.
 - `Features`: one folder per gameplay system.
-- `World`: persistent scene content and region-based world assembly.
+- `World`: master scene content, zone prefab content, shared lighting, shared materials, and world assembly.
 - `Characters`: creature-specific content, such as the cat.
 - `Art`: shared shaders, materials, textures, models, placeholders.
 - `Audio`: project audio content.
