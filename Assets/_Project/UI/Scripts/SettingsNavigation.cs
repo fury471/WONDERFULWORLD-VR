@@ -22,6 +22,7 @@ namespace Wonderland.UI
             if (btnGeneral != null) btnGeneral.onClick.AddListener(ShowGeneral);
             if (btnComfort != null) btnComfort.onClick.AddListener(ShowComfort);
             if (btnAudio != null) btnAudio.onClick.AddListener(ShowAudio);
+            if (btnClose != null) btnClose.onClick.AddListener(ClosePanel);
         }
 
         void Start()
@@ -41,7 +42,7 @@ namespace Wonderland.UI
 
             if (target != null) target.SetActive(true);
 
-            if (btnClose != null) btnClose.onClick.AddListener(ClosePanel);
+            
         }
 
         public void ClosePanel()
