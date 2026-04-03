@@ -16,6 +16,9 @@ public class WeatherPreset : ScriptableObject
     [Header("Identity")]
     public WeatherType weatherType;
 
+    [Header("Sky")]
+    public Material skyboxMaterial;
+
     [Header("Lighting")]
     public Color directionalLightColor = Color.white;
     [Range(0f, 8f)] public float directionalLightIntensity = 1f;
@@ -137,6 +140,7 @@ public class WeatherManager : MonoBehaviour
     private void ApplyImmediate(WeatherPreset preset)
     {
         CurrentPreset = preset;
+        ApplySkybox(preset);
         ApplyLighting(preset);
         ApplyFog(preset);
         ApplyParticles(preset);
@@ -149,6 +153,12 @@ public class WeatherManager : MonoBehaviour
 
     private void ApplyBlended(WeatherPreset from, WeatherPreset to, float t)
     {
+        if (t >= 0.5f && to.skyboxMaterial != null && RenderSettings.skybox != to.skyboxMaterial)
+        {
+            RenderSettings.skybox = to.skyboxMaterial;
+            DynamicGI.UpdateEnvironment();
+        }
+
         if (directionalLight != null)
         {
             directionalLight.color = Color.Lerp(from.directionalLightColor, to.directionalLightColor, t);
@@ -164,6 +174,18 @@ public class WeatherManager : MonoBehaviour
 
         ApplyParticleBlend(rainParticles, from.rainParticlesEnabled, to.rainParticlesEnabled, from.particleEmissionMultiplier, to.particleEmissionMultiplier, t);
         ApplyParticleBlend(windParticles, from.windParticlesEnabled, to.windParticlesEnabled, from.particleEmissionMultiplier, to.particleEmissionMultiplier, t);
+    }
+
+    private void ApplySkybox(WeatherPreset preset)
+    {
+        if (preset.skyboxMaterial == null)
+            return;
+
+        if (RenderSettings.skybox != preset.skyboxMaterial)
+        {
+            RenderSettings.skybox = preset.skyboxMaterial;
+            DynamicGI.UpdateEnvironment();
+        }
     }
 
     private void ApplyLighting(WeatherPreset preset)
