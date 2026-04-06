@@ -8,6 +8,7 @@ public class ParticleCollector : MonoBehaviour
     [SerializeField] private Transform leftHandTransform;
     [SerializeField] private Transform debugSource;
     [SerializeField] private ParticleSystem absorbParticleSystem;
+    [SerializeField] private InputActionReference collectAction;
 
     [Header("Collection")]
     [SerializeField] private float collectRadius = 1.5f;
@@ -45,7 +46,7 @@ public class ParticleCollector : MonoBehaviour
     [SerializeField] private float minColorAlpha = 0.35f;
     [SerializeField] private float maxColorAlpha = 0.85f;
 
-    [Header("Prompt UI")]
+    [Header("Prompt State")]
     [SerializeField] private float promptAutoHideSeconds = 5f;
     [SerializeField] private float warningDurationSeconds = 2f;
     [SerializeField] private bool enableDebugLogs = true;
@@ -76,6 +77,22 @@ public class ParticleCollector : MonoBehaviour
         }
     }
 
+    public bool ShowCollectPrompt => showCollectPrompt;
+    public bool CollectPromptConfirmed => collectPromptConfirmed;
+    public string WarningMessage => warningMessage;
+    public float CollectPromptSecondsRemaining => Mathf.Max(0f, collectPromptHideTime - Time.time);
+    public float WarningSecondsRemaining => Mathf.Max(0f, warningHideTime - Time.time);
+
+    private void OnEnable()
+    {
+        collectAction?.action?.Enable();
+    }
+
+    private void OnDisable()
+    {
+        collectAction?.action?.Disable();
+    }
+
     private void Update()
     {
         if (shapeSystem == null || leftHandTransform == null)
@@ -83,16 +100,16 @@ public class ParticleCollector : MonoBehaviour
             return;
         }
 
-        Keyboard keyboard = Keyboard.current;
-        if (keyboard == null)
+        UpdateCollectPromptState();
+        UpdateWindVfx();
+
+        InputAction action = collectAction != null ? collectAction.action : null;
+        if (action == null)
         {
             return;
         }
 
-        UpdateCollectPromptState();
-        UpdateWindVfx();
-
-        if (keyboard.gKey.wasPressedThisFrame)
+        if (action.WasPressedThisFrame())
         {
             if (shapeSystem.CurrentShape != ParticleShapeSystem.ShapeType.HoldCloud
                 && shapeSystem.ActiveParticleCount > 0)
@@ -106,13 +123,13 @@ public class ParticleCollector : MonoBehaviour
             absorbHoldStartTime = Time.time;
         }
 
-        if (keyboard.gKey.isPressed)
+        if (action.IsPressed())
         {
             bool startedAbsorption = TryCollectWhileHeld();
             shouldShowShapeSelectionOnRelease |= startedAbsorption;
         }
 
-        if (keyboard.gKey.wasReleasedThisFrame && shouldShowShapeSelectionOnRelease)
+        if (action.WasReleasedThisFrame() && shouldShowShapeSelectionOnRelease)
         {
             shapeSystem.ShowShapeSelection();
             shouldShowShapeSelectionOnRelease = false;
@@ -120,15 +137,10 @@ public class ParticleCollector : MonoBehaviour
             absorbHoldStartTime = -1f;
             StopWindVfxEmission();
         }
-        else if (keyboard.gKey.wasReleasedThisFrame)
+        else if (action.WasReleasedThisFrame())
         {
             absorbHoldStartTime = -1f;
             StopWindVfxEmission();
-        }
-
-        if (keyboard.tabKey.wasPressedThisFrame)
-        {
-            shapeSystem.CycleShape();
         }
     }
 
@@ -234,7 +246,8 @@ public class ParticleCollector : MonoBehaviour
         absorbParticleSystem.transform.position = source.position;
         absorbParticleSystem.transform.rotation = source.rotation;
 
-        bool isActive = Keyboard.current != null && Keyboard.current.gKey.isPressed && IsWithinCollectRange;
+        InputAction action = collectAction != null ? collectAction.action : null;
+        bool isActive = action != null && action.IsPressed() && IsWithinCollectRange;
         float strength = isActive ? GetAbsorbStrength01() : 0f;
 
         var emission = absorbParticleSystem.emission;
@@ -434,58 +447,22 @@ public class ParticleCollector : MonoBehaviour
         }
     }
 
-    private void OnGUI()
+    public void ConfirmCollectPrompt()
     {
-        if (!showCollectPrompt && string.IsNullOrEmpty(warningMessage))
-        {
-            return;
-        }
+        collectPromptConfirmed = true;
+        showCollectPrompt = false;
+        LogDebug("Collect prompt confirmed by user.");
+    }
 
-        Camera camera = Camera.main;
-        if (camera == null)
-        {
-            return;
-        }
+    public void DismissCollectPrompt()
+    {
+        showCollectPrompt = false;
+    }
 
-        Vector3 uiWorldPosition = camera.transform.position + camera.transform.forward * 0.75f + Vector3.up * 0.08f;
-        Vector3 screenPosition = camera.WorldToScreenPoint(uiWorldPosition);
-        if (screenPosition.z <= 0f)
-        {
-            return;
-        }
-
-        const float width = 320f;
-        float height = showCollectPrompt ? 95f : 70f;
-        Rect panel = new Rect(
-            screenPosition.x - width * 0.5f,
-            Screen.height - screenPosition.y - height * 0.5f,
-            width,
-            height);
-
-        GUILayout.BeginArea(panel, GUI.skin.box);
-        if (showCollectPrompt)
-        {
-            GUILayout.Label("Particle source detected.");
-            float secondsLeft = Mathf.Max(0f, collectPromptHideTime - Time.time);
-            GUILayout.Label($"Hold G to absorb particles. Hint hides in {secondsLeft:F1}s");
-
-            if (!collectPromptConfirmed)
-            {
-                if (GUILayout.Button("Confirm"))
-                {
-                    collectPromptConfirmed = true;
-                    showCollectPrompt = false;
-                    LogDebug("Collect prompt confirmed by user.");
-                }
-            }
-        }
-
-        if (!string.IsNullOrEmpty(warningMessage))
-        {
-            GUILayout.Label(warningMessage);
-        }
-
-        GUILayout.EndArea();
+    public void ClearWarning()
+    {
+        warningMessage = string.Empty;
+        warningHideTime = 0f;
     }
 
 }
