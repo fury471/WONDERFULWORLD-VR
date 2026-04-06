@@ -371,6 +371,18 @@ public class ParticleShapeSystem : MonoBehaviour
         showShapeSelection = true;
     }
 
+    public void ShowPostCollectOptionsNow()
+    {
+        if (currentWorldPositions.Count == 0)
+        {
+            return;
+        }
+
+        pendingPostCollectOptions = false;
+        showShapeSelection = false;
+        showPostCollectOptions = true;
+    }
+
     public void ClearParticlesAndCloseOptions()
     {
         ClearParticles();
@@ -484,78 +496,6 @@ public class ParticleShapeSystem : MonoBehaviour
         displayParticleSystem.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
     }
 
-    private void OnGUI()
-    {
-        if (!showShapeSelection && !showPostCollectOptions)
-        {
-            return;
-        }
-
-        Camera camera = Camera.main;
-        if (camera == null || previewAnchor == null)
-        {
-            return;
-        }
-
-        Vector3 uiWorldPosition = camera.transform.position + camera.transform.forward * selectionUiDistanceFromCamera;
-        Vector3 screenPosition = camera.WorldToScreenPoint(uiWorldPosition);
-        if (screenPosition.z <= 0f)
-        {
-            return;
-        }
-
-        float width = selectionPanelSize.x;
-        float height = showPostCollectOptions ? 140f : selectionPanelSize.y;
-        Rect panel = new Rect(
-            screenPosition.x - width * 0.5f,
-            Screen.height - screenPosition.y - height * 0.5f,
-            width,
-            height);
-
-        GUILayout.BeginArea(panel, GUI.skin.box);
-        if (showPostCollectOptions)
-        {
-            GUILayout.Label("Petals collected");
-            GUILayout.Label("Choose what to do next");
-
-            if (GUILayout.Button("Clear Particles"))
-            {
-                ClearParticlesAndCloseOptions();
-            }
-
-            if (GUILayout.Button("Keep Displaying"))
-            {
-                ContinueDisplaying();
-            }
-        }
-        else
-        {
-            GUILayout.Label("Choose Particle Shape");
-            GUILayout.Label("Click a button or press 1 / 2 / 3 / 4");
-
-            if (GUILayout.Button("1. Hold Cloud"))
-            {
-                SelectShapeAndShowPostOptions(ShapeType.HoldCloud);
-            }
-
-            if (GUILayout.Button("2. Sphere"))
-            {
-                SelectShapeAndShowPostOptions(ShapeType.Sphere);
-            }
-
-            if (GUILayout.Button("3. Heart"))
-            {
-                SelectShapeAndShowPostOptions(ShapeType.Heart);
-            }
-
-            if (GUILayout.Button("4. Spiral"))
-            {
-                SelectShapeAndShowPostOptions(ShapeType.Spiral);
-            }
-        }
-
-        GUILayout.EndArea();
-    }
 }
 
 [CreateAssetMenu(
