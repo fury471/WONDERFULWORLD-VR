@@ -1,15 +1,34 @@
 # Explore The Wonderland
 ## M2 Execution Packet v1.0
 
-- Date: April 2, 2026
-- Purpose: Convert M2 from a milestone idea into an executable feature-implementation baseline
+- Date: April 7, 2026
+- Purpose: Convert M2 from a milestone idea into an executable feature-implementation baseline with a current repo status snapshot
 - Source Docs:
   - `Docs/ExploreTheWonderland_PRD_TDD_v1.3.2.md`
   - `Docs/ExploreTheWonderland_30_Day_Production_Milestone_Plan_v1.0.md`
   - `Docs/M0/ExploreTheWonderland_M0_Execution_Packet_v1.0.md`
   - `Docs/M2/Start_Here_M2_Kickoff_Guide.md`
 
-## 1. Locked M2 Scope
+## 1. Current Repo Snapshot (April 7, 2026)
+
+M2 is in active progress, not at kickoff anymore.
+
+Current repo-side picture:
+
+- ScaleShift runtime and first-pass tuning asset are in the repo
+- Weather runtime and 4 preset assets are in the repo
+- Growth runtime and first-pass tuning asset are in the repo
+- ParticleVitality runtime and first-pass tuning asset are in the repo
+- Fireworks runtime and first-pass pattern library are in the repo
+- Lotus runtime is in the repo, but the planned `LotusScale_SO.asset` is still missing
+- Mounts runtime has not landed yet
+- Wenao's slice lighting and VFX hooks have not landed yet
+- feature prefab folders are still mostly empty
+- formal automated test coverage is still thin
+
+This means the team is in mid-M2: most core logic tracks have landed, but the milestone is not yet complete.
+
+## 2. Locked M2 Scope
 
 M2 is the Signature Systems milestone.
 
@@ -32,7 +51,7 @@ The priority is:
 - safe feature handoff
 - no hard-crash or play-flow breakage
 
-## 2. Locked Technical Rules
+## 3. Locked Technical Rules
 
 ### Production Authoring Rules
 
@@ -54,7 +73,7 @@ Preferred implementation style:
 - feature prefabs over scene-only setup
 - sandbox validation before main-scene integration
 
-## 3. Owner Map
+## 4. Owner Map
 
 - Xuanyuan Qin owns ScaleShift, Weather, ParticleVitality, and Fireworks gameplay logic
 - Tongyan Sun owns Growth and LotusPond gameplay logic
@@ -62,7 +81,7 @@ Preferred implementation style:
 - Wenao Li owns VFX presentation hooks and visual support for M2 systems
 - Yu Fu owns XR/player-rig integration support and later scene-safe handoff review
 
-## 4. Branching And Merge Rules
+## 5. Branching And Merge Rules
 
 ### Branch Naming
 
@@ -86,41 +105,23 @@ Examples:
 - if a PR adds shared XR/core hooks, Yu Fu reviews it
 - if a PR adds feature handoff requirements for M3 integration, the scene owner reviews it
 
-## 5. Validation Checklist
+## 6. Current Required Remaining Repo Targets
 
-Every M2 feature handoff should answer these questions:
+Still missing or incomplete compared with the locked M2 target structure:
 
-- does the target runtime script exist in the correct feature folder?
-- does the feature expose tuning through ScriptableObjects or prefabs?
-- can the feature be demonstrated in isolation?
-- does the feature avoid hard-crashing play mode?
-- is the feature reliable enough for handoff even if presentation is still placeholder quality?
-
-## 6. Expected Repo Targets
-
-Required core M2 targets:
-
-- `Assets/_Project/Features/ScaleShift/Runtime/ScaleManager.cs`
-- `Assets/_Project/Features/Weather/Runtime/WeatherManager.cs`
-- `Assets/_Project/Features/Growth/Runtime/GrowthController.cs`
-- `Assets/_Project/Features/ParticleVitality/Runtime/ParticleShapeSystem.cs`
-- `Assets/_Project/Features/Fireworks/Runtime/FireworkController.cs`
 - `Assets/_Project/Features/Mounts/Runtime/MountController.cs`
-- `Assets/_Project/Features/LotusPond/Runtime/LotusNoteTrigger.cs`
-- first-pass ScriptableObject assets for settings and presets
-
-Useful supporting targets from the locked structure:
-
-- `ScaleState.cs`
-- `ScaleTransitionController.cs`
-- `RegionWeatherResponder.cs`
-- `GrowthStageDriver.cs`
-- `ParticleCollector.cs`
-- `ParticlePreviewAnchor.cs`
-- `FireworkLaunchPad.cs`
-- `CatRideRouteController.cs`
-- `LotusRippleController.cs`
+- `Assets/_Project/Features/Mounts/Runtime/CatRideRouteController.cs`
+- `Assets/_Project/Features/Mounts/ScriptableObjects/MountSettings_SO.asset`
+- `Assets/_Project/Features/LotusPond/ScriptableObjects/LotusScale_SO.asset`
+- first-pass reusable M2 prefabs in the feature `Prefabs/` folders
+- Wenao's lighting and VFX support hooks under `Assets/_Project/World/Shared` and `Assets/_Project/Art`
+- stronger test or sandbox proof for isolated system demos
 
 ## 7. Handoff To M3
 
-M3 should begin only after each M2 system works in isolation and the team can demonstrate stable first-pass behavior without relying on hidden one-off scene hacks.
+M3 should begin only after:
+
+- all required M2 runtime scripts exist
+- first-pass tuning assets exist for every active system
+- each system can be demonstrated in isolation
+- the team can describe the handoff risk for integrating each system into the park scene
