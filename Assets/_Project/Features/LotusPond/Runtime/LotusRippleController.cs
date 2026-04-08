@@ -3,6 +3,9 @@ using UnityEngine;
 
 public class LotusRippleController : MonoBehaviour
 {
+    [Header("Settings")]
+    [SerializeField] private LotusScaleSettingsSO settings;
+
     [Header("Visual")]
     [SerializeField] private Transform rippleVisual;
     [SerializeField] private ParticleSystem rippleParticles;
@@ -17,6 +20,8 @@ public class LotusRippleController : MonoBehaviour
 
     private void Awake()
     {
+        ApplySettings();
+
         if (rippleVisual != null)
         {
             rippleVisual.localScale = startScale;
@@ -25,6 +30,11 @@ public class LotusRippleController : MonoBehaviour
                 rippleVisual.gameObject.SetActive(false);
             }
         }
+    }
+
+    private void OnValidate()
+    {
+        ApplySettings();
     }
 
     public void PlayRipple()
@@ -66,5 +76,24 @@ public class LotusRippleController : MonoBehaviour
         {
             rippleVisual.gameObject.SetActive(false);
         }
+    }
+
+    public void SetSettings(LotusScaleSettingsSO scaleSettings)
+    {
+        settings = scaleSettings;
+        ApplySettings();
+    }
+
+    private void ApplySettings()
+    {
+        if (settings == null)
+        {
+            return;
+        }
+
+        startScale = settings.rippleStartScale;
+        endScale = settings.rippleEndScale;
+        duration = settings.rippleDuration;
+        hideWhenIdle = settings.hideRippleWhenIdle;
     }
 }

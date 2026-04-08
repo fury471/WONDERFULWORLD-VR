@@ -3,6 +3,9 @@ using UnityEngine.InputSystem;
 
 public class LotusNoteTrigger : MonoBehaviour
 {
+    [Header("Settings")]
+    [SerializeField] private LotusScaleSettingsSO settings;
+
     [Header("Audio")]
     [SerializeField] private AudioSource audioSource;
     [SerializeField] private AudioClip noteClip;
@@ -43,6 +46,13 @@ public class LotusNoteTrigger : MonoBehaviour
         {
             rippleController = GetComponentInChildren<LotusRippleController>(true);
         }
+
+        ApplySettings();
+    }
+
+    private void OnValidate()
+    {
+        ApplySettings();
     }
 
     private void Update()
@@ -114,6 +124,12 @@ public class LotusNoteTrigger : MonoBehaviour
         }
     }
 
+    public void SetSettings(LotusScaleSettingsSO scaleSettings)
+    {
+        settings = scaleSettings;
+        ApplySettings();
+    }
+
     private void TriggerNoteInternal(string debugMessage)
     {
         if (Time.time < nextAllowedTriggerTime)
@@ -183,5 +199,32 @@ public class LotusNoteTrigger : MonoBehaviour
         }
 
         return false;
+    }
+
+    private void ApplySettings()
+    {
+        if (settings == null)
+        {
+            return;
+        }
+
+        cooldownSeconds = settings.cooldownSeconds;
+
+        if (settings.sharedNoteClip != null)
+        {
+            noteClip = settings.sharedNoteClip;
+        }
+
+        if (audioSource != null)
+        {
+            audioSource.volume = settings.volume;
+            audioSource.minDistance = settings.minDistance;
+            audioSource.maxDistance = settings.maxDistance;
+        }
+
+        if (rippleController != null)
+        {
+            rippleController.SetSettings(settings);
+        }
     }
 }

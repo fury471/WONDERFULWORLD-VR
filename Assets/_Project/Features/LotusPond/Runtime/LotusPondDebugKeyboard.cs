@@ -12,6 +12,7 @@ public class LotusPondDebugKeyboard : MonoBehaviour
     }
 
     [Header("Audio")]
+    [SerializeField] private LotusScaleSettingsSO settings;
     [SerializeField] private AudioClip sharedNoteClip;
     [SerializeField] private float volume = 0.8f;
     [SerializeField] private float minDistance = 1f;
@@ -52,8 +53,13 @@ public class LotusPondDebugKeyboard : MonoBehaviour
             AudioSource audioSource = pad.GetComponent<AudioSource>();
             if (audioSource != null)
             {
+                if (settings != null)
+                {
+                    trigger.SetSettings(settings);
+                }
+
                 audioSource.pitch = padBindings[i].pitch;
-                trigger.ConfigureDebug(audioSource, sharedNoteClip);
+                trigger.ConfigureDebug(audioSource, settings != null && settings.sharedNoteClip != null ? settings.sharedNoteClip : sharedNoteClip);
             }
 
             triggers[i] = trigger;
