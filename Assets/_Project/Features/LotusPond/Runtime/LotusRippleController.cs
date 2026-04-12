@@ -3,6 +3,9 @@ using UnityEngine;
 
 public class LotusRippleController : MonoBehaviour
 {
+    public event System.Action RippleStarted;
+    public event System.Action RippleCompleted;
+
     [Header("Settings")]
     [SerializeField] private LotusScaleSettingsSO settings;
 
@@ -49,6 +52,8 @@ public class LotusRippleController : MonoBehaviour
 
     private IEnumerator PlayRippleRoutine()
     {
+        RippleStarted?.Invoke();
+
         if (rippleParticles != null)
         {
             rippleParticles.Play();
@@ -56,6 +61,7 @@ public class LotusRippleController : MonoBehaviour
 
         if (rippleVisual == null)
         {
+            RippleCompleted?.Invoke();
             yield break;
         }
 
@@ -76,6 +82,8 @@ public class LotusRippleController : MonoBehaviour
         {
             rippleVisual.gameObject.SetActive(false);
         }
+
+        RippleCompleted?.Invoke();
     }
 
     public void SetSettings(LotusScaleSettingsSO scaleSettings)

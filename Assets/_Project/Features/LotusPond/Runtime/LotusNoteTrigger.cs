@@ -3,6 +3,10 @@ using UnityEngine.InputSystem;
 
 public class LotusNoteTrigger : MonoBehaviour
 {
+    public event System.Action<LotusNoteTrigger> NoteTriggered;
+
+    public float CooldownSeconds => cooldownSeconds;
+
     [Header("Settings")]
     [SerializeField] private LotusScaleSettingsSO settings;
 
@@ -155,6 +159,8 @@ public class LotusNoteTrigger : MonoBehaviour
         {
             rippleController.PlayRipple();
         }
+
+        NoteTriggered?.Invoke(this);
 
         if (logDebugMessages)
         {
