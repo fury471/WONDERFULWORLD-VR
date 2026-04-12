@@ -24,6 +24,10 @@ namespace WonderfulWorld.Features.Fireworks
         private Coroutine playbackRoutine;
         private bool isPlaying;
 
+        public event Action SequenceStarted;
+        public event Action SequenceStopped;
+        public event Action<FireworkPattern, Vector3> PatternSpawned;
+
         public bool IsPlaying => isPlaying;
         public int PatternCount => patterns.Count;
         public IReadOnlyList<FireworkPattern> Patterns => patterns;
@@ -64,6 +68,7 @@ namespace WonderfulWorld.Features.Fireworks
             }
 
             playbackRoutine = StartCoroutine(PlaySequenceRoutine());
+            SequenceStarted?.Invoke();
         }
 
         public void PlayPattern(int patternIndex)
@@ -86,6 +91,7 @@ namespace WonderfulWorld.Features.Fireworks
             }
 
             isPlaying = false;
+            SequenceStopped?.Invoke();
         }
 
         public void RefreshPatternsFromLibrary()
@@ -140,11 +146,13 @@ namespace WonderfulWorld.Features.Fireworks
 
             isPlaying = false;
             playbackRoutine = null;
+            SequenceStopped?.Invoke();
         }
 
         private void SpawnPattern(FireworkPattern pattern)
         {
             Vector3 spawnPosition = ResolveSpawnPosition(pattern);
+            PatternSpawned?.Invoke(pattern, spawnPosition);
 
             if (pattern.effectPrefab != null)
             {
