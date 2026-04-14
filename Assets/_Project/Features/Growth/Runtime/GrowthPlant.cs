@@ -1,4 +1,7 @@
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 public class GrowthPlant : MonoBehaviour
 {
@@ -29,7 +32,11 @@ public class GrowthPlant : MonoBehaviour
 
     public GrowthProfile_SO Profile => growthProfile;
 
-    
+    private void Awake()
+    {
+        AutoAssignProfile();
+        AutoAssignBindings();
+    }
 
     private void Start()
     {
@@ -121,6 +128,84 @@ public class GrowthPlant : MonoBehaviour
     public bool IsTransitioning()
     {
         return isTransitioning;
+    }
+
+    private void AutoAssignProfile()
+    {
+        if (growthProfile != null)
+        {
+            return;
+        }
+
+#if UNITY_EDITOR
+        growthProfile = AssetDatabase.LoadAssetAtPath<GrowthProfile_SO>(
+            "Assets/_Project/Features/Growth/ScriptableObjects/GrowthProfile_SO.asset");
+#endif
+    }
+
+    private void AutoAssignBindings()
+    {
+        if (bindings != null && bindings.Length > 0)
+        {
+            return;
+        }
+
+        Transform stem = FindChildRecursive(transform, "Stem");
+        Transform bloom = FindChildRecursive(transform, "Bloom");
+
+        int count = 0;
+        if (stem != null) count++;
+        if (bloom != null) count++;
+
+        if (count == 0)
+        {
+            return;
+        }
+
+        bindings = new PlantPartBinding[count];
+        int index = 0;
+
+        if (stem != null)
+        {
+            bindings[index++] = new PlantPartBinding
+            {
+                partName = "Stem",
+                target = stem
+            };
+        }
+
+        if (bloom != null)
+        {
+            bindings[index] = new PlantPartBinding
+            {
+                partName = "Bloom",
+                target = bloom
+            };
+        }
+    }
+
+    private static Transform FindChildRecursive(Transform root, string targetName)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        if (root.name == targetName)
+        {
+            return root;
+        }
+
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform found = FindChildRecursive(root.GetChild(i), targetName);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private float[] GetStageTimes()

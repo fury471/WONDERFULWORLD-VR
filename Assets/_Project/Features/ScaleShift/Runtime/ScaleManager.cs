@@ -2,7 +2,11 @@ using System.Collections;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.InputSystem;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
+[RequireComponent(typeof(ScaleTransitionController))]
 public class ScaleManager : MonoBehaviour
 {
     [Header("Core References")]
@@ -31,6 +35,11 @@ public class ScaleManager : MonoBehaviour
     private Vector3 baseCameraPivotLocalPosition;
     private bool baseCameraPivotCaptured;
 
+    private void Awake()
+    {
+        AutoAssignReferences();
+    }
+
     private void Start()
     {
         CacheBaseValues();
@@ -52,6 +61,50 @@ public class ScaleManager : MonoBehaviour
 
         if (keyboard.digit3Key.wasPressedThisFrame)
             SetScale(ScaleState.Large);
+    }
+
+    private void AutoAssignReferences()
+    {
+        if (scaleRoot == null)
+        {
+            scaleRoot = transform;
+        }
+
+        if (cameraPivot == null)
+        {
+            Transform foundPivot = transform.Find("Camera Offset");
+            if (foundPivot != null)
+            {
+                cameraPivot = foundPivot;
+            }
+        }
+
+        if (targetCamera == null)
+        {
+            targetCamera = GetComponentInChildren<Camera>(includeInactive: true);
+            if (targetCamera == null)
+            {
+                targetCamera = Camera.main;
+            }
+        }
+
+        if (transitionController == null)
+        {
+            transitionController = GetComponent<ScaleTransitionController>();
+        }
+
+        if (characterController == null)
+        {
+            characterController = GetComponent<CharacterController>();
+        }
+
+        if (settings == null)
+        {
+#if UNITY_EDITOR
+            settings = AssetDatabase.LoadAssetAtPath<ScaleSettings>(
+                "Assets/_Project/Features/ScaleShift/ScriptableObjects/ScaleSettings_SO.asset");
+#endif
+        }
     }
 
     public void SetScale(ScaleState newState)
