@@ -5,6 +5,10 @@
 - Audience: Group 5 M2 feature team
 - Goal: Start M2 cleanly from the current repo without guessing where feature work belongs or who should touch the master scene
 
+Current demonstration note:
+
+- M2 systems should be built as discoverable attractions and environmental affordances for an exploration-first magical park, not as steps in a rigid mission chain
+
 ## Current Progress Snapshot (April 7, 2026)
 
 - ScaleShift, Weather, Growth, ParticleVitality, Fireworks, and most Lotus runtime work have landed in the repo.
