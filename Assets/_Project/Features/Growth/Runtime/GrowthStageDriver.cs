@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public class GrowthStageDriver : MonoBehaviour
 {
@@ -25,8 +26,15 @@ public class GrowthStageDriver : MonoBehaviour
     private bool clusterPressedLastFrame;
     private bool regressPressedLastFrame;
 
+    private void Awake()
+    {
+        AutoAssignReferences();
+    }
+
     private void Update()
     {
+        AutoAssignReferences();
+
         if (interactionOrigin == null)
         {
             Debug.Log("GrowthStageDriver: interactionOrigin is NULL");
@@ -80,7 +88,7 @@ public class GrowthStageDriver : MonoBehaviour
                 distance <= singleRange)
             {
                 Debug.Log("Single growth TRIGGERED");
-                singleGrowthController.TriggerGrowth();
+                singleGrowthController.TriggerSingleGrowth();
             }
             else
             {
@@ -100,7 +108,7 @@ public class GrowthStageDriver : MonoBehaviour
                 distance <= clusterRange)
             {
                 Debug.Log("Cluster growth TRIGGERED");
-                clusterGrowthController.TriggerGrowth();
+                clusterGrowthController.TriggerClusterGrowth();
             }
             else
             {
@@ -120,7 +128,7 @@ public class GrowthStageDriver : MonoBehaviour
                 distance <= singleRange)
             {
                 Debug.Log("Reverse growth TRIGGERED");
-                singleGrowthController.TriggerGrowthReverse();
+                singleGrowthController.TriggerSingleGrowthReverse();
             }
             else
             {
@@ -131,5 +139,107 @@ public class GrowthStageDriver : MonoBehaviour
         singlePressedLastFrame = singlePressedThisFrame;
         clusterPressedLastFrame = clusterPressedThisFrame;
         regressPressedLastFrame = regressPressedThisFrame;
+    }
+
+    private void AutoAssignReferences()
+    {
+        if (interactionOrigin == null)
+        {
+            if (Camera.main != null)
+            {
+                interactionOrigin = Camera.main.transform;
+            }
+            else
+            {
+                interactionOrigin = FindInScene("Main Camera");
+            }
+        }
+
+        if (singleGrowthController == null)
+        {
+            singleGrowthController = GetComponent<GrowthController>();
+            if (singleGrowthController == null)
+            {
+                singleGrowthController = FindFirstObjectByType<GrowthController>();
+            }
+        }
+
+        if (clusterGrowthController == null)
+        {
+            clusterGrowthController = singleGrowthController;
+        }
+
+        if (singleTarget == null)
+        {
+            if (singleGrowthController != null && singleGrowthController.TargetPlant != null)
+            {
+                singleTarget = singleGrowthController.TargetPlant.transform;
+            }
+            else
+            {
+                GrowthPlant plant = FindFirstObjectByType<GrowthPlant>();
+                if (plant != null)
+                {
+                    singleTarget = plant.transform;
+                }
+            }
+        }
+
+        if (clusterTarget == null)
+        {
+            if (clusterGrowthController != null && clusterGrowthController.TargetCluster != null)
+            {
+                clusterTarget = clusterGrowthController.TargetCluster.transform;
+            }
+            else
+            {
+                GrowthCluster cluster = FindFirstObjectByType<GrowthCluster>();
+                if (cluster != null)
+                {
+                    clusterTarget = cluster.transform;
+                }
+            }
+        }
+    }
+
+    private static Transform FindInScene(string targetName)
+    {
+        Scene activeScene = SceneManager.GetActiveScene();
+        GameObject[] roots = activeScene.GetRootGameObjects();
+
+        for (int i = 0; i < roots.Length; i++)
+        {
+            Transform found = FindChildRecursive(roots[i].transform, targetName);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private static Transform FindChildRecursive(Transform root, string targetName)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        if (root.name == targetName)
+        {
+            return root;
+        }
+
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform found = FindChildRecursive(root.GetChild(i), targetName);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 }

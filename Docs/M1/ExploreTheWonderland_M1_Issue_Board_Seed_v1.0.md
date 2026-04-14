@@ -5,6 +5,10 @@
 - Purpose: Provide a milestone-specific M1 board summary and closeout task set
 - Usage: Copy into GitHub Projects, Jira, Trello, or use directly as the in-repo M1 tracker
 
+Current demonstration note:
+
+- any route references in this file describe the orientation shell for readability and testing, not a forced final play order
+
 ## 1. Label Set
 
 Owner labels:

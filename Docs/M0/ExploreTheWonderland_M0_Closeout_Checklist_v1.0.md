@@ -4,6 +4,10 @@
 - Date: March 27, 2026
 - Scope: repo-side M0 completion check plus required human approvals
 
+Current demonstration note:
+
+- the route references in this document should be read as a suggested attraction arc for testing and communication, not a required mission order
+
 ## 1. M0 Deliverables Status
 
 | Item | Status | Evidence | Notes |

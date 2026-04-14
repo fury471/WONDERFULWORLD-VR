@@ -1,9 +1,13 @@
 # Explore The Wonderland
 ## M2 Issue Board Seed v1.0
 
-- Date: April 7, 2026
+- Date: April 14, 2026
 - Purpose: Provide an owner-tagged M2 tracker with current repo status
 - Usage: Copy into GitHub Projects, Jira, Trello, or use directly as the in-repo M2 tracker
+
+Current demonstration note:
+
+- M2 systems should be judged by modularity, readability, and attraction-style discoverability, not by strict sequence order
 
 ## 1. Label Set
 
@@ -57,16 +61,16 @@ M2 implementation note:
 
 | ID | Title | Owner | Labels | Repo Target | Current Repo State | What Is Left |
 | --- | --- | --- | --- | --- | --- | --- |
-| M2-01 | Implement scale manager v1 | Xuanyuan Qin | `owner:xuanyuan-qin`, `area:scale-shift`, `priority:p0`, `milestone:m2`, `status:needs-review` | `Assets/_Project/Features/ScaleShift/Runtime/ScaleManager.cs` | runtime and tuning asset landed | isolated demo and QA confirmation |
-| M2-02 | Implement weather manager v1 | Xuanyuan Qin | `owner:xuanyuan-qin`, `area:weather`, `priority:p0`, `milestone:m2`, `status:needs-review` | `Assets/_Project/Features/Weather/Runtime/WeatherManager.cs` | runtime plus 4 preset assets landed | isolated demo and world-response validation |
-| M2-03 | Implement growth traversal v1 | Tongyan Sun | `owner:tongyan-sun`, `area:growth`, `priority:p0`, `milestone:m2`, `status:needs-review` | `Assets/_Project/Features/Growth/Runtime/GrowthController.cs` | runtime and growth profile landed | isolated traversal demo |
-| M2-04 | Implement particle vitality v1 | Xuanyuan Qin | `owner:xuanyuan-qin`, `area:particle-vitality`, `priority:p0`, `milestone:m2`, `status:needs-review` | `Assets/_Project/Features/ParticleVitality/Runtime/ParticleShapeSystem.cs` | runtime and shape library landed | isolated 3-shape demo |
-| M2-05 | Implement lotus interaction v1 | Tongyan Sun | `owner:tongyan-sun`, `area:lotus-pond`, `priority:p0`, `milestone:m2`, `status:in-progress` | `Assets/_Project/Features/LotusPond/Runtime/LotusNoteTrigger.cs` | runtime landed, debug helpers landed | `LotusScale_SO.asset` and isolated demo |
-| M2-06 | Implement cat ride route v1 | Haobo Xu | `owner:haobo-xu`, `area:mounts`, `priority:p0`, `milestone:m2`, `status:ready` | `Assets/_Project/Features/Mounts/Runtime/MountController.cs` | folder still empty | runtime, settings asset, and first demo |
-| M2-07 | Implement fireworks controller v1 | Xuanyuan Qin | `owner:xuanyuan-qin`, `area:fireworks`, `priority:p0`, `milestone:m2`, `status:needs-review` | `Assets/_Project/Features/Fireworks/Runtime/FireworkController.cs` | runtime and pattern library landed | isolated 3-pattern demo |
-| M2-08 | Establish slice lighting and VFX language | Wenao Li | `owner:wenao-li`, `area:art`, `area:vfx`, `priority:p1`, `milestone:m2`, `status:ready` | `Assets/_Project/World/Shared/Lighting`, `Assets/_Project/Art/Shaders` | no repo assets landed yet | first-pass look-dev hooks |
-| M2-09 | Create first-pass ScriptableObject tuning assets | Xuanyuan Qin / Tongyan Sun / Haobo Xu | `area:core`, `area:docs`, `priority:p1`, `milestone:m2`, `status:in-progress` | feature `ScriptableObjects/` folders | ScaleShift, Weather, Growth, ParticleVitality, Fireworks assets landed | Lotus and Mounts assets still missing |
-| M2-10 | Review XR/player-rig handoff hooks for M3 | Yu Fu | `owner:yu-fu`, `area:core`, `priority:p1`, `milestone:m2`, `status:in-progress` | `_Project/Core`, `_Project/Core/XR` | XR rig touched recently | explicit handoff notes or integration review still needed |
+| M2-01 | Implement scale manager v1 | Xuanyuan Qin | `owner:xuanyuan-qin`, `area:scale-shift`, `priority:p0`, `milestone:m2`, `status:done` | `Assets/_Project/Features/ScaleShift/Runtime/ScaleManager.cs` | simulator validation pass | carry known caveats into M3 handoff notes only |
+| M2-02 | Implement weather manager v1 | Xuanyuan Qin | `owner:xuanyuan-qin`, `area:weather`, `priority:p0`, `milestone:m2`, `status:done` | `Assets/_Project/Features/Weather/Runtime/WeatherManager.cs` | simulator validation pass | carry known caveats into M3 handoff notes only |
+| M2-03 | Implement growth traversal v1 | Tongyan Sun | `owner:tongyan-sun`, `area:growth`, `priority:p0`, `milestone:m2`, `status:needs-review` | `Assets/_Project/Features/Growth/Runtime/GrowthController.cs` | simulator trigger path pass | review visual readability during M3 integration |
+| M2-04 | Implement particle vitality v1 | Xuanyuan Qin | `owner:xuanyuan-qin`, `area:particle-vitality`, `priority:p0`, `milestone:m2`, `status:done` | `Assets/_Project/Features/ParticleVitality/Runtime/ParticleShapeSystem.cs` | simulator validation pass | carry known caveats into M3 handoff notes only |
+| M2-05 | Implement lotus interaction v1 | Tongyan Sun | `owner:tongyan-sun`, `area:lotus-pond`, `priority:p0`, `milestone:m2`, `status:needs-review` | `Assets/_Project/Features/LotusPond/Runtime/LotusNoteTrigger.cs` | simulator debug-path pass | fix or revisit simulator ray path during M3 integration |
+| M2-06 | Implement cat ride route v1 | Haobo Xu | `owner:haobo-xu`, `area:mounts`, `priority:p0`, `milestone:m2`, `status:done` | `Assets/_Project/Features/Mounts/Runtime/MountController.cs` | simulator validation pass | carry known caveats into M3 handoff notes only |
+| M2-07 | Implement fireworks controller v1 | Xuanyuan Qin | `owner:xuanyuan-qin`, `area:fireworks`, `priority:p0`, `milestone:m2`, `status:done` | `Assets/_Project/Features/Fireworks/Runtime/FireworkController.cs` | simulator validation pass | carry known caveats into M3 handoff notes only |
+| M2-08 | Establish slice lighting and VFX language | Wenao Li | `owner:wenao-li`, `area:art`, `area:vfx`, `priority:p1`, `milestone:m2`, `status:needs-review` | `Assets/_Project/World/Shared/Lighting`, `Assets/_Project/Art/Shaders` | hook code and shader support landed | review readiness for real scene integration |
+| M2-09 | Create first-pass ScriptableObject tuning assets | Xuanyuan Qin / Tongyan Sun / Haobo Xu | `area:core`, `area:docs`, `priority:p1`, `milestone:m2`, `status:done` | feature `ScriptableObjects/` folders | all planned first-pass assets landed | none |
+| M2-10 | Review XR/player-rig handoff hooks for M3 | Yu Fu | `owner:yu-fu`, `area:core`, `priority:p1`, `milestone:m2`, `status:in-progress` | `_Project/Core`, `_Project/Core/XR` | simulator validation completed | write final handoff note and known caveats |
 
 ## 3. Suggested Board Columns
 
@@ -80,4 +84,4 @@ Recommended board columns:
 
 Recommended working rule:
 
-- no feature is considered done until it works outside the master park scene
+- no feature is considered done until its validation result and handoff caveat are written down
