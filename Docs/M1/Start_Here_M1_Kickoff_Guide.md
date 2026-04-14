@@ -5,6 +5,10 @@
 - Audience: Group 5 kickoff team
 - Goal: Start M1 cleanly from the current repo without guessing what to do first
 
+Current demonstration note:
+
+- the park should feel exploratory and open, and any route-order language in this guide should be read as a suggested orientation spine for readability and demoing rather than a forced player sequence
+
 ## 1. What This Repo Is Right Now
 
 The repo is ready for M1 planning-wise, but not implementation-complete yet.
@@ -37,7 +41,7 @@ This means the correct way to start is:
 Do this before anyone starts editing Unity scenes:
 
 1. Confirm every teammate installs Unity `6000.3.11f1`.
-2. Confirm the Day 30 route is locked:
+2. Confirm the Day 30 attraction arc is locked for demoing and readability:
    `Arrival Plaza -> Flower Field -> Lotus Lagoon -> Cat Route -> Fireworks Plaza`
 3. Confirm branch naming rules from the execution packet.
 4. Copy the issue seed from `Docs/ExploreTheWonderland_M0_Issue_Board_Seed_v1.0.md` into your real tracker.
@@ -179,7 +183,7 @@ Recommended parallel support:
 Once the prefabs exist, continue in this order:
 
 1. Place all zone blockout prefabs into `World_WonderlandPark.unity`.
-2. Build the player route in the locked order.
+2. Build a readable orientation spine in the locked order.
 3. Confirm the next destination is always visually readable.
 4. Add the onboarding panel where the route begins.
 5. Add temporary lighting and scale landmarks so the route reads in-headset.
@@ -197,7 +201,7 @@ Do not move on to M2 systems until all of this is true:
 1. The project opens without import blockers.
 2. `World_WonderlandPark.unity` exists and opens cleanly.
 3. The XR rig prefab is in the scene and spawns correctly.
-4. The full route is walkable in order:
+4. The suggested orientation spine is readable and walkable:
    Human Entry -> Flower Field -> Lotus Pond -> Cat Route -> Fireworks Clearing
 5. The scene has no critical missing references.
 6. The team can do one headset smoke pass without a show-stopping blocker.

@@ -7,6 +7,11 @@
   - `Docs/ExploreTheWonderland_PRD_TDD_v1.3.2.md`
   - `Docs/ExploreTheWonderland_30_Day_Production_Milestone_Plan_v1.0.md`
   - `Docs/M0/ExploreTheWonderland_M0_Execution_Packet_v1.0.md`
+  - `Docs/Current_Demonstration_Direction_v1.0.md`
+
+Current demonstration note:
+
+- the route shell in M1 should be treated as a readability spine for exploration-first park play, not as a hard mission sequence
 
 ## 1. Locked M1 Goal
 
@@ -17,10 +22,10 @@ Mandatory M1 outcomes:
 1. `World_WonderlandPark.unity` exists as the master production park scene.
 2. `WonderlandXROrigin.prefab` exists under `_Project`.
 3. The project boots into the master park scene instead of template sample content.
-4. The route shell exists in one big scene:
+4. A readable orientation spine exists in one big scene:
    `Human Entry -> Flower Field -> Lotus Pond -> Cat Route -> Fireworks Clearing`
 5. Settings and onboarding stubs exist and are reachable.
-6. One smoke-pass-ready greybox route exists before M2 systems begin.
+6. One smoke-pass-ready greybox park shell exists before M2 systems begin.
 
 Anything outside route assembly, XR boot safety, UI stub reachability, and first-pass comfort validation is not M1 scope.
 

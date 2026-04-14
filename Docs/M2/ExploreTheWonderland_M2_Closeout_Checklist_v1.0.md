@@ -1,61 +1,64 @@
 # Explore The Wonderland
 ## M2 Closeout Checklist v1.0
 
-- Date: April 7, 2026
+- Date: April 14, 2026
 - Scope: current M2 progress check plus required human verification
+
+Current demonstration note:
+
+- M2 completion means the park has a modular attraction set ready for exploratory integration in M3, not that the player has a final fixed route
 
 ## 1. M2 Deliverables Status
 
 | Item | Status | Evidence | Notes |
 | --- | --- | --- | --- |
-| `ScaleManager.cs` exists and first-pass tuning asset exists | Done In Repo | `Assets/_Project/Features/ScaleShift/Runtime/ScaleManager.cs`, `ScaleSettings_SO.asset` | still needs isolated demo verification |
-| `WeatherManager.cs` exists and 4 presets exist | Done In Repo | `Assets/_Project/Features/Weather/Runtime/WeatherManager.cs`, weather preset assets | still needs isolated demo verification |
-| `GrowthController.cs` exists and growth profile asset exists | Done In Repo | `Assets/_Project/Features/Growth/Runtime/GrowthController.cs`, `GrowthProfile_SO.asset` | still needs isolated traversal demo |
-| `ParticleShapeSystem.cs` exists and shape library asset exists | Done In Repo | `Assets/_Project/Features/ParticleVitality/Runtime/ParticleShapeSystem.cs`, `ParticleShapeLibrary_SO.asset` | still needs isolated 3-shape demo |
-| `LotusNoteTrigger.cs` and `LotusRippleController.cs` exist | Partial | `Assets/_Project/Features/LotusPond/Runtime` | `LotusScale_SO.asset` still missing |
-| `MountController.cs` exists and guided ride flow works safely | Not Started In Repo | `Assets/_Project/Features/Mounts/Runtime/MountController.cs` | file not present yet |
-| `FireworkController.cs` exists and pattern library asset exists | Done In Repo | `Assets/_Project/Features/Fireworks/Runtime/FireworkController.cs`, `FireworkPatternLibrary_SO.asset` | still needs isolated 3-pattern demo |
-| First-pass ScriptableObject tuning assets exist for all active systems | Partial | feature `ScriptableObjects/` folders | missing Lotus and Mounts tuning assets |
-| Each system can be demoed in isolation | Needs Human Signoff | sandbox scenes / test setups / capture videos | repo alone cannot prove this yet |
-| No signature system hard-crashes play mode or blocks play flow | Needs Human Signoff | team test pass | compile-fix commit landed, runtime signoff still needed |
+| `ScaleManager.cs` exists and first-pass tuning asset exists | Done And Simulator-Validated | `Assets/_Project/Features/ScaleShift/Runtime/ScaleManager.cs`, `ScaleSettings_SO.asset` | Yu Fu validated scale switching and blink flow in simulator |
+| `WeatherManager.cs` exists and 4 presets exist | Done And Simulator-Validated | `Assets/_Project/Features/Weather/Runtime/WeatherManager.cs`, weather preset assets | weather preset switching passed in simulator |
+| `GrowthController.cs` exists and growth profile asset exists | Partial Simulator Validation | `Assets/_Project/Features/Growth/Runtime/GrowthController.cs`, `GrowthProfile_SO.asset` | trigger path works in simulator; visual readability still needs review |
+| `ParticleShapeSystem.cs` exists and shape library asset exists | Done And Simulator-Validated | `Assets/_Project/Features/ParticleVitality/Runtime/ParticleShapeSystem.cs`, `ParticleShapeLibrary_SO.asset` | prompt, absorb, shape selection, and clear flow passed in simulator |
+| `LotusNoteTrigger.cs`, `LotusRippleController.cs`, and `LotusScale_SO.asset` exist | Partial Simulator Validation | `Assets/_Project/Features/LotusPond/Runtime`, `Assets/_Project/Features/LotusPond/ScriptableObjects` | `Z` debug path works; simulator ray path still needs follow-up |
+| `MountController.cs` exists and guided ride flow works safely | Done And Simulator-Validated | `Assets/_Project/Features/Mounts/Runtime/MountController.cs`, `MountSettings_SO.asset` | mount, route, dismount flow passed in simulator |
+| `FireworkController.cs` exists and pattern library asset exists | Done And Simulator-Validated | `Assets/_Project/Features/Fireworks/Runtime/FireworkController.cs`, `FireworkPatternLibrary_SO.asset` | Heart, Star, Ring trigger paths passed in simulator |
+| First-pass ScriptableObject tuning assets exist for all active systems | Done In Repo | feature `ScriptableObjects/` folders | ScaleShift, Weather, Growth, ParticleVitality, Fireworks, Lotus, and Mounts all have first-pass assets |
+| Each system can be demoed in isolation | Mostly Complete | sandbox scenes / test setups / capture videos | all core systems have a simulator proof path; Growth/Lotus still have caveats |
+| No signature system hard-crashes play mode or blocks play flow | Simulator Pass | simulator test passes | headset and full-scene integration risks still belong to later validation |
 
 ## 2. Owner Action Status
 
 | Owner Action | Status | Evidence |
 | --- | --- | --- |
-| Xuanyuan Qin: ScaleShift, Weather, ParticleVitality, Fireworks gameplay logic | Strong Repo Progress | runtime scripts and data assets landed in all 4 feature folders |
-| Tongyan Sun: Growth and Lotus interaction implementation | Strong Repo Progress | Growth landed strongly; Lotus runtime landed but data asset still missing |
-| Haobo Xu: Mounts and guided route logic | Not Started In Repo | Mounts folder still has placeholder files only |
-| Wenao Li: lighting/VFX support hooks | Not Started In Repo | `World/Shared` and `Art` remain placeholder-only |
-| Yu Fu: player-rig integration review and M3 handoff safety | Partial | XR rig changed recently, but no explicit handoff doc or core hook file landed |
+| Xuanyuan Qin: ScaleShift, Weather, ParticleVitality, Fireworks gameplay logic | Done For M2 Repo Scope | runtime scripts and data assets landed in all 4 feature folders; simulator checks passed |
+| Tongyan Sun: Growth and Lotus interaction implementation | Mostly Done | Growth trigger path passes; Lotus debug path passes; remaining caveats are readability and ray-input follow-up |
+| Haobo Xu: Mounts and guided route logic | Done For M2 Repo Scope | mount route flow and settings asset landed; simulator ride flow passed |
+| Wenao Li: lighting/VFX support hooks | Repo-Side Hook Work Landed | `World/Shared/Lighting/Runtime_lwa` and `Art/Shaders/VFXHooks_lwa` landed; readiness still needs review |
+| Yu Fu: player-rig integration review and M3 handoff safety | In Progress | simulator validation completed; remaining task is to document caveats and gate M3 integration safely |
 
 ## 3. Known Issues And Residual Risks
 
 | Issue | Impact | Decision | Status |
 | --- | --- | --- | --- |
-| Mounts feature is still empty | M2 cannot be considered complete | implement `MountController.cs`, route controller, and settings asset | Open |
-| Lotus data asset is still missing | Lotus system is not fully data-driven yet | add `LotusScale_SO.asset` before M2 signoff | Open |
-| Feature prefab folders are still mostly empty | handoff to M3 may rely too much on scene-specific setup | add first-pass reusable prefabs for active systems | Open |
-| Art/VFX support hooks have not landed | visual handoff into M3 is under-prepared | Wenao needs first-pass shared lighting/VFX assets | Open |
-| Most systems are landed in repo but not yet proven by isolated demo | risk of false-positive milestone status | require owner demos before calling M2 complete | Open |
+| Growth trigger path works, but the visual result was not clearly readable in simulator | M3 integration may hide weak feedback/readability | keep as known issue and revisit during integration polish | Open |
+| Lotus works through the `Z` debug path, but simulator ray interaction did not work reliably | simulator-only validation is weaker than desired for Lotus input | keep as known issue and re-test during M3 integration | Open |
+| Feature prefab coverage is still uneven outside Mounts | handoff to M3 may still rely on scene-specific setup for some systems | acceptable to start M3, but keep prefabs a follow-up task | Open |
+| Wenao's hook assets landed, but they have not yet been validated in the main park scene | visual handoff into M3 still has integration risk | verify hooks during M3 scene integration | Open |
 
 ## 4. Exit Criteria Status
 
 | Exit Criterion | Status | Notes |
 | --- | --- | --- |
-| each system works in isolation | In Progress | several runtime systems are present, but owner demos are still needed |
-| no signature system hard-crashes the build or blocks play flow | In Progress | compile-fix landed, runtime validation still needed |
-| systems expose tunable data through ScriptableObjects or prefabs | Partial | several do, but Lotus and Mounts are not complete yet |
+| each system works in isolation | Simulator Pass With Caveats | Weather, Fireworks, Particle, Mounts, and ScaleShift passed; Growth and Lotus passed core paths with follow-up notes |
+| no signature system hard-crashes the build or blocks play flow | Simulator Pass | no red-error blocker was reported during current simulator validation |
+| systems expose tunable data through ScriptableObjects or prefabs | Done In Repo | all core M2 systems now have first-pass ScriptableObject support |
 
 ## 5. Team Signoff Checklist
 
 Use this section during the M2 closeout review.
 
-- [ ] Xuanyuan Qin demonstrates ScaleShift, Weather, ParticleVitality, and Fireworks in isolation
-- [ ] Tongyan Sun demonstrates Growth and Lotus in isolation
-- [ ] Haobo Xu demonstrates guided cat route logic in isolation
+- [x] Xuanyuan Qin demonstrates ScaleShift, Weather, ParticleVitality, and Fireworks in isolation
+- [x] Tongyan Sun demonstrates Growth and Lotus core logic in isolation
+- [x] Haobo Xu demonstrates guided cat route logic in isolation
 - [ ] Wenao Li confirms first-pass visual/VFX hooks are ready for M3 integration
-- [ ] Yu Fu confirms shared XR/core handoff risks are understood
+- [ ] Yu Fu confirms shared XR/core handoff risks are understood and documented
 - [ ] Team confirms M3 integration can begin without rewriting M2 system scope
 
 ## 6. M2 Completion Statement
@@ -70,6 +73,6 @@ Human-signoff M2 will be complete when the checklist in section 5 is fully check
 
 Current state after this update:
 
-- repo-side M2: in progress, with strong progress on 6 major workstreams
-- repo-side blockers: Mounts, Lotus data asset, art/VFX hooks, isolated demo proof
-- human signoff M2: not ready yet
+- repo-side M2: complete enough to begin M3 safely
+- simulator validation: complete, with follow-up caveats for Growth readability and Lotus ray interaction
+- remaining M2 work: final handoff notes, Wenao hook review, and team agreement to begin M3

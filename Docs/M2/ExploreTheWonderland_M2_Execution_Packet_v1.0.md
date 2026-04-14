@@ -1,15 +1,20 @@
 # Explore The Wonderland
 ## M2 Execution Packet v1.0
 
-- Date: April 7, 2026
+- Date: April 14, 2026
 - Purpose: Convert M2 from a milestone idea into an executable feature-implementation baseline with a current repo status snapshot
 - Source Docs:
   - `Docs/ExploreTheWonderland_PRD_TDD_v1.3.2.md`
   - `Docs/ExploreTheWonderland_30_Day_Production_Milestone_Plan_v1.0.md`
   - `Docs/M0/ExploreTheWonderland_M0_Execution_Packet_v1.0.md`
   - `Docs/M2/Start_Here_M2_Kickoff_Guide.md`
+  - `Docs/Current_Demonstration_Direction_v1.0.md`
 
-## 1. Current Repo Snapshot (April 7, 2026)
+Current demonstration note:
+
+- M2 systems are being handed off as modular attractions inside an exploration-first park slice, not as required sequence gates
+
+## 1. Current Repo Snapshot (April 14, 2026)
 
 M2 is in active progress, not at kickoff anymore.
 
@@ -20,13 +25,15 @@ Current repo-side picture:
 - Growth runtime and first-pass tuning asset are in the repo
 - ParticleVitality runtime and first-pass tuning asset are in the repo
 - Fireworks runtime and first-pass pattern library are in the repo
-- Lotus runtime is in the repo, but the planned `LotusScale_SO.asset` is still missing
-- Mounts runtime has not landed yet
-- Wenao's slice lighting and VFX hooks have not landed yet
+- Lotus runtime and `LotusScale_SO.asset` are in the repo
+- Mounts runtime, mount settings asset, and first-pass prefabs are in the repo
+- Wenao's first-pass VFX hook code and shader support are in the repo
 - feature prefab folders are still mostly empty
 - formal automated test coverage is still thin
+- simulator validation has now been completed for the major M2 systems
+- two caveats remain from simulator validation: Growth visual readability and Lotus ray interaction
 
-This means the team is in mid-M2: most core logic tracks have landed, but the milestone is not yet complete.
+This means the team is no longer in mid-M2 implementation. The code-and-data side of M2 is substantially complete, and the project can move into M3 integration with documented caveats.
 
 ## 2. Locked M2 Scope
 
@@ -105,17 +112,17 @@ Examples:
 - if a PR adds shared XR/core hooks, Yu Fu reviews it
 - if a PR adds feature handoff requirements for M3 integration, the scene owner reviews it
 
-## 6. Current Required Remaining Repo Targets
+## 6. Current Remaining M2 Work
 
-Still missing or incomplete compared with the locked M2 target structure:
+What remains before full M2 signoff:
 
-- `Assets/_Project/Features/Mounts/Runtime/MountController.cs`
-- `Assets/_Project/Features/Mounts/Runtime/CatRideRouteController.cs`
-- `Assets/_Project/Features/Mounts/ScriptableObjects/MountSettings_SO.asset`
-- `Assets/_Project/Features/LotusPond/ScriptableObjects/LotusScale_SO.asset`
-- first-pass reusable M2 prefabs in the feature `Prefabs/` folders
-- Wenao's lighting and VFX support hooks under `Assets/_Project/World/Shared` and `Assets/_Project/Art`
-- stronger test or sandbox proof for isolated system demos
+- record the simulator validation results in the closeout checklist
+- review Wenao's VFX hook work for actual M3 integration readiness
+- document known caveats:
+  - Growth trigger path passed, but visual readability needs follow-up
+  - Lotus core logic passed with `Z`, but simulator ray interaction still needs follow-up
+- complete Yu Fu's handoff note for safe M3 integration
+- get team agreement that M3 can begin without rewriting M2 scope
 
 ## 7. Handoff To M3
 

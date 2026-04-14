@@ -2,6 +2,11 @@
 
 Each major mechanic should live in its own folder.
 
+Current demonstration direction:
+
+- systems should behave like discoverable attractions or environmental affordances inside an exploration-first magical park
+- route references in milestone docs are readability guides, not required mission sequencing
+
 ## How to use this folder
 
 - Put feature code in `Runtime`.
@@ -9,6 +14,7 @@ Each major mechanic should live in its own folder.
 - Put data assets in `ScriptableObjects`.
 - Put isolated feature tests in `Tests`.
 - Keep each feature as independent as possible from unrelated features.
+- Design each feature so it can be discovered in flexible order unless a later milestone explicitly requires stronger sequencing.
 
 ## Current feature modules
 
