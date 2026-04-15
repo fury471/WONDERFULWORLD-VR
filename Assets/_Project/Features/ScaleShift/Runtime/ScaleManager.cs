@@ -21,6 +21,9 @@ public class ScaleManager : MonoBehaviour
     [SerializeField] private Component[] moveSpeedTargets;
     [SerializeField] private Component[] interactionDistanceTargets;
 
+    [Header("Debug")]
+    [SerializeField] private bool enableDebugKeyboardScaleShortcuts = false;
+
     [SerializeField] private ScaleState currentState = ScaleState.Normal;
 
     private bool isTransitioning;
@@ -40,6 +43,11 @@ public class ScaleManager : MonoBehaviour
         AutoAssignReferences();
     }
 
+    private void OnValidate()
+    {
+        AutoAssignReferences();
+    }
+
     private void Start()
     {
         CacheBaseValues();
@@ -48,7 +56,13 @@ public class ScaleManager : MonoBehaviour
 
     private void Update()
     {
-        // Temporary debug input for sandbox only
+        // Temporary debug input for sandbox only. Keep disabled in integrated scenes
+        // so it doesn't conflict with other number-key driven systems.
+        if (!enableDebugKeyboardScaleShortcuts)
+        {
+            return;
+        }
+
         var keyboard = Keyboard.current;
         
         if (keyboard == null) return;
@@ -158,6 +172,8 @@ public class ScaleManager : MonoBehaviour
 
     private void ApplyScaleImmediate(ScaleState state)
     {
+        Vector3 preScaleAnchorPosition = GetGroundAnchorPosition();
+
         ScaleSettings.ScaleProfile profile = GetProfile(state);
 
         if (scaleRoot != null)
@@ -170,6 +186,7 @@ public class ScaleManager : MonoBehaviour
         ApplyMoveSpeed(profile.moveSpeedMultiplier);
         ApplyInteractionDistance(profile.interactionDistanceMultiplier);
         ApplyCharacterController(profile.controllerHeightMultiplier, profile.controllerRadiusMultiplier);
+        RestoreGroundAnchorPosition(preScaleAnchorPosition);
 
         Debug.Log(
             $"[ScaleShift] Applied {state} | " +
@@ -296,6 +313,51 @@ public class ScaleManager : MonoBehaviour
         Vector3 localPosition = baseCameraPivotLocalPosition;
         localPosition.y = baseCameraPivotLocalPosition.y * eyeHeightMultiplier;
         cameraPivot.localPosition = localPosition;
+    }
+
+    private Vector3 GetGroundAnchorPosition()
+    {
+        if (targetCamera != null)
+        {
+            float groundY = 0f;
+
+            if (characterController != null)
+            {
+                groundY = characterController.bounds.min.y;
+            }
+            else if (scaleRoot != null)
+            {
+                groundY = scaleRoot.position.y;
+            }
+
+            Vector3 cameraPosition = targetCamera.transform.position;
+            return new Vector3(cameraPosition.x, groundY, cameraPosition.z);
+        }
+
+        if (characterController != null)
+        {
+            Bounds bounds = characterController.bounds;
+            return new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+        }
+
+        if (scaleRoot != null)
+        {
+            return scaleRoot.position;
+        }
+
+        return transform.position;
+    }
+
+    private void RestoreGroundAnchorPosition(Vector3 desiredAnchorPosition)
+    {
+        if (scaleRoot == null)
+        {
+            return;
+        }
+
+        Vector3 currentAnchorPosition = GetGroundAnchorPosition();
+        Vector3 delta = desiredAnchorPosition - currentAnchorPosition;
+        scaleRoot.position += delta;
     }
 
     private static bool TryGetFloatMemberValue(Component target, out float value, params string[] memberNames)
