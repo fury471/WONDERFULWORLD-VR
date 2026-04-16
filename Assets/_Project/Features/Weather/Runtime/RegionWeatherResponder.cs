@@ -22,6 +22,11 @@ public class RegionWeatherResponder : MonoBehaviour
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId = Shader.PropertyToID("_Color");
 
+    private void Awake()
+    {
+        EnsurePropertyBlock();
+    }
+
     private void OnEnable()
     {
         if (weatherManager != null)
@@ -30,7 +35,7 @@ public class RegionWeatherResponder : MonoBehaviour
 
     private void Start()
     {
-        propertyBlock ??= new MaterialPropertyBlock();
+        EnsurePropertyBlock();
 
         if (weatherManager != null && weatherManager.CurrentPreset != null)
             ApplyWeather(weatherManager.CurrentPreset);
@@ -75,6 +80,8 @@ public class RegionWeatherResponder : MonoBehaviour
         if (renderersToTint == null)
             return;
 
+        EnsurePropertyBlock();
+
         foreach (Renderer targetRenderer in renderersToTint)
         {
             if (targetRenderer == null)
@@ -100,5 +107,10 @@ public class RegionWeatherResponder : MonoBehaviour
             default:
                 return clearTint;
         }
+    }
+
+    private void EnsurePropertyBlock()
+    {
+        propertyBlock ??= new MaterialPropertyBlock();
     }
 }
