@@ -19,12 +19,22 @@ public class MountController : MonoBehaviour
     [Header("Movement Lock Targets")]
     [SerializeField] private GameObject locomotionRoot;
 
+    [Header("Auto Dismount")]
+    [SerializeField] private bool autoDismountBesideMount = true;
+    [SerializeField] private float dismountSideOffset = 0.7f;
+    [SerializeField] private float dismountForwardOffset = 0.1f;
+    [SerializeField] private float dismountGroundProbeHeight = 3f;
+    [SerializeField] private float dismountGroundProbeDistance = 8f;
+    [SerializeField] private LayerMask dismountGroundMask = Physics.DefaultRaycastLayers;
+    [SerializeField] private bool keepCurrentFacingOnDismount = true;
+
     private CharacterController playerCharacterController;
     private bool playerCharacterControllerWasEnabled;
     private bool locomotionRootWasActive;
     private Coroutine stateRoutine;
     private float originalCameraOffsetY = 0f;
     private bool hasCachedCameraOffsetY = false;
+    private Transform trackedHeadTransform;
 
     private void Awake()
     {
@@ -45,6 +55,12 @@ public class MountController : MonoBehaviour
         {
             originalCameraOffsetY = cameraOffset.localPosition.y;
             hasCachedCameraOffsetY = true;
+
+            Transform mainCamera = cameraOffset.Find("Main Camera");
+            if (mainCamera != null)
+            {
+                trackedHeadTransform = mainCamera;
+            }
         }
     }
 
@@ -140,7 +156,7 @@ public class MountController : MonoBehaviour
             return;
         }
 
-        if (seatAnchor == null || dismountPoint == null || routeController == null || playerRigRoot == null)
+        if (seatAnchor == null || routeController == null || playerRigRoot == null)
         {
             Debug.LogError("[MountController] Missing one or more required references.");
             return;
@@ -178,8 +194,11 @@ public class MountController : MonoBehaviour
         Vector3 startLocalPosition = rig.localPosition;
         Quaternion startLocalRotation = rig.localRotation;
 
-        float cameraOffsetY = hasCachedCameraOffsetY ? originalCameraOffsetY : 0f;
-        Vector3 targetLocalPosition = new Vector3(0f, settings.seatHeightOffset - cameraOffsetY, 0f);
+        Vector3 trackedHeadLocalPosition = GetTrackedHeadLocalPosition(rig);
+        Vector3 targetLocalPosition = new Vector3(
+            -trackedHeadLocalPosition.x,
+            settings.seatHeightOffset - trackedHeadLocalPosition.y,
+            -trackedHeadLocalPosition.z);
 
         float duration = Mathf.Max(0f, settings.mountBlendTime);
 
@@ -222,7 +241,7 @@ public class MountController : MonoBehaviour
             return;
         }
 
-        if (dismountPoint == null || playerRigRoot == null)
+        if (playerRigRoot == null)
         {
             Debug.LogError("[MountController] Missing dismountPoint or playerRigRoot.");
             return;
@@ -248,8 +267,11 @@ public class MountController : MonoBehaviour
 
         rig.SetParent(null, true);
 
-        Vector3 targetWorldPosition = dismountPoint.position;
-        Quaternion targetWorldRotation = dismountPoint.rotation;
+        if (!ResolveDismountPose(startWorldRotation, out Vector3 targetWorldPosition, out Quaternion targetWorldRotation))
+        {
+            Debug.LogError("[MountController] Could not resolve a dismount point.");
+            yield break;
+        }
         float duration = Mathf.Max(0f, settings.dismountBlendTime);
 
         if (duration <= 0f)
@@ -278,5 +300,148 @@ public class MountController : MonoBehaviour
         currentState = MountState.Idle;
         if (settings.debugLogs) Debug.Log("[MountController] State: Idle (Finished)");
         stateRoutine = null;
+    }
+
+    private Vector3 GetTrackedHeadLocalPosition(Transform rig)
+    {
+        if (rig == null)
+        {
+            return Vector3.zero;
+        }
+
+        if (trackedHeadTransform == null)
+        {
+            CacheRigReferences();
+        }
+
+        if (trackedHeadTransform != null)
+        {
+            return rig.InverseTransformPoint(trackedHeadTransform.position);
+        }
+
+        return new Vector3(0f, hasCachedCameraOffsetY ? originalCameraOffsetY : 0f, 0f);
+    }
+
+    private bool ResolveDismountPose(Quaternion currentWorldRotation, out Vector3 targetWorldPosition, out Quaternion targetWorldRotation)
+    {
+        Vector3 flattenedForward = transform.forward;
+        flattenedForward.y = 0f;
+        if (flattenedForward.sqrMagnitude < 0.0001f)
+        {
+            flattenedForward = Vector3.forward;
+        }
+
+        flattenedForward.Normalize();
+        targetWorldRotation = keepCurrentFacingOnDismount
+            ? GetFlattenedRotation(currentWorldRotation, flattenedForward)
+            : Quaternion.LookRotation(flattenedForward, Vector3.up);
+
+        if (autoDismountBesideMount)
+        {
+            Vector3 basePosition = seatAnchor != null ? seatAnchor.position : transform.position;
+            Vector3 sampleBasePosition =
+                basePosition +
+                transform.right * dismountSideOffset +
+                flattenedForward * dismountForwardOffset;
+
+            Vector3 sampleOrigin = sampleBasePosition + Vector3.up * dismountGroundProbeHeight;
+
+            if (Physics.Raycast(
+                    sampleOrigin,
+                    Vector3.down,
+                    out RaycastHit hit,
+                    dismountGroundProbeDistance,
+                    dismountGroundMask,
+                    QueryTriggerInteraction.Ignore))
+            {
+                targetWorldPosition = hit.point;
+                return true;
+            }
+
+            targetWorldPosition = sampleBasePosition;
+            return true;
+        }
+
+        if (dismountPoint != null)
+        {
+            targetWorldPosition = dismountPoint.position;
+            targetWorldRotation = dismountPoint.rotation;
+            return true;
+        }
+
+        Transform routeOut = FindNearbyTransform("RouteOut");
+        if (routeOut != null)
+        {
+            targetWorldPosition = routeOut.position;
+            targetWorldRotation = routeOut.rotation;
+            return true;
+        }
+
+        Transform mountEndAnchor = FindNearbyTransform("MountEndAnchor");
+        if (mountEndAnchor != null)
+        {
+            targetWorldPosition = mountEndAnchor.position;
+            targetWorldRotation = mountEndAnchor.rotation;
+            return true;
+        }
+
+        targetWorldPosition = transform.position;
+        return false;
+    }
+
+    private static Quaternion GetFlattenedRotation(Quaternion currentWorldRotation, Vector3 fallbackForward)
+    {
+        Vector3 forward = currentWorldRotation * Vector3.forward;
+        forward.y = 0f;
+
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = fallbackForward;
+        }
+
+        forward.Normalize();
+        return Quaternion.LookRotation(forward, Vector3.up);
+    }
+
+    private Transform FindNearbyTransform(string targetName)
+    {
+        Transform searchRoot = transform;
+
+        while (searchRoot != null)
+        {
+            Transform found = FindChildRecursive(searchRoot, targetName);
+            if (found != null)
+            {
+                return found;
+            }
+
+            searchRoot = searchRoot.parent;
+        }
+
+        return null;
+    }
+
+    private static Transform FindChildRecursive(Transform root, string targetName)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        if (root.name == targetName)
+        {
+            return root;
+        }
+
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform found = FindChildRecursive(root.GetChild(i), targetName);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 }

@@ -23,6 +23,7 @@ namespace WonderfulWorld.Features.Fireworks
 
         private Coroutine playbackRoutine;
         private bool isPlaying;
+        private Transform debugSparkRoot;
 
         public event Action SequenceStarted;
         public event Action SequenceStopped;
@@ -258,31 +259,69 @@ namespace WonderfulWorld.Features.Fireworks
             spark.name = $"FireworkSpark_{pattern.patternName}";
             spark.transform.position = position;
             spark.transform.localScale = Vector3.one * Mathf.Max(0.1f, pattern.sizeMultiplier * 0.35f);
+            spark.transform.SetParent(GetOrCreateDebugSparkRoot(), true);
+
+            if (Application.isPlaying)
+            {
+                spark.hideFlags = HideFlags.HideInHierarchy;
+            }
 
             Collider collider = spark.GetComponent<Collider>();
             if (collider != null)
             {
-                Destroy(collider);
+                SafeDestroy(collider);
             }
 
             Renderer renderer = spark.GetComponent<Renderer>();
             if (renderer != null)
             {
-                renderer.material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                renderer.material.color = pattern.color;
-                StartCoroutine(FadeAndDestroySpark(renderer, spark, pattern));
+                Material sparkMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                sparkMaterial.color = pattern.color;
+
+                if (!Application.isPlaying)
+                {
+                    sparkMaterial.hideFlags = HideFlags.HideAndDontSave;
+                }
+
+                renderer.sharedMaterial = sparkMaterial;
+                StartCoroutine(FadeAndDestroySpark(renderer, spark, sparkMaterial, pattern));
                 return;
             }
 
-            Destroy(spark, Mathf.Max(3.5f, pattern.sparkLifetime));
+            SafeDestroy(spark);
         }
 
-        private IEnumerator FadeAndDestroySpark(Renderer renderer, GameObject spark, FireworkPattern pattern)
+        private Transform GetOrCreateDebugSparkRoot()
+        {
+            if (debugSparkRoot != null)
+            {
+                return debugSparkRoot;
+            }
+
+            Transform existing = transform.Find("_DebugFireworkSparks");
+            if (existing != null)
+            {
+                debugSparkRoot = existing;
+                return debugSparkRoot;
+            }
+
+            GameObject root = new GameObject("_DebugFireworkSparks");
+            root.transform.SetParent(transform, false);
+
+            if (Application.isPlaying)
+            {
+                root.hideFlags = HideFlags.HideInHierarchy;
+            }
+
+            debugSparkRoot = root.transform;
+            return debugSparkRoot;
+        }
+
+        private IEnumerator FadeAndDestroySpark(Renderer renderer, GameObject spark, Material sparkMaterial, FireworkPattern pattern)
         {
             float visibleDuration = Mathf.Max(0f, debugSparkVisibleDuration);
             float fadeDuration = Mathf.Max(0.1f, debugSparkFadeDuration);
-            Material material = renderer.material;
-            Color startColor = material.color;
+            Color startColor = sparkMaterial.color;
 
             yield return new WaitForSeconds(visibleDuration);
 
@@ -293,13 +332,32 @@ namespace WonderfulWorld.Features.Fireworks
                 float t = Mathf.Clamp01(elapsed / fadeDuration);
                 Color fadedColor = startColor;
                 fadedColor.a = Mathf.Lerp(startColor.a, 0f, t);
-                material.color = fadedColor;
+                sparkMaterial.color = fadedColor;
                 yield return null;
             }
 
+            SafeDestroy(sparkMaterial);
+
             if (spark != null)
             {
-                Destroy(spark);
+                SafeDestroy(spark);
+            }
+        }
+
+        private static void SafeDestroy(UnityEngine.Object target)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(target);
+            }
+            else
+            {
+                DestroyImmediate(target);
             }
         }
 
@@ -389,57 +447,4 @@ namespace WonderfulWorld.Features.Fireworks
         public float fanArc = 90f;
     }
 
-    [CreateAssetMenu(
-        fileName = "FireworkPatternLibrary_SO",
-        menuName = "WonderfulWorld/Fireworks/Pattern Library")]
-    public class FireworkPatternLibrary_SO : ScriptableObject
-    {
-        [SerializeField] private List<FireworkPattern> patterns = new List<FireworkPattern>();
-
-        public IReadOnlyList<FireworkPattern> Patterns => patterns;
-
-        private void OnEnable()
-        {
-            if (patterns == null || patterns.Count == 0)
-            {
-                patterns = FireworkController.GetDefaultPatterns();
-            }
-        }
-
-        public List<FireworkPattern> CreatePatternCopies()
-        {
-            if (patterns == null || patterns.Count == 0)
-            {
-                patterns = FireworkController.GetDefaultPatterns();
-            }
-
-            List<FireworkPattern> copies = new List<FireworkPattern>(patterns.Count);
-            for (int i = 0; i < patterns.Count; i++)
-            {
-                FireworkPattern pattern = patterns[i];
-                copies.Add(new FireworkPattern
-                {
-                    patternName = pattern.patternName,
-                    shape = pattern.shape,
-                    effectPrefab = pattern.effectPrefab,
-                    color = pattern.color,
-                    heightOffset = pattern.heightOffset,
-                    radius = pattern.radius,
-                    delayAfterLaunch = pattern.delayAfterLaunch,
-                    sizeMultiplier = pattern.sizeMultiplier,
-                    sparkLifetime = pattern.sparkLifetime,
-                    debugBurstCount = pattern.debugBurstCount,
-                    fanArc = pattern.fanArc
-                });
-            }
-
-            return copies;
-        }
-
-        [ContextMenu("Reset To Default M2 Patterns")]
-        private void ResetToDefaults()
-        {
-            patterns = FireworkController.GetDefaultPatterns();
-        }
-    }
 }
