@@ -1,11 +1,16 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using UnityEngine.Events;
 
-public class GrowthStageDriver : MonoBehaviour
+public class GrowthDriver : MonoBehaviour
 {
     [Header("Interaction Origin")]
     [SerializeField] private Transform interactionOrigin;
+    [Header("XR Controllers")]
+    [Header("Input Actions")]
+    [SerializeField] private InputActionProperty leftTrigger; 
+    [SerializeField] private InputActionProperty rightTrigger; 
 
     [Header("Single Growth")]
     [SerializeField] private GrowthController singleGrowthController;
@@ -26,6 +31,10 @@ public class GrowthStageDriver : MonoBehaviour
     private bool clusterPressedLastFrame;
     private bool regressPressedLastFrame;
 
+    [Header("Interaction Events")]
+    [Tooltip("Events to trigger when growth is successfully activated")]
+    public UnityEvent OnInteractionSuccess; 
+
     private void Awake()
     {
         AutoAssignReferences();
@@ -45,31 +54,46 @@ public class GrowthStageDriver : MonoBehaviour
         bool clusterPressedThisFrame = false;
         bool regressPressedThisFrame = false;
 
-        if (enableSimulatorTrigger)
+        // --- 1. XR Interaction (Trigger Buttons) ---
+        if (rightTrigger.action != null && rightTrigger.action.WasPressedThisFrame())
         {
-            if (Mouse.current != null && Mouse.current.leftButton.isPressed)
+            singlePressedThisFrame = true;
+        }
+
+        if (leftTrigger.action != null && leftTrigger.action.WasPressedThisFrame())
+        {
+            clusterPressedThisFrame = true;
+        }
+
+        // --- 2. Simulator/Mouse Debug (Mouse Buttons) ---
+        if (enableSimulatorTrigger && Mouse.current != null)
+        {
+            // Mouse Right Click -> Single Growth
+            if (Mouse.current.rightButton.isPressed)
             {
                 singlePressedThisFrame = true;
             }
-
-            if (Keyboard.current != null && Keyboard.current.gKey.isPressed)
+            // Mouse Left Click -> Cluster Growth
+            if (Mouse.current.leftButton.isPressed)
             {
                 clusterPressedThisFrame = true;
             }
         }
 
+        // --- 3. Keyboard Debug (R, T, Q keys) ---
         if (enableKeyboardFallback && Keyboard.current != null)
         {
-            if (Keyboard.current.eKey.isPressed)
+            // T Key -> Single Growth
+            if (Keyboard.current.tKey.isPressed)
             {
                 singlePressedThisFrame = true;
             }
-
+            // R Key -> Cluster Growth
             if (Keyboard.current.rKey.isPressed)
             {
                 clusterPressedThisFrame = true;
             }
-
+            // Q Key -> Shrink (Regress)
             if (allowShrinkInDebug && Keyboard.current.qKey.isPressed)
             {
                 regressPressedThisFrame = true;
@@ -89,6 +113,7 @@ public class GrowthStageDriver : MonoBehaviour
             {
                 Debug.Log("Single growth TRIGGERED");
                 singleGrowthController.TriggerSingleGrowth();
+                OnInteractionSuccess?.Invoke();
             }
             else
             {
@@ -109,6 +134,7 @@ public class GrowthStageDriver : MonoBehaviour
             {
                 Debug.Log("Cluster growth TRIGGERED");
                 clusterGrowthController.TriggerClusterGrowth();
+                OnInteractionSuccess?.Invoke();
             }
             else
             {
