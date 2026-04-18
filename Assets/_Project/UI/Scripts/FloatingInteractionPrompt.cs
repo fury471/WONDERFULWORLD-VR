@@ -35,6 +35,23 @@ public class FloatingInteractionPrompt : MonoBehaviour
     {
         if (promptCanvasGroup != null) promptCanvasGroup.alpha = 0f;
         baseLocalPos = transform.localPosition;
+        
+        // If the Player Camera is not assigned in the Inspector (which is normal for prefabs)
+        if (playerCamera == null)
+        {
+            // Automatically find the object with the "MainCamera" tag from your screenshot
+            GameObject mainCam = GameObject.FindGameObjectWithTag("MainCamera");
+            
+            if (mainCam != null)
+            {
+                playerCamera = mainCam.transform;
+                if (enableDebugLog) Debug.Log($"[Prompt] Successfully linked to: {mainCam.name}");
+            }
+            else
+            {
+                Debug.LogError("[Prompt] Cannot find an object with the 'MainCamera' tag in the scene!");
+            }
+        }
     }
 
     private void Update()
