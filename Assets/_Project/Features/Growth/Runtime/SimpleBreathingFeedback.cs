@@ -21,6 +21,16 @@ public class SimpleBreathingFeedback : MonoBehaviour
     private void Start() 
     {
         initialScale = transform.localScale;
+        // --- AUTOMATIC CAMERA LINK ---
+        if (playerCamera == null)
+        {
+            GameObject mainCam = GameObject.FindGameObjectWithTag("MainCamera");
+            if (mainCam != null)
+            {
+                playerCamera = mainCam.transform;
+                if (enableDebugLog) Debug.Log($"[Breathing] Linked to Camera: {mainCam.name}");
+            }
+        }
     }
 
     private void Update()
