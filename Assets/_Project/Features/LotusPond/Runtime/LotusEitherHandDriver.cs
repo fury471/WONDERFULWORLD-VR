@@ -36,16 +36,19 @@ public class LotusEitherHandDriver : MonoBehaviour
 
         bool leftTrigger = IsPressed(leftDevice);
         bool rightTrigger = IsPressed(rightDevice);
-        bool mouseClicked = enableMouseDebug && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
-
-        if ((leftTrigger && !leftPressedLastFrame) || mouseClicked)
+        bool mouseLeft = enableMouseDebug && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
+        bool mouseRight = enableMouseDebug && Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
+        Debug.LogWarning($"[LotusDriver] leftTrigger={leftTrigger},+ rightTrigger={rightTrigger},mouseLeft={mouseLeft},mouseRight={mouseRight}");
+        if ((leftTrigger && !leftPressedLastFrame) || mouseLeft)
         {
-            TryTrigger(mouseClicked ? rightRayOrigin : leftRayOrigin, mouseClicked ? "Mouse" : "LeftHand");
+            Debug.LogWarning($"[LotusDriver] mouseLeft! leftRayOrigin="+leftRayOrigin);
+            TryTrigger(leftRayOrigin, mouseLeft ? "Mouse" : "LeftHand");
         }
 
-        if (rightTrigger && !rightPressedLastFrame)
+        if ((rightTrigger && !rightPressedLastFrame) || mouseRight)
         {
-            TryTrigger(rightRayOrigin, "RightHand");
+            Debug.LogWarning($"[LotusDriver] mouseRight! rightRayOrigin="+rightRayOrigin);
+            TryTrigger(rightRayOrigin, mouseRight? "Mouse" : "RightHand");
         }
 
         leftPressedLastFrame = leftTrigger;
@@ -74,7 +77,7 @@ public class LotusEitherHandDriver : MonoBehaviour
             {
                 // DEBUG POINT 2: Script found and triggered
                 Debug.Log($"[LotusDriver] SUCCESS! Calling TriggerNote on {trigger.name}");
-                trigger.TriggerNote();
+                trigger.TriggerNote(hit.point); 
             }
             else
             {
