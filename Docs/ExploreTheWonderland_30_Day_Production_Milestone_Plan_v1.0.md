@@ -5,14 +5,14 @@
 - Project: Open-World PCVR Fantasy Amusement Park Experience
 - Source Vision: `Docs/ExploreTheWonderland_PRD_TDD_v1.3.2.md`
 - Planning Horizon: 30 calendar days
-- Target Outcome: polished vertical slice, not full production completion
+- Target Outcome: polished exploratory park slice, not full production completion
 - Status: Proposed execution plan mapped to the current repo structure
 
 ## 1. Executive Goal
 
-At the end of 30 days, the team should have a stable, headset-ready vertical slice that demonstrates the project's identity as a magical open-world wonderland park with strong visual quality, professional presentation, and comfort-first immersion.
+At the end of 30 days, the team should have a stable, headset-ready exploratory park slice that demonstrates the project's identity as a magical open-world-style wonderland park with strong visual quality, professional presentation, comfort-first immersion, and believable soft-boundary world design.
 
-The Day 30 build must support one connected park loop:
+The Day 30 build should present one coherent magical park slice with a **suggested first-read attraction arc** for demoing, readability, and testing. That arc is not a mandatory mission sequence in the player experience:
 
 1. Arrival Plaza / Human Entry
 2. Flower Field land
@@ -50,6 +50,7 @@ Planning rules:
 - every milestone ends with a headset build and a short written check-in
 - no new feature enters production after Day 24 unless it replaces a broken feature
 - if performance and polish conflict, cut scope before lowering comfort or readability
+- older route-order language should be read as a readability spine, not as a forced player flow
 
 ## 3. Proposed Owners
 
@@ -408,19 +409,21 @@ Exit criteria:
 
 Objective:
 
-- connect the systems into one coherent park experience
-- prove that the slice functions as a single authored attraction loop
+- connect the systems into one coherent magical park experience
+- prove that the slice feels open and exploratory without requiring an endless map
+- use a suggested attraction arc for readability and demoing, but do not force a strict mission order
 
 Deliverables:
 
-- player start in Human Entry with onboarding guidance
-- scale shift gate in Flower Field
-- weather response visible in at least one land
-- growth route opens one new traversal path
+- player starts in Human Entry with onboarding that releases them into exploration
+- scale shift gate in Flower Field is discoverable and readable
+- weather response is visible in at least one land
+- growth route opens one new traversal possibility
 - particle interaction leads into a show-like payoff moment
-- lotus attraction is reachable and readable
+- lotus attraction is reachable and readable without hidden debug knowledge
 - cat ride connects park spaces in a memorable scenic beat
-- fireworks finale is triggered at the end of the route
+- fireworks finale reads as a skyline or destination payoff moment
+- park perimeter and land edges feel intentional and diegetic rather than like obvious hard walls
 
 Required repo outputs:
 
@@ -432,17 +435,18 @@ Required repo outputs:
 
 Owner breakdown:
 
-- Haobo owns attraction layout, route pacing, landmark spacing, and region integration
-- Yu Fu owns scene boot order, load safety, and integration bug fixing
+- Haobo owns attraction layout, scenic pacing, landmark spacing, soft-boundary shaping, and region integration
+- Yu Fu owns scene boot order, load safety, integration bug fixing, and exploratory handoff safety
 - Xuanyuan owns feature handoff wiring and state transitions
 - Tongyan owns clarity, interaction prompts, and first-time-user usability
-- Wenao owns visual continuity between lands and spectacle staging support
+- Wenao owns visual continuity between lands, skyline support, and spectacle staging support
 
 Exit criteria:
 
-- a tester can complete the whole slice with minimal explanation
+- a tester can explore the slice with minimal explanation
 - the game reads as one wonderland park, not disconnected feature rooms
 - no major transition breaks immersion or causes confusion about where to go next
+- the slice feels bounded in production terms but open in player perception
 
 ### M4: Visual And Immersion Pass
 ### Days 20-24
@@ -542,10 +546,10 @@ Exit criteria:
 | 12 | Particle vitality v1 | Xuanyuan | gather, hold, 3 preset shapes | `Features/ParticleVitality` |
 | 13 | Lotus attraction v1 | Tongyan | note, ripple, dual input support | `Features/LotusPond` |
 | 14 | Mount and fireworks v1 | Haobo / Xuanyuan / Wenao | guided cat route and first fireworks sequence | `Features/Mounts`, `Features/Fireworks` |
-| 15 | System integration pass 1 | Yu Fu | all systems connected into the master park scene flow | `Core/Runtime`, park scene |
-| 16 | Human Entry and Flower Field flow pass | Haobo | start sequence and first attraction readability | `World/Regions/HumanEntry`, `FlowerField` |
-| 17 | Lotus and Cat Route flow pass | Haobo / Tongyan | lagoon attraction and cat ride pacing | `World/Regions/LotusPond`, `CatRoute` |
-| 18 | Fireworks finale flow pass | Wenao / Xuanyuan | finale trigger and payoff moment | `World/Regions/FireworksClearing` |
+| 15 | System integration pass 1 | Yu Fu | all systems connected into the master park scene as discoverable attractions | `Core/Runtime`, park scene |
+| 16 | Human Entry and Flower Field exploration pass | Haobo | onboarding release and first attraction readability | `World/Regions/HumanEntry`, `FlowerField` |
+| 17 | Lotus and Cat Route exploration pass | Haobo / Tongyan | lagoon attraction and cat ride pacing in free exploration | `World/Regions/LotusPond`, `CatRoute` |
+| 18 | Fireworks skyline payoff pass | Wenao / Xuanyuan | finale trigger and skyline payoff moment | `World/Regions/FireworksClearing` |
 | 19 | Full-slice playtest 1 | Tongyan | confusion list, comfort list, blocker list | test notes external or docs |
 | 20 | Lighting direction lock | Wenao | global light, fog, sky, color script | `World/Shared/Lighting` |
 | 21 | Shader and material pass | Wenao | toon, foliage, water baseline | `Art/Shaders`, `World/Shared/Materials` |
@@ -681,7 +685,7 @@ Do not cut these without replacing them:
 The Day 30 milestone is complete only if all items below are true:
 
 - the build starts in `World_WonderlandPark` and places the player correctly in Human Entry
-- the player can comfortably traverse the park loop in headset
+- the player can comfortably explore the park slice in headset
 - scale shift works reliably and feels immersive
 - at least one weather change has visible world impact
 - at least one growth route changes traversal
@@ -690,6 +694,7 @@ The Day 30 milestone is complete only if all items below are true:
 - the cat ride is memorable and comfortable
 - the fireworks finale lands as a payoff moment
 - the art, lighting, VFX, audio, and UI feel coherent
+- the playable perimeter feels intentional and diegetic rather than like a visible hard stop
 - target hardware performance is acceptable during normal play
 - known issues are documented and none are critical blockers
 

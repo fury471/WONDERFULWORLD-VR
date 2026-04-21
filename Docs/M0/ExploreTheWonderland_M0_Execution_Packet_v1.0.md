@@ -6,12 +6,17 @@
 - Source Docs:
   - `Docs/ExploreTheWonderland_PRD_TDD_v1.3.2.md`
   - `Docs/ExploreTheWonderland_30_Day_Production_Milestone_Plan_v1.0.md`
+  - `Docs/Current_Demonstration_Direction_v1.0.md`
+
+Current demonstration note:
+
+- read any route-order language in this document as a suggested first-read attraction arc for readability and demoing, not as a mandatory mission sequence
 
 ## 1. Locked Day 30 Vertical Slice
 
 This 30-day cycle is not building the full park. It is building one polished vertical slice.
 
-Mandatory route order:
+Suggested first-read attraction arc:
 
 1. `Arrival Plaza / Human Entry`
 2. `Flower Field`

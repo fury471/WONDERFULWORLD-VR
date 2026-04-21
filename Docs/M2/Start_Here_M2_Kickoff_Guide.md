@@ -5,6 +5,18 @@
 - Audience: Group 5 M2 feature team
 - Goal: Start M2 cleanly from the current repo without guessing where feature work belongs or who should touch the master scene
 
+Current demonstration note:
+
+- M2 systems should be built as discoverable attractions and environmental affordances for an exploration-first magical park, not as steps in a rigid mission chain
+
+## Current Progress Snapshot (April 7, 2026)
+
+- ScaleShift, Weather, Growth, ParticleVitality, Fireworks, and most Lotus runtime work have landed in the repo.
+- Mounts has not landed yet.
+- Lotus is still missing its planned LotusScale_SO.asset.
+- Wenao's M2 lighting and VFX support hooks have not landed yet.
+- The team is past M2 kickoff and is now in active mid-milestone implementation.
+
 ## 1. What This Repo Is Right Now
 
 The repo is ready for M2 feature kickoff planning, but M2 should begin as isolated feature implementation, not as direct park-scene hacking.
@@ -299,3 +311,4 @@ Use these as the source of truth:
 - `Docs/Start_Here_M1_Kickoff_Guide.md`
 
 If the team follows this order, M2 starts with the least scene-merge risk and the clearest path to prototype-quality signature systems.
+
