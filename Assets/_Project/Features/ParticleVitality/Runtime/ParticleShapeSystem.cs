@@ -12,6 +12,12 @@ public class ParticleShapeSystem : MonoBehaviour
         Heart,
         Spiral
     }
+    public enum lifeCycleType
+    {
+        Init, // 默认值为 0
+        Active,    // 默认值为 1
+        nature,     // 默认值为 2
+    }
 
     [Header("References")]
     [SerializeField] private ParticlePreviewAnchor previewAnchor;
@@ -26,11 +32,10 @@ public class ParticleShapeSystem : MonoBehaviour
 
     [Header("Display Particles")]
     [SerializeField] private float displayParticleLifetime = 999f;
-    [SerializeField] private float displayParticleSize = 0.035f;
+    [SerializeField] private float displayParticleSize = 0.5f;
     [SerializeField] private Color displayParticleColor = Color.white;
 
     [Header("Selection UI")]
-    [SerializeField] private bool showShapeSelection;
     [SerializeField] private bool showPostCollectOptions;
     [SerializeField] private Vector2 selectionPanelSize = new(260f, 190f);
     [SerializeField] private float selectionUiDistanceFromCamera = 0.8f;
@@ -47,40 +52,83 @@ public class ParticleShapeSystem : MonoBehaviour
 
     private readonly List<Vector3> currentWorldPositions = new();
     private readonly List<Vector3> targetLocalPositions = new();
-    private ParticleSystem.Particle[] particleBuffer = Array.Empty<ParticleSystem.Particle>();
-    private bool pendingPostCollectOptions;
-    private float pendingPostCollectOptionsTime;
+    private ParticleSystem.Particle[] captureBuffer = Array.Empty<ParticleSystem.Particle>();
+    private bool allowShapeMotion=false;
 
     public ParticlePreviewAnchor PreviewAnchor => previewAnchor;
     public ShapeType CurrentShape => currentShape;
-    public int ActiveParticleCount => currentWorldPositions.Count;
-    public int RemainingCapacity => Mathf.Max(0, maxParticles - currentWorldPositions.Count);
-    public bool CanAcceptParticle => currentWorldPositions.Count < maxParticles;
-    public bool IsSelectionVisible => showShapeSelection;
-    public bool IsPostCollectOptionsVisible => showPostCollectOptions;
+    private lifeCycleType currentLifeCycle = lifeCycleType.Init;
+
+    [SerializeField] private float jitterStrength = 0.02f; // 颤动幅度
+    [SerializeField] private float jitterSpeed = 5f;      // 颤动频率
+
+    [Header("Juice")]
+    [SerializeField] private float globalPulseSpeed = 2f;
+    [SerializeField] private float globalPulseAmplitude = 0.1f;
+
 
     private void Awake()
     {
         ConfigureDisplayParticleSystem();
     }
 
-    public void SetShape(ShapeType shape)
+  
+
+    public void CaptureParticlesFromSystem(ParticleSystem sourceSystem)
     {
-        currentShape = shape;
-        showShapeSelection = false;
-        showPostCollectOptions = false;
-        RebuildTargets();
+        if (sourceSystem == null)
+        {
+            ClearParticles();
+            return;
+        }
+
+        int liveCount = sourceSystem.particleCount;
+        if (liveCount <= 0)
+        {
+            ClearParticles();
+            return;
+        }
+
+        if (captureBuffer.Length < liveCount)
+        {
+            captureBuffer = new ParticleSystem.Particle[liveCount];
+        }
+
+        int capturedCount = sourceSystem.GetParticles(captureBuffer);
+
+        currentWorldPositions.Clear();
+        targetLocalPositions.Clear();
+
+        int sampleCount = Mathf.Min(maxParticles, capturedCount);
+        for (int i = 0; i < sampleCount; i++)
+        {
+            int sourceIndex = Mathf.FloorToInt(i * (capturedCount / (float)sampleCount));
+            sourceIndex = Mathf.Clamp(sourceIndex, 0, capturedCount - 1);
+
+            ParticleSystem.MainModule main = sourceSystem.main;
+
+            Vector3 worldPos;
+            if (main.simulationSpace == ParticleSystemSimulationSpace.World)
+            {
+                worldPos = captureBuffer[sourceIndex].position;
+            }
+            else
+            {
+                worldPos = sourceSystem.transform.TransformPoint(captureBuffer[sourceIndex].position);
+            }
+            currentWorldPositions.Add(worldPos);
+            targetLocalPositions.Add(Vector3.zero);
+        }
+
     }
 
-    public void SelectShapeAndShowPostOptions(ShapeType shape)
-    {
-        SetShape(shape);
 
-        if (currentWorldPositions.Count > 0)
-        {
-            pendingPostCollectOptions = true;
-            pendingPostCollectOptionsTime = Time.time + postCollectOptionsDelaySeconds;
-        }
+    public void SetShape(ShapeType shape)
+    {
+        allowShapeMotion = true;
+        currentLifeCycle = lifeCycleType.Active;
+        currentShape = shape;
+        RebuildTargets();
     }
 
     public void CycleShape()
@@ -89,72 +137,58 @@ public class ParticleShapeSystem : MonoBehaviour
         SetShape((ShapeType)nextValue);
     }
 
-    public void SpawnParticle(Vector3 worldPosition)
-    {
-        if (!CanAcceptParticle)
-        {
-            return;
-        }
-
-        currentWorldPositions.Add(worldPosition);
-        targetLocalPositions.Add(Vector3.zero);
-        RebuildTargets();
-        SyncDisplayParticles(forceResetLifetime: true);
-    }
 
     public void ClearParticles()
     {
+        allowShapeMotion = false;
+        currentLifeCycle = lifeCycleType.nature;
+
+        int count = displayParticleSystem.particleCount;
+        if (count > 0)
+        {
+            displayParticleSystem.GetParticles(captureBuffer);
+            for (int i = 0; i < count; i++)
+            {
+                // 给初速度
+                captureBuffer[i].velocity = new Vector3(
+                        UnityEngine.Random.Range(-0.8f, 0.8f), // 水平晃动
+                        UnityEngine.Random.Range(-0.2f, -0.5f), // 缓慢下落
+                        UnityEngine.Random.Range(-0.8f, 0.8f)
+                    );
+            }
+            displayParticleSystem.SetParticles(captureBuffer, count);
+        }
+
         currentWorldPositions.Clear();
         targetLocalPositions.Clear();
-        SyncDisplayParticles(forceResetLifetime: false);
     }
 
-    private void Update()
+    private void LateUpdate()
     {
-        HandleDebugInput();
-        UpdateDeferredPostCollectOptions();
-        UpdateParticleTargets();
-        MoveParticles();
+
+        var main = displayParticleSystem.main;
+       
+                
+        if (lifeCycleType.Active == currentLifeCycle)
+        {
+            main.simulationSpeed = 0f;
+            MoveParticles();
+            SyncDisplayParticles(forceResetLifetime: false);
+        
+        }else if (lifeCycleType.nature == currentLifeCycle)
+        {
+    
+            main.simulationSpeed = 0.5f; 
+            
+            // 如果所有粒子都自然消失了，可以回到 Init 状态
+            if (displayParticleSystem.particleCount == 0)
+            {
+                currentLifeCycle = lifeCycleType.Init;
+            }
+        }
+        
     }
 
-    private void HandleDebugInput()
-    {
-        if (!showShapeSelection)
-        {
-            return;
-        }
-
-        Keyboard keyboard = Keyboard.current;
-        if (keyboard == null)
-        {
-            return;
-        }
-
-        if (keyboard.digit1Key.wasPressedThisFrame)
-        {
-            SelectShapeAndShowPostOptions(ShapeType.HoldCloud);
-        }
-        else if (keyboard.digit2Key.wasPressedThisFrame)
-        {
-            SelectShapeAndShowPostOptions(ShapeType.Sphere);
-        }
-        else if (keyboard.digit3Key.wasPressedThisFrame)
-        {
-            SelectShapeAndShowPostOptions(ShapeType.Heart);
-        }
-        else if (keyboard.digit4Key.wasPressedThisFrame)
-        {
-            SelectShapeAndShowPostOptions(ShapeType.Spiral);
-        }
-    }
-
-    private void UpdateParticleTargets()
-    {
-        if (targetLocalPositions.Count != currentWorldPositions.Count)
-        {
-            RebuildTargets();
-        }
-    }
 
     private void MoveParticles()
     {
@@ -168,13 +202,19 @@ public class ParticleShapeSystem : MonoBehaviour
         for (int i = 0; i < currentWorldPositions.Count; i++)
         {
             Vector3 targetWorldPosition = GetTargetWorldPosition(targetLocalPositions[i]);
+
+            // 为每个粒子计算一个独特的随机偏移 (Perlin Noise 效果最平滑)
+            // 使用 i 作为种子偏移，确保每个粒子的抖动轨迹不同
+            float offsetX = (Mathf.PerlinNoise(Time.time * jitterSpeed, i * 0.1f) - 0.5f) * jitterStrength;
+            float offsetY = (Mathf.PerlinNoise(Time.time * jitterSpeed, i * 0.2f) - 0.5f) * jitterStrength;
+            float offsetZ = (Mathf.PerlinNoise(Time.time * jitterSpeed, i * 0.3f) - 0.5f) * jitterStrength;
+            Vector3 jitteredTarget = targetWorldPosition + new Vector3(offsetX, offsetY, offsetZ);
             currentWorldPositions[i] = Vector3.Lerp(
                 currentWorldPositions[i],
-                targetWorldPosition,
+                jitteredTarget,
                 Time.deltaTime * currentMoveSpeed);
         }
-
-        SyncDisplayParticles(forceResetLifetime: false);
+       
     }
 
     private Vector3 GetTargetWorldPosition(Vector3 localTargetPosition)
@@ -183,10 +223,15 @@ public class ParticleShapeSystem : MonoBehaviour
         {
             return localTargetPosition;
         }
-
+        // 计算全局脉动系数
+        // 使用 Sin 函数随时间产生 0.9 到 1.1 之间的缩放倍率
+        float pulse = 1f + Mathf.Sin(Time.time * globalPulseSpeed) * globalPulseAmplitude;
+        
+        // 应用缩放
+        Vector3 dynamicLocalPos = localTargetPosition * pulse;
         return currentShape == ShapeType.HoldCloud
-            ? previewAnchor.GetHoldWorldPosition(localTargetPosition)
-            : previewAnchor.GetShapeWorldPosition(localTargetPosition);
+            ? previewAnchor.GetHoldWorldPosition(dynamicLocalPos)
+            : previewAnchor.GetShapeWorldPosition(dynamicLocalPos);
     }
 
     private void RebuildTargets()
@@ -346,105 +391,7 @@ public class ParticleShapeSystem : MonoBehaviour
         Gizmos.DrawWireSphere(gizmoCenter, gizmoRadius);
     }
 
-    public void BeginGathering()
-    {
-        showShapeSelection = false;
-        showPostCollectOptions = false;
-        pendingPostCollectOptions = false;
-        SetShape(ShapeType.HoldCloud);
-    }
 
-    public void ContinueDisplaying()
-    {
-        showPostCollectOptions = false;
-        pendingPostCollectOptions = false;
-    }
-
-    public void ShowShapeSelection()
-    {
-        if (currentWorldPositions.Count == 0)
-        {
-            return;
-        }
-
-        showPostCollectOptions = false;
-        showShapeSelection = true;
-    }
-
-    public void ShowPostCollectOptionsNow()
-    {
-        if (currentWorldPositions.Count == 0)
-        {
-            return;
-        }
-
-        pendingPostCollectOptions = false;
-        showShapeSelection = false;
-        showPostCollectOptions = true;
-    }
-
-    public void ClearParticlesAndCloseOptions()
-    {
-        ClearParticles();
-        showPostCollectOptions = false;
-        showShapeSelection = false;
-        pendingPostCollectOptions = false;
-    }
-
-    public void HideShapeSelection()
-    {
-        showShapeSelection = false;
-        showPostCollectOptions = false;
-        pendingPostCollectOptions = false;
-    }
-
-    private void UpdateDeferredPostCollectOptions()
-    {
-        if (!pendingPostCollectOptions)
-        {
-            return;
-        }
-
-        if (Time.time < pendingPostCollectOptionsTime)
-        {
-            return;
-        }
-
-        pendingPostCollectOptions = false;
-        showPostCollectOptions = true;
-    }
-
-    public Vector3 GetRandomHoldWorldPosition()
-    {
-        if (previewAnchor == null)
-        {
-            return transform.position;
-        }
-
-        float radius = GetShapeRadius(ShapeType.HoldCloud, holdRadius);
-        float heightRange = GetShapeHeight(ShapeType.HoldCloud, holdRadius * 0.8f);
-
-        Vector2 circle = UnityEngine.Random.insideUnitCircle * radius;
-        float y = UnityEngine.Random.Range(-heightRange * 0.5f, heightRange * 0.5f);
-        Vector3 localOffset = new Vector3(circle.x, y, circle.y);
-        return previewAnchor.GetHoldWorldPosition(localOffset);
-    }
-
-    public Vector3 GetRandomAbsorbTargetWorldPosition()
-    {
-        if (previewAnchor == null)
-        {
-            return transform.position;
-        }
-
-        float radius = GetShapeRadius(ShapeType.HoldCloud, holdRadius);
-        float heightRange = GetShapeHeight(ShapeType.HoldCloud, holdRadius * 0.8f);
-
-        Vector2 circle = UnityEngine.Random.insideUnitCircle * radius;
-        float y = UnityEngine.Random.Range(-heightRange * 0.35f, heightRange * 0.35f);
-        Vector3 localOffset = new Vector3(circle.x, y, circle.y);
-        return previewAnchor.GetHoldWorldPosition(localOffset);
-    }
 
     private void SyncDisplayParticles(bool forceResetLifetime)
     {
@@ -457,25 +404,30 @@ public class ParticleShapeSystem : MonoBehaviour
 
         for (int i = 0; i < currentWorldPositions.Count; i++)
         {
-            particleBuffer[i].position = currentWorldPositions[i];
-            particleBuffer[i].startSize = displayParticleSize;
-            particleBuffer[i].startColor = displayParticleColor;
-
-            if (forceResetLifetime || particleBuffer[i].remainingLifetime <= 0f)
+            captureBuffer[i].position = currentWorldPositions[i];
+            captureBuffer[i].startSize = displayParticleSize;
+        
+            if (forceResetLifetime || captureBuffer[i].remainingLifetime <= 0f)
             {
-                particleBuffer[i].startLifetime = displayParticleLifetime;
-                particleBuffer[i].remainingLifetime = displayParticleLifetime;
+                    captureBuffer[i].startLifetime = displayParticleLifetime;
+                    captureBuffer[i].remainingLifetime = displayParticleLifetime;
+                    captureBuffer[i].velocity = Vector3.zero;
+                
             }
         }
-
-        displayParticleSystem.SetParticles(particleBuffer, currentWorldPositions.Count);
+        // Debug.Log($"当前世界坐标列表的大小为: {currentWorldPositions.Count},{currentLifeCycle}");
+        if (!displayParticleSystem.isPlaying)
+        {
+            displayParticleSystem.Play();
+        }
+        displayParticleSystem.SetParticles(captureBuffer, currentWorldPositions.Count);
     }
 
     private void EnsureParticleBufferSize(int count)
     {
-        if (particleBuffer.Length < count)
+        if (captureBuffer.Length < count)
         {
-            particleBuffer = new ParticleSystem.Particle[Mathf.Max(count, 1)];
+            captureBuffer = new ParticleSystem.Particle[Mathf.Max(count, 1)];
         }
     }
 
@@ -498,3 +450,72 @@ public class ParticleShapeSystem : MonoBehaviour
 
 }
 
+[CreateAssetMenu(
+    fileName = "ParticleShapeLibrary_SO",
+    menuName = "WonderfulWorld/Particle Vitality/Particle Shape Library")]
+public class ParticleShapeLibrary_SO : ScriptableObject
+{
+    [Header("Hold Cloud")]
+    [SerializeField] private ParticleShapePreset holdCloud = new("Hold Cloud", ParticleShapeSystem.ShapeType.HoldCloud, 0.18f, 0.09f, 1f);
+
+    [Header("Sphere")]
+    [SerializeField] private ParticleShapePreset sphere = new("Sphere", ParticleShapeSystem.ShapeType.Sphere, 0.25f, 0f, 1f);
+
+    [Header("Heart")]
+    [SerializeField] private ParticleShapePreset heart = new("Heart", ParticleShapeSystem.ShapeType.Heart, 0.3f, 0f, 1f);
+
+    [Header("Spiral")]
+    [SerializeField] private ParticleShapePreset spiral = new("Spiral", ParticleShapeSystem.ShapeType.Spiral, 0.28f, 0.4f, 1f);
+
+    public bool TryGetPreset(ParticleShapeSystem.ShapeType shapeType, out ParticleShapePreset preset)
+    {
+        switch (shapeType)
+        {
+            case ParticleShapeSystem.ShapeType.HoldCloud:
+                preset = holdCloud;
+                return true;
+            case ParticleShapeSystem.ShapeType.Sphere:
+                preset = sphere;
+                return true;
+            case ParticleShapeSystem.ShapeType.Heart:
+                preset = heart;
+                return true;
+            case ParticleShapeSystem.ShapeType.Spiral:
+                preset = spiral;
+                return true;
+            default:
+                preset = default;
+                return false;
+        }
+    }
+}
+
+[Serializable]
+public struct ParticleShapePreset
+{
+    [SerializeField] private string displayName;
+    [SerializeField] private ParticleShapeSystem.ShapeType shapeType;
+    [SerializeField] private float radius;
+    [SerializeField] private float height;
+    [SerializeField] private float moveSpeedMultiplier;
+
+    public ParticleShapePreset(
+        string displayName,
+        ParticleShapeSystem.ShapeType shapeType,
+        float radius,
+        float height,
+        float moveSpeedMultiplier)
+    {
+        this.displayName = displayName;
+        this.shapeType = shapeType;
+        this.radius = radius;
+        this.height = height;
+        this.moveSpeedMultiplier = moveSpeedMultiplier;
+    }
+
+    public string DisplayName => displayName;
+    public ParticleShapeSystem.ShapeType ShapeType => shapeType;
+    public float Radius => radius;
+    public float Height => height;
+    public float MoveSpeedMultiplier => moveSpeedMultiplier <= 0f ? 1f : moveSpeedMultiplier;
+}
