@@ -11,55 +11,25 @@ public class ParticleCollector : MonoBehaviour
     [SerializeField] private InputActionReference collectAction;
 
     [Header("Collection")]
-    [SerializeField] private float collectRadius = 1.5f;
-    [SerializeField] private int minParticlesPerBurst = 1;
-    [SerializeField] private int maxParticlesPerBurst = 5;
-    [SerializeField] private float burstIntervalSeconds = 0.12f;
+    [SerializeField] private float collectRadius = 0.1f;
     [SerializeField] private bool requireDebugSource = true;
 
     [Header("Absorb Buildup")]
     [SerializeField] private float absorbBuildupSeconds = 1.8f;
 
-    [Header("Wind VFX")]
-    [SerializeField] private float blossomFieldWidth = 1.25f;
-    [SerializeField] private float blossomFieldHeight = 0.7f;
-    [SerializeField] private float blossomFieldDepth = 0.6f;
-    [SerializeField] private Color blossomColor = new(1f, 0.45f, 0.82f, 1f);
-    [SerializeField] private float minEmissionRate = 3f;
-    [SerializeField] private float maxEmissionRate = 18f;
-    [SerializeField] private float minStartSpeed = 0.002f;
-    [SerializeField] private float maxStartSpeed = 0.015f;
-    [SerializeField] private float minStartLifetime = 3.2f;
-    [SerializeField] private float maxStartLifetime = 5.2f;
-    [SerializeField] private float minStartSize = 0.018f;
-    [SerializeField] private float maxStartSize = 0.032f;
-    [SerializeField] private float minNoiseStrength = 0.1f;
-    [SerializeField] private float maxNoiseStrength = 0.22f;
-    [SerializeField] private float minOrbitalVelocity = 0.01f;
-    [SerializeField] private float maxOrbitalVelocity = 0.08f;
-    [SerializeField] private float minRadialVelocity = -0.005f;
-    [SerializeField] private float maxRadialVelocity = -0.035f;
-    [SerializeField] private float minUpwardVelocity = 0.01f;
-    [SerializeField] private float maxUpwardVelocity = 0.035f;
-    [SerializeField] private float sideDriftStrength = 0.03f;
-    [SerializeField] private float forwardDriftStrength = 0.012f;
-    [SerializeField] private float minColorAlpha = 0.35f;
-    [SerializeField] private float maxColorAlpha = 0.85f;
-
     [Header("Prompt State")]
-    [SerializeField] private float promptAutoHideSeconds = 5f;
     [SerializeField] private float warningDurationSeconds = 2f;
     [SerializeField] private bool enableDebugLogs = true;
 
     private bool showCollectPrompt;
     private bool collectPromptConfirmed;
-    private bool wasWithinCollectRangeLastFrame;
-    private bool shouldShowShapeSelectionOnRelease;
     private string warningMessage;
     private float collectPromptHideTime;
     private float warningHideTime;
-    private float nextBurstTime;
+
     private float absorbHoldStartTime = -1f;
+
+    private float simulationSpeed = -1f;
 
     private void Awake()
     {
@@ -76,12 +46,6 @@ public class ParticleCollector : MonoBehaviour
                 && Vector3.Distance(leftHandTransform.position, source.position) <= collectRadius;
         }
     }
-
-    public bool ShowCollectPrompt => showCollectPrompt;
-    public bool CollectPromptConfirmed => collectPromptConfirmed;
-    public string WarningMessage => warningMessage;
-    public float CollectPromptSecondsRemaining => Mathf.Max(0f, collectPromptHideTime - Time.time);
-    public float WarningSecondsRemaining => Mathf.Max(0f, warningHideTime - Time.time);
 
     private void OnEnable()
     {
@@ -100,7 +64,6 @@ public class ParticleCollector : MonoBehaviour
             return;
         }
 
-        UpdateCollectPromptState();
         UpdateWindVfx();
 
         InputAction action = collectAction != null ? collectAction.action : null;
@@ -111,200 +74,70 @@ public class ParticleCollector : MonoBehaviour
 
         if (action.WasPressedThisFrame())
         {
-            if (shapeSystem.CurrentShape != ParticleShapeSystem.ShapeType.HoldCloud
-                && shapeSystem.ActiveParticleCount > 0)
-            {
-                shapeSystem.ClearParticles();
-                LogDebug("Existing shaped particles cleared. Starting a new absorb cycle.");
-            }
 
-            nextBurstTime = 0f;
-            shouldShowShapeSelectionOnRelease = false;
+            shapeSystem.ClearParticles();
+            LogDebug("Existing shaped particles cleared. Starting a new absorb cycle.");
             absorbHoldStartTime = Time.time;
         }
 
-        if (action.IsPressed())
-        {
-            bool startedAbsorption = TryCollectWhileHeld();
-            shouldShowShapeSelectionOnRelease |= startedAbsorption;
-        }
 
-        if (action.WasReleasedThisFrame() && shouldShowShapeSelectionOnRelease)
+        if (action.WasReleasedThisFrame())
         {
-            shapeSystem.ShowShapeSelection();
-            shouldShowShapeSelectionOnRelease = false;
-            nextBurstTime = 0f;
-            absorbHoldStartTime = -1f;
+            LogDebug("action.WasReleasedThisFrame.");
+            shapeSystem.CaptureParticlesFromSystem(absorbParticleSystem);
+            shapeSystem.CycleShape();
             StopWindVfxEmission();
         }
-        else if (action.WasReleasedThisFrame())
+        if(!IsWithinCollectRange)
         {
-            absorbHoldStartTime = -1f;
             StopWindVfxEmission();
+            shapeSystem.ClearParticles();
         }
     }
 
-    private void UpdateCollectPromptState()
-    {
-        bool isWithinRange = IsWithinCollectRange;
-
-        if (isWithinRange && !wasWithinCollectRangeLastFrame)
-        {
-            showCollectPrompt = true;
-            collectPromptConfirmed = false;
-            collectPromptHideTime = Time.time + promptAutoHideSeconds;
-            warningMessage = string.Empty;
-            warningHideTime = 0f;
-            LogDebug($"Entered collect range. Prompt shown. Distance={GetDistanceToSource():F3}");
-        }
-
-        if (!isWithinRange)
-        {
-            if (showCollectPrompt)
-            {
-                LogDebug($"Left collect range. Prompt cleared. Distance={GetDistanceToSource():F3}");
-            }
-
-            showCollectPrompt = false;
-            collectPromptConfirmed = false;
-        }
-        else if (showCollectPrompt && Time.time >= collectPromptHideTime)
-        {
-            showCollectPrompt = false;
-            LogDebug("Collect prompt auto-hidden after timeout.");
-        }
-
-        if (!string.IsNullOrEmpty(warningMessage) && Time.time >= warningHideTime)
-        {
-            warningMessage = string.Empty;
-            warningHideTime = 0f;
-        }
-
-        wasWithinCollectRangeLastFrame = isWithinRange;
-    }
-
-    private bool TryCollectWhileHeld()
-    {
-        if (!shapeSystem.CanAcceptParticle)
-        {
-            ShowWarning("Particle capacity is full.");
-            LogDebug("Press G ignored: particle capacity is full.");
-            return false;
-        }
-
-        Transform source = GetActiveSource();
-        if (source == null)
-        {
-            ShowWarning("No particle source is assigned.");
-            LogDebug("Press G ignored: no active particle source.");
-            return false;
-        }
-
-        if (!IsWithinCollectRange)
-        {
-            ShowWarning("Out of range. Move closer to the source first.");
-            LogDebug($"Press G ignored: out of range. Distance={GetDistanceToSource():F3}, Radius={collectRadius:F3}");
-            return false;
-        }
-
-        if (Time.time < nextBurstTime)
-        {
-            return false;
-        }
-
-        shapeSystem.BeginGathering();
-
-        float absorbStrength = GetAbsorbStrength01();
-        int logicalBurst = Mathf.RoundToInt(Mathf.Lerp(minParticlesPerBurst, maxParticlesPerBurst, absorbStrength));
-        int spawnCount = Mathf.Min(logicalBurst, shapeSystem.RemainingCapacity);
-        for (int i = 0; i < spawnCount; i++)
-        {
-            shapeSystem.SpawnParticle(source.position);
-        }
-
-        nextBurstTime = Time.time + burstIntervalSeconds;
-
-        LogDebug($"Absorb started. Spawned {spawnCount} particles from source.");
-
-        return spawnCount > 0;
-    }
 
     private void UpdateWindVfx()
     {
-        if (absorbParticleSystem == null)
-        {
-            return;
-        }
-
-        Transform source = GetActiveSource();
-        if (source == null || leftHandTransform == null)
-        {
-            StopWindVfxEmission();
-            return;
-        }
-
-        absorbParticleSystem.transform.position = source.position;
-        absorbParticleSystem.transform.rotation = source.rotation;
 
         InputAction action = collectAction != null ? collectAction.action : null;
-        bool isActive = action != null && action.IsPressed() && IsWithinCollectRange;
-        float strength = isActive ? GetAbsorbStrength01() : 0f;
-
-        var emission = absorbParticleSystem.emission;
-        emission.rateOverTimeMultiplier = Mathf.Lerp(0f, maxEmissionRate, strength);
-
-        var main = absorbParticleSystem.main;
-        main.startSpeed = Mathf.Lerp(minStartSpeed, maxStartSpeed, strength);
-        main.startLifetime = Mathf.Lerp(minStartLifetime, maxStartLifetime, strength);
-        main.startSize = Mathf.Lerp(minStartSize, maxStartSize, strength);
-        Color currentColor = blossomColor;
-        currentColor.a = Mathf.Lerp(minColorAlpha, maxColorAlpha, strength);
-        main.startColor = currentColor;
-
-        var velocityOverLifetime = absorbParticleSystem.velocityOverLifetime;
-        velocityOverLifetime.enabled = true;
-        velocityOverLifetime.space = ParticleSystemSimulationSpace.Local;
-        velocityOverLifetime.x = new ParticleSystem.MinMaxCurve(-sideDriftStrength, sideDriftStrength);
-        float upwardVelocity = Mathf.Lerp(minUpwardVelocity, maxUpwardVelocity, strength);
-        velocityOverLifetime.y = new ParticleSystem.MinMaxCurve(upwardVelocity, upwardVelocity);
-        velocityOverLifetime.z = new ParticleSystem.MinMaxCurve(-forwardDriftStrength, forwardDriftStrength);
-
-        var limitVelocityOverLifetime = absorbParticleSystem.limitVelocityOverLifetime;
-        limitVelocityOverLifetime.enabled = true;
-        limitVelocityOverLifetime.space = ParticleSystemSimulationSpace.Local;
-        limitVelocityOverLifetime.limit = Mathf.Lerp(0.12f, 0.55f, strength);
-
-        var noise = absorbParticleSystem.noise;
-        noise.enabled = true;
-        noise.strength = Mathf.Lerp(minNoiseStrength, maxNoiseStrength, strength);
-        noise.frequency = Mathf.Lerp(0.08f, 0.22f, strength);
-        noise.scrollSpeed = Mathf.Lerp(0.05f, 0.2f, strength);
-
-        var forceOverLifetime = absorbParticleSystem.forceOverLifetime;
-        forceOverLifetime.enabled = true;
-        forceOverLifetime.space = ParticleSystemSimulationSpace.Local;
-        forceOverLifetime.x = new ParticleSystem.MinMaxCurve(0f);
-        forceOverLifetime.y = new ParticleSystem.MinMaxCurve(Mathf.Lerp(0.01f, 0.04f, strength));
-        forceOverLifetime.z = new ParticleSystem.MinMaxCurve(0f);
-
-        var rotationOverLifetime = absorbParticleSystem.rotationOverLifetime;
-        rotationOverLifetime.enabled = true;
-        rotationOverLifetime.z = new ParticleSystem.MinMaxCurve(Mathf.Lerp(0.15f, 0.8f, strength));
-
-        var velocityBySpeed = absorbParticleSystem.velocityOverLifetime;
-        velocityBySpeed.orbitalY = new ParticleSystem.MinMaxCurve(Mathf.Lerp(minOrbitalVelocity, maxOrbitalVelocity, strength));
-        velocityBySpeed.radial = new ParticleSystem.MinMaxCurve(Mathf.Lerp(minRadialVelocity, maxRadialVelocity, strength));
-
-        if (isActive)
+        bool isActive = action != null && action.IsPressed();
+        
+        if (isActive && IsWithinCollectRange )
         {
+            // 只有当它还没播放时，才调用 Play()，避免每一帧都重复触发
+            float holdDuration = Time.time - absorbHoldStartTime;
+            float t = Mathf.Clamp01(holdDuration / absorbBuildupSeconds);
+            var emission = absorbParticleSystem.emission;
+            var main = absorbParticleSystem.main;
+
+
             if (!absorbParticleSystem.isPlaying)
             {
+                main.simulationSpeed = 1f;
                 absorbParticleSystem.Play();
+                LogDebug("Particle System Started Playing.");
             }
+            main.simulationSpeed = Mathf.Lerp(1.0f, 2.0f, t);
+            emission.rateOverTimeMultiplier = 5f * Mathf.Pow(100f / 5f, t);
+            main.gravityModifier = Mathf.Lerp(0.1f, 0.5f, t);
+            main.startSpeed = Mathf.Lerp(2.0f, 8.0f, t);
+            
         }
-        else if (absorbParticleSystem.isPlaying)
+        else
         {
-            absorbParticleSystem.Stop(false, ParticleSystemStopBehavior.StopEmitting);
+            // 只有当它正在播放时，才调用 Stop()
+            if (absorbParticleSystem.isPlaying)
+            {
+                absorbParticleSystem.Stop(false, ParticleSystemStopBehavior.StopEmitting);
+                var main = absorbParticleSystem.main;
+                simulationSpeed = main.simulationSpeed;
+                main.simulationSpeed = 0f;
+
+            }
+            if (action.WasReleasedThisFrame())
+            {
+                absorbHoldStartTime = -1f;
+            }
         }
     }
 
@@ -317,68 +150,6 @@ public class ParticleCollector : MonoBehaviour
 
         var main = absorbParticleSystem.main;
         main.playOnAwake = false;
-        main.loop = false;
-        main.simulationSpace = ParticleSystemSimulationSpace.Local;
-        main.gravityModifier = 0f;
-        main.startSpeed = minStartSpeed;
-        main.startLifetime = minStartLifetime;
-        main.startSize = minStartSize;
-        main.maxParticles = Mathf.Max(main.maxParticles, 2048);
-
-        var emission = absorbParticleSystem.emission;
-        emission.enabled = true;
-        emission.rateOverTimeMultiplier = 0f;
-
-        var shape = absorbParticleSystem.shape;
-        shape.enabled = true;
-        shape.shapeType = ParticleSystemShapeType.Box;
-        shape.scale = new Vector3(blossomFieldWidth, blossomFieldHeight, blossomFieldDepth);
-
-        var velocityOverLifetime = absorbParticleSystem.velocityOverLifetime;
-        velocityOverLifetime.enabled = true;
-        velocityOverLifetime.space = ParticleSystemSimulationSpace.Local;
-        velocityOverLifetime.x = new ParticleSystem.MinMaxCurve(-sideDriftStrength, sideDriftStrength);
-        velocityOverLifetime.y = new ParticleSystem.MinMaxCurve(minUpwardVelocity, minUpwardVelocity);
-        velocityOverLifetime.z = new ParticleSystem.MinMaxCurve(-forwardDriftStrength, forwardDriftStrength);
-        velocityOverLifetime.orbitalY = new ParticleSystem.MinMaxCurve(minOrbitalVelocity);
-        velocityOverLifetime.radial = new ParticleSystem.MinMaxCurve(minRadialVelocity);
-
-        var forceOverLifetime = absorbParticleSystem.forceOverLifetime;
-        forceOverLifetime.enabled = true;
-        forceOverLifetime.space = ParticleSystemSimulationSpace.Local;
-        forceOverLifetime.x = new ParticleSystem.MinMaxCurve(0f);
-        forceOverLifetime.y = new ParticleSystem.MinMaxCurve(0.01f);
-        forceOverLifetime.z = new ParticleSystem.MinMaxCurve(0f);
-
-        var limitVelocityOverLifetime = absorbParticleSystem.limitVelocityOverLifetime;
-        limitVelocityOverLifetime.enabled = true;
-        limitVelocityOverLifetime.space = ParticleSystemSimulationSpace.Local;
-        limitVelocityOverLifetime.limit = 0.12f;
-
-        var inheritVelocity = absorbParticleSystem.inheritVelocity;
-        inheritVelocity.enabled = false;
-
-        var noise = absorbParticleSystem.noise;
-        noise.enabled = true;
-        noise.strength = minNoiseStrength;
-        noise.frequency = 0.08f;
-        noise.scrollSpeed = 0.05f;
-
-        var rotationOverLifetime = absorbParticleSystem.rotationOverLifetime;
-        rotationOverLifetime.enabled = true;
-        rotationOverLifetime.z = new ParticleSystem.MinMaxCurve(0.15f);
-
-        absorbParticleSystem.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-    }
-
-    private float GetAbsorbStrength01()
-    {
-        if (absorbHoldStartTime < 0f)
-        {
-            return 0f;
-        }
-
-        return Mathf.Clamp01((Time.time - absorbHoldStartTime) / Mathf.Max(0.01f, absorbBuildupSeconds));
     }
 
     private void StopWindVfxEmission()
@@ -390,13 +161,8 @@ public class ParticleCollector : MonoBehaviour
 
         var emission = absorbParticleSystem.emission;
         emission.rateOverTimeMultiplier = 0f;
-    }
-
-    private void ShowWarning(string message)
-    {
-        warningMessage = message;
-        warningHideTime = Time.time + warningDurationSeconds;
-        LogDebug($"Warning shown: {message}");
+        absorbHoldStartTime = -1f;
+        absorbParticleSystem.Clear();
     }
 
     private float GetDistanceToSource()
@@ -430,39 +196,5 @@ public class ParticleCollector : MonoBehaviour
         return requireDebugSource ? null : leftHandTransform;
     }
 
-    private void OnDrawGizmosSelected()
-    {
-        if (leftHandTransform == null)
-        {
-            return;
-        }
-
-        Gizmos.color = IsWithinCollectRange ? Color.green : Color.red;
-        Gizmos.DrawWireSphere(leftHandTransform.position, collectRadius);
-
-        if (debugSource != null)
-        {
-            Gizmos.color = Color.magenta;
-            Gizmos.DrawLine(leftHandTransform.position, debugSource.position);
-        }
-    }
-
-    public void ConfirmCollectPrompt()
-    {
-        collectPromptConfirmed = true;
-        showCollectPrompt = false;
-        LogDebug("Collect prompt confirmed by user.");
-    }
-
-    public void DismissCollectPrompt()
-    {
-        showCollectPrompt = false;
-    }
-
-    public void ClearWarning()
-    {
-        warningMessage = string.Empty;
-        warningHideTime = 0f;
-    }
 
 }
