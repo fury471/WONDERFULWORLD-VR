@@ -29,6 +29,12 @@ namespace WonderfulWorld.Features.Fireworks
         [ContextMenu("Trigger Launch")]
         public void TriggerLaunch()
         {
+            if (!Application.isPlaying)
+            {
+                Debug.Log("[Fireworks] Enter Play Mode to preview launches safely.");
+                return;
+            }
+
             if (controller == null)
             {
                 Debug.LogWarning($"{nameof(FireworkLaunchPad)} on {name} has no {nameof(FireworkController)} assigned.", this);
@@ -65,6 +71,12 @@ namespace WonderfulWorld.Features.Fireworks
 
         public void TriggerPattern(int patternIndex)
         {
+            if (!Application.isPlaying)
+            {
+                Debug.Log("[Fireworks] Enter Play Mode to preview launches safely.");
+                return;
+            }
+
             if (controller == null)
             {
                 Debug.LogWarning($"{nameof(FireworkLaunchPad)} on {name} has no {nameof(FireworkController)} assigned.", this);

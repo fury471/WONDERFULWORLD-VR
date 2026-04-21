@@ -4,6 +4,10 @@
 - Date: April 2, 2026
 - Scope: repo-side M1 completion check plus required human verification
 
+Current demonstration note:
+
+- route references in this checklist describe the readable park shell and attraction arc used for testing, not a mandatory final player sequence
+
 ## 1. M1 Deliverables Status
 
 | Item | Status | Evidence | Notes |

@@ -5,6 +5,10 @@
 - Purpose: Provide an owner-tagged starter board so M1 work can begin immediately
 - Usage: Copy into GitHub Projects, Jira, Trello, or use directly as the in-repo planning board
 
+Current demonstration note:
+
+- any route-order references in this file should be read as a readability and demo arc, not as a forced player sequence
+
 ## 1. Label Set
 
 Owner labels:

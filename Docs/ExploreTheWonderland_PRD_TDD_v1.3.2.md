@@ -1,14 +1,30 @@
 # Explore the Wonderland
 ## Product Requirements Document (PRD) + Technical Development Document (TDD)
 
-- Document Version: 1.3.2
-- Date: March 27, 2026
+- Document Version: 1.3.2 with April 2026 demonstration-direction alignment
+- Date: April 14, 2026
 - Team (Group 5): Xuanyuan Qin, Tongyan Sun, Haobo Xu, Wenao Li, Yu Fu
 - Product Type: Open-World PCVR Fantasy Amusement Park Experience
 - Platform: PCVR (SteamVR / OpenXR Tethered)
 - Engine Target: Unity 2022.3 LTS or newer
 - Repository: GitHub (with Git LFS for binary source assets)
-- Refinement Note: This version keeps the open-world direction while reframing the project as a magical, attraction-driven wonderland park with stronger production logic, VR comfort, and implementation clarity.
+- Refinement Note: This version keeps the open-world direction while reframing the project as a magical, attraction-driven wonderland park with stronger production logic, VR comfort, implementation clarity, soft-boundary world design, and exploration-first play logic.
+
+## Current Demonstration Direction
+
+For the current demonstration, the project should be read as a **bounded, seamless-feeling magical amusement park** rather than an endless map.
+
+Key interpretation rules:
+
+- the park should feel open and explorable
+- the current playable space is intentionally bounded
+- the world should imply extension beyond the immediately playable footprint
+- attraction discovery matters more than strict mission flow
+- any route references in older planning language should be treated as a suggested orientation arc, not as a mandatory player sequence
+
+Current source-of-truth framing:
+
+- `Docs/Current_Demonstration_Direction_v1.0.md`
 
 # PART 1: PRODUCT REQUIREMENTS DOCUMENT (PRD)
 
