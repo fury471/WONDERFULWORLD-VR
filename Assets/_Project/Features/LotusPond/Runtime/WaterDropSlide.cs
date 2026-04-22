@@ -6,6 +6,12 @@ public class WaterDropSlide : MonoBehaviour
     [Header("Slide Properties")]
     [SerializeField] private float slideSpeed = 0.4f;
     [SerializeField] private float gravityStrength = 7.0f;
+
+    [Header("Splash Settings")]
+    [Tooltip("The prefab containing the splash particle effect")]
+    [SerializeField] private GameObject splashPrefab;
+    [Tooltip("The world Y-coordinate where the splash should trigger")]
+    [SerializeField] private float waterLevelY = 0.1f;
     
     // The calculated local radius of the leaf
     private float leafRadius; 
@@ -89,10 +95,37 @@ public class WaterDropSlide : MonoBehaviour
             transform.localPosition += fallVelocity * Time.deltaTime;
             transform.localScale *= 0.96f;
 
+            // --- Splash Trigger Logic ---
+            // Detect when the droplet hits the defined water level height
+            Debug.LogWarning($"[LotusDriver]  transform.position.y={transform.position.y},waterLevelY={waterLevelY}");
+            if (transform.position.y <= waterLevelY)
+            {
+                SpawnSplashEffect();
+                break; // Stop the falling routine once impact occurs
+            }
+
             yield return null;
         }
 
+        
+
         // Cleanup
         Destroy(gameObject);
+    }
+
+    private void SpawnSplashEffect()
+    {
+        Debug.LogWarning($"SpawnSplashEffect！！！！！");
+        if (splashPrefab != null)
+        {
+            // Spawn splash at the hit location but aligned to the water surface Y
+            Vector3 splashPosition = new Vector3(transform.position.x, waterLevelY, transform.position.z);
+            
+            // Particles usually spray upward, so we rotate -90 degrees on X axis
+            GameObject splashInstance = Instantiate(splashPrefab, splashPosition, Quaternion.Euler(-90, 0, 0));
+            
+            // Ensure the splash effect object is cleaned up after playing
+            Destroy(splashInstance, 1.5f);
+        }
     }
 }
