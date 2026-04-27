@@ -12,7 +12,7 @@ Current demonstration direction:
 - `WeatherVfxHooks_lwa` : listens to `WeatherManager.WeatherChanged` and outputs
   - global shader params (`_WW_*`), optional
   - `WeatherVfxChannel_SO_lwa` ScriptableObject event channel, optional
-- `FireworksVfxHooks_lwa` : listens to `FireworkController.PatternSpawned` and outputs
+- `FireworksVfxHooks_lwa` : listens to `FireworkController.PointCloudFireworkSpawned` and outputs
   - global shader params (`_WW_*`), optional
   - `FireworkVfxChannel_SO_lwa` event channel, optional
 - `LotusVfxHooks_lwa` : listens to `LotusNoteTrigger.NoteTriggered` / `LotusRippleController.RippleStarted` and outputs
