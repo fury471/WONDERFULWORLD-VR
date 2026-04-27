@@ -78,19 +78,19 @@ public class LotusNoteTrigger : MonoBehaviour
         if (waterDropPrefab == null) return;
         int count = Random.Range(minDrops, maxDrops + 1);
         // Get the MeshRenderer of the leaf itself
-        MeshRenderer leafMesh = GetComponent<MeshRenderer>();
+        MeshRenderer leafMesh = GetComponentInChildren<MeshRenderer>();
 
         for (int i = 0; i < count; i++)
         {
             Vector2 randomPoint = Random.insideUnitCircle * spawnRadius;
-            Vector3 localPos = new Vector3(randomPoint.x, 1f, randomPoint.y); // Y微抬防止穿模
+            Vector3 localPos = new Vector3(randomPoint.x, 0.01f, randomPoint.y); // Y微抬防止穿模
 
             GameObject drop = Instantiate(waterDropPrefab, transform);
             drop.transform.localPosition = localPos;
 
-            float s = Random.Range(0.03f, 0.06f);
+            float s = Random.Range(0.2f, 0.4f);
             
-            drop.transform.localScale = new Vector3(s, s * 10f, s); 
+            drop.transform.localScale = new Vector3(s, s * 0.5f, s); 
             drop.transform.localRotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
 
             WaterDropSlide slideScript = drop.GetComponent<WaterDropSlide>();
