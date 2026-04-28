@@ -28,7 +28,11 @@ public class LotusNoteTrigger : MonoBehaviour
     [SerializeField] private GameObject waterDropPrefab;
     [SerializeField] private int minDrops = 3;        
     [SerializeField] private int maxDrops = 7;          
-    [SerializeField] private float spawnRadius = 0.4f;  
+    [SerializeField] private float spawnRadius = 0.4f; 
+    [SerializeField] private bool autoSpawnRadius = true;
+    
+    [Range(0.1f, 1.0f)]
+    [SerializeField] private float spawnRadiusMultiplier = 0.7f;
 
     private float nextAllowedTriggerTime;
     private bool objectStillInside;
@@ -79,6 +83,19 @@ public class LotusNoteTrigger : MonoBehaviour
         int count = Random.Range(minDrops, maxDrops + 1);
         // Get the MeshRenderer of the leaf itself
         MeshRenderer leafMesh = GetComponentInChildren<MeshRenderer>();
+        float effectiveSpawnRadius = spawnRadius;
+
+        if (autoSpawnRadius && leafMesh != null)
+        {
+            // leafMesh.bounds is WORLD space
+            Bounds worldBounds = leafMesh.bounds;
+            float radiusWorld = Mathf.Min(worldBounds.extents.x, worldBounds.extents.z);
+
+            // Convert WORLD radius to LOCAL radius (because we spawn via localPosition under this transform)
+            float radiusLocal = transform.InverseTransformVector(Vector3.right * radiusWorld).magnitude;
+
+            effectiveSpawnRadius = Mathf.Max(0.01f, radiusLocal * spawnRadiusMultiplier);
+        }
 
         for (int i = 0; i < count; i++)
         {
