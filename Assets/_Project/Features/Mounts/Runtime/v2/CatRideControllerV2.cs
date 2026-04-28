@@ -24,6 +24,8 @@ public class CatRideControllerV2 : MonoBehaviour
     [SerializeField] private GameObject locomotionRoot;
     [SerializeField] private GameObject xrDeviceSimulatorRoot;
     [SerializeField] private MountSettings_SO settings;
+    [SerializeField] private Animator kittyAnimator;
+
 
     [Header("Mount Access")]
     [SerializeField] private float remountDistance = 1.25f;
@@ -40,6 +42,9 @@ public class CatRideControllerV2 : MonoBehaviour
     [Header("Fallback Blend")]
     [SerializeField] private float fallbackMountBlendTime = 0.25f;
     [SerializeField] private float fallbackDismountBlendTime = 0.25f;
+    [SerializeField] private float dismountGroundLift = 0.05f;
+    [SerializeField] private float dismountUnlockDelay = 0.08f;
+
 
     [Header("Debug")]
     [SerializeField] private bool debugLogs = true;
@@ -237,6 +242,41 @@ public class CatRideControllerV2 : MonoBehaviour
         }
     }
 
+
+    private void UpdateKittyAnimation(float moveAmount, bool isAutoRiding)
+    {
+        if (kittyAnimator == null)
+        {
+            return;
+        }
+
+        if (isAutoRiding)
+        {
+            kittyAnimator.SetFloat("Vert", 1f);
+            kittyAnimator.SetFloat("State", 1f);
+            return;
+        }
+
+        if (moveAmount <= 0.01f)
+        {
+            kittyAnimator.SetFloat("Vert", 0f);
+            kittyAnimator.SetFloat("State", 0f);
+            return;
+        }
+
+        kittyAnimator.SetFloat("Vert", 1f);
+
+        if (moveAmount < 0.75f)
+        {
+            kittyAnimator.SetFloat("State", 0f);
+        }
+        else
+        {
+            kittyAnimator.SetFloat("State", 1f);
+        }
+    }
+
+
     private void StartMount()
     {
         if (currentState != RideState.Idle || stateRoutine != null)
@@ -306,6 +346,7 @@ public class CatRideControllerV2 : MonoBehaviour
 
         currentAutoIndex = 0;
         currentState = RideState.MountedManual;
+        UpdateKittyAnimation(0f, false);
         stateRoutine = null;
 
         if (debugLogs)
@@ -413,6 +454,9 @@ public class CatRideControllerV2 : MonoBehaviour
             targetWorldRotation = Quaternion.LookRotation(transform.forward, Vector3.up);
         }
 
+        // 稍微抬高一点，避免 CharacterController 恢复时和地面或猫体积发生挤压
+        targetWorldPosition += Vector3.up * dismountGroundLift;
+
         float duration = settings != null
             ? Mathf.Max(0f, settings.dismountBlendTime)
             : fallbackDismountBlendTime;
@@ -441,10 +485,22 @@ public class CatRideControllerV2 : MonoBehaviour
             rig.rotation = targetWorldRotation;
         }
 
+        Physics.SyncTransforms();
+
+        if (dismountUnlockDelay > 0f)
+        {
+            yield return new WaitForSeconds(dismountUnlockDelay);
+        }
+        else
+        {
+            yield return null;
+        }
+
         SetPlayerLocomotionLocked(false);
 
         currentAutoIndex = 0;
         currentState = RideState.Idle;
+        UpdateKittyAnimation(0f, false);
         stateRoutine = null;
 
         if (debugLogs)
@@ -452,6 +508,7 @@ public class CatRideControllerV2 : MonoBehaviour
             Debug.Log("[CatRideControllerV2] Dismounted.");
         }
     }
+
 
     private void HandleManualRide()
     {
@@ -465,6 +522,9 @@ public class CatRideControllerV2 : MonoBehaviour
 
         transform.Rotate(Vector3.up, turnInput * manualTurnSpeed * Time.deltaTime);
         transform.position += transform.forward * moveInput * manualMoveSpeed * Time.deltaTime;
+
+        UpdateKittyAnimation(Mathf.Abs(moveInput), false);
+
     }
 
     public bool BeginAutoRide()
@@ -515,6 +575,10 @@ public class CatRideControllerV2 : MonoBehaviour
             return;
         }
 
+
+        UpdateKittyAnimation(1f, true);
+
+
         float autoSpeed = settings != null ? settings.autoRideSpeed : 2f;
         float rotateSpeed = settings != null ? settings.rotateSpeed : 180f;
         float reachDistance = settings != null ? settings.reachDistance : 0.25f;
@@ -552,6 +616,8 @@ public class CatRideControllerV2 : MonoBehaviour
     private void FinishAutoRide()
     {
         currentState = RideState.MountedManual;
+        UpdateKittyAnimation(0f, false);
+
 
         if (debugLogs)
         {
