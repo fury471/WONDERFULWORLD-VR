@@ -26,27 +26,10 @@ namespace WonderfulWorld.Features.Fireworks
             }
         }
 
-        [ContextMenu("Trigger Launch")]
+        [ContextMenu("Showcase/Run Configured Sequence")]
         public void TriggerLaunch()
         {
-            if (!Application.isPlaying)
-            {
-                Debug.Log("[Fireworks] Enter Play Mode to preview launches safely.");
-                return;
-            }
-
-            if (controller == null)
-            {
-                Debug.LogWarning($"{nameof(FireworkLaunchPad)} on {name} has no {nameof(FireworkController)} assigned.", this);
-                return;
-            }
-
-            if (controller.PatternCount < 3)
-            {
-                Debug.LogWarning($"{nameof(FireworkController)} should expose at least 3 patterns for M2 validation.", controller);
-            }
-
-            if (controller.IsPlaying && !allowRetriggerWhilePlaying)
+            if (!CanTriggerShowcase())
             {
                 return;
             }
@@ -54,36 +37,108 @@ namespace WonderfulWorld.Features.Fireworks
             controller.PlaySequence();
         }
 
+        [ContextMenu("Showcase/Run All Sequence")]
+        public void TriggerAllShowcase()
+        {
+            if (!CanTriggerShowcase())
+            {
+                return;
+            }
+
+            controller.PlayAllSequence();
+        }
+
         public void TriggerStar()
         {
-            TriggerPatternByShape(FireworkShape.Star);
+            TriggerMathFirework(MathFireworkPattern.Star);
         }
 
         public void TriggerRing()
         {
-            TriggerPatternByShape(FireworkShape.Ring);
+            TriggerMathFirework(MathFireworkPattern.Ring);
         }
 
         public void TriggerHeart()
         {
-            TriggerPatternByShape(FireworkShape.Heart);
+            TriggerMathFirework(MathFireworkPattern.Heart);
+        }
+
+        public void TriggerFlower()
+        {
+            TriggerMathFirework(MathFireworkPattern.Flower);
+        }
+
+        public void TriggerSpiral()
+        {
+            TriggerMathFirework(MathFireworkPattern.Spiral);
+        }
+
+        public void TriggerTextFirework(string text)
+        {
+            if (!CanTriggerManualFirework())
+            {
+                return;
+            }
+
+            controller.LaunchTextFirework(text);
+        }
+
+        [ContextMenu("Showcase/Text")]
+        public void TriggerDreamText()
+        {
+            if (!CanTriggerManualFirework())
+            {
+                return;
+            }
+
+            controller.LaunchTextFirework(controller.GetText());
+        }
+
+        [ContextMenu("Showcase/Math Heart")]
+        public void TriggerMathHeart()
+        {
+            TriggerMathFirework(MathFireworkPattern.Heart);
+        }
+
+        [ContextMenu("Showcase/Math Ring")]
+        public void TriggerMathRing()
+        {
+            TriggerMathFirework(MathFireworkPattern.Ring);
+        }
+
+        [ContextMenu("Showcase/Math Spiral")]
+        public void TriggerMathSpiral()
+        {
+            TriggerMathFirework(MathFireworkPattern.Spiral);
+        }
+
+        [ContextMenu("Showcase/Math Sphere")]
+        public void TriggerMathSphere()
+        {
+            TriggerMathFirework(MathFireworkPattern.Sphere);
+        }
+
+        [ContextMenu("Showcase/Math Flower")]
+        public void TriggerMathFlower()
+        {
+            TriggerMathFirework(MathFireworkPattern.Flower);
+        }
+
+        [ContextMenu("Showcase/Math Star")]
+        public void TriggerMathStar()
+        {
+            TriggerMathFirework(MathFireworkPattern.Star);
+        }
+
+        [ContextMenu("Showcase/Math Mobius")]
+        public void TriggerMathMobius()
+        {
+            TriggerMathFirework(MathFireworkPattern.Mobius);
         }
 
         public void TriggerPattern(int patternIndex)
         {
-            if (!Application.isPlaying)
-            {
-                Debug.Log("[Fireworks] Enter Play Mode to preview launches safely.");
-                return;
-            }
-
-            if (controller == null)
-            {
-                Debug.LogWarning($"{nameof(FireworkLaunchPad)} on {name} has no {nameof(FireworkController)} assigned.", this);
-                return;
-            }
-
-            if (controller.IsPlaying && !allowRetriggerWhilePlaying)
+            if (!CanTriggerManualFirework())
             {
                 return;
             }
@@ -91,25 +146,51 @@ namespace WonderfulWorld.Features.Fireworks
             controller.PlayPattern(patternIndex);
         }
 
-        private void TriggerPatternByShape(FireworkShape shape)
+        private void TriggerMathFirework(MathFireworkPattern pattern)
         {
-            if (controller == null)
+            if (!CanTriggerManualFirework())
             {
-                Debug.LogWarning($"{nameof(FireworkLaunchPad)} on {name} has no {nameof(FireworkController)} assigned.", this);
                 return;
             }
 
-            var patterns = controller.Patterns;
-            for (int i = 0; i < patterns.Count; i++)
+            controller.LaunchMathFirework(pattern);
+        }
+
+        private bool CanTriggerShowcase()
+        {
+            if (!CanResolveController())
             {
-                if (patterns[i].shape == shape)
-                {
-                    TriggerPattern(i);
-                    return;
-                }
+                return false;
             }
 
-            Debug.LogWarning($"No firework pattern with shape {shape} was found on {nameof(FireworkController)}.", controller);
+            return !controller.IsShowcasePlaying || allowRetriggerWhilePlaying;
+        }
+
+        private bool CanTriggerManualFirework()
+        {
+            return CanResolveController();
+        }
+
+        private bool CanResolveController()
+        {
+            if (!Application.isPlaying)
+            {
+                Debug.Log("[Fireworks] Enter Play Mode to preview launches safely.");
+                return false;
+            }
+
+            if (controller == null)
+            {
+                controller = GetComponentInChildren<FireworkController>();
+            }
+
+            if (controller == null)
+            {
+                Debug.LogWarning($"{nameof(FireworkLaunchPad)} on {name} has no {nameof(FireworkController)} assigned.", this);
+                return false;
+            }
+
+            return true;
         }
     }
 }
