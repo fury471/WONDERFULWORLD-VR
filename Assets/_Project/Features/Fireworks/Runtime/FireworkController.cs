@@ -1,46 +1,89 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 namespace WonderfulWorld.Features.Fireworks
 {
+    [DisallowMultipleComponent]
     public class FireworkController : MonoBehaviour
     {
-        [Header("Playback")]
+        private static readonly MathFireworkPattern[] AllShowcaseMathPatterns =
+        {
+            MathFireworkPattern.Heart,
+            MathFireworkPattern.Ring,
+            MathFireworkPattern.Spiral,
+            MathFireworkPattern.Sphere,
+            MathFireworkPattern.Flower,
+            MathFireworkPattern.Star,
+            MathFireworkPattern.Mobius
+        };
+
+        [Header("Launch")]
         [SerializeField] private Transform launchPoint;
         [SerializeField] private Transform target;
         [SerializeField] private Vector3 targetOffset = new Vector3(0f, 2f, 6f);
-        [SerializeField] private FireworkPatternLibrary_SO patternLibrary;
-        [SerializeField] private List<FireworkPattern> patterns = new List<FireworkPattern>();
-        [SerializeField] private bool loopSequence;
-        [SerializeField] private bool playOnStart;
-        [SerializeField] private float initialDelay = 0.5f;
-        [Header("Debug Spark Timing")]
-        [SerializeField] private float debugSparkVisibleDuration = 3f;
-        [SerializeField] private float debugSparkFadeDuration = 1f;
 
-        private Coroutine playbackRoutine;
-        private bool isPlaying;
-        private Transform debugSparkRoot;
+        [Header("Showcase")]
+        [SerializeField] private bool playOnStart;
+        [SerializeField] private bool loopShowcase;
+        [SerializeField] private float initialDelay = 0.5f;
+        [SerializeField] private float delayBetweenShowcaseLaunches = 3.6f;
+        [SerializeField] private string showcaseText = "DREAM";
+        [SerializeField]
+        private List<MathFireworkPattern> showcaseMathPatterns = new List<MathFireworkPattern>
+        {
+            MathFireworkPattern.Heart,
+            MathFireworkPattern.Sphere,
+            MathFireworkPattern.Flower,
+            MathFireworkPattern.Mobius
+        };
+
+        [Header("Point Cloud Fireworks")]
+        [SerializeField] private PointCloudFireworkRenderer pointCloudRenderer;
+        [SerializeField] private float pointCloudHeightOffset = 13f;
+        [SerializeField] private float pointCloudForwardOffset = 7f;
+        [SerializeField] private float pointCloudScale = 3.8f;
+        [SerializeField] private float textPointCloudScaleMultiplier = 1.5f;
+        [SerializeField] private float mathPointCloudScaleMultiplier = 3.8f;
+        [SerializeField] private int textPointBudget = 980;
+        [SerializeField] private int mathPointBudget = 4800;
+        [SerializeField] private Color textFireworkColor = new Color(1f, 0.76f, 0.48f, 1f);
+        [SerializeField] private Color mathFireworkColor = new Color(0.56f, 0.95f, 1f, 1f);
+
+        [Header("Performance")]
+        [SerializeField] private FireworkQualityMode qualityMode = FireworkQualityMode.Balanced;
+        [SerializeField] private bool usePatternBudgetTuning = true;
+
+        [Header("Audio")]
+        [SerializeField] private AudioSource audioSource;
+        [SerializeField] private AudioClip launchAudioClip;
+        [SerializeField] private AudioClip burstAudioClip;
+        [SerializeField] private float launchAudioVolume = 0.55f;
+        [SerializeField] private float burstAudioVolume = 0.9f;
+        [SerializeField] private float pointCloudBurstAudioDelay = 1.05f;
+
+        private Coroutine showcaseRoutine;
+        private Coroutine pointCloudAudioRoutine;
 
         public event Action SequenceStarted;
         public event Action SequenceStopped;
-        public event Action<FireworkPattern, Vector3> PatternSpawned;
+        public event Action<PointCloudFireworkRequest, Vector3> PointCloudFireworkSpawned;
 
-        public bool IsPlaying => isPlaying;
-        public int PatternCount => patterns.Count;
-        public IReadOnlyList<FireworkPattern> Patterns => patterns;
+        public bool IsPlaying => showcaseRoutine != null || (pointCloudRenderer != null && pointCloudRenderer.IsPlaying);
+        public bool IsShowcasePlaying => showcaseRoutine != null;
+
+        public int PatternCount => showcaseMathPatterns?.Count ?? 0;
+
+        public string GetText()
+        {
+            return showcaseText;
+        }
 
         private void Reset()
         {
             launchPoint = transform;
-
-            if (patterns.Count == 0)
-            {
-                patterns = GetDefaultPatterns();
-            }
+            EnsureShowcasePatterns();
         }
 
         private void Awake()
@@ -50,7 +93,12 @@ namespace WonderfulWorld.Features.Fireworks
                 launchPoint = transform;
             }
 
-            LoadPatternsFromLibraryIfNeeded(forceRefresh: patternLibrary != null);
+            if (audioSource == null)
+            {
+                audioSource = GetComponent<AudioSource>();
+            }
+
+            EnsureShowcasePatterns();
         }
 
         private void Start()
@@ -61,66 +109,116 @@ namespace WonderfulWorld.Features.Fireworks
             }
         }
 
+        private void OnValidate()
+        {
+            pointCloudHeightOffset = Mathf.Max(0f, pointCloudHeightOffset);
+            pointCloudForwardOffset = Mathf.Max(0f, pointCloudForwardOffset);
+            pointCloudScale = Mathf.Max(0.1f, pointCloudScale);
+            textPointCloudScaleMultiplier = Mathf.Max(0.1f, textPointCloudScaleMultiplier);
+            mathPointCloudScaleMultiplier = Mathf.Max(0.1f, mathPointCloudScaleMultiplier);
+            textPointBudget = Mathf.Clamp(textPointBudget, FireworkPointCloudGenerator.MinPointBudget, FireworkPointCloudGenerator.MaxPointBudget);
+            mathPointBudget = Mathf.Clamp(mathPointBudget, FireworkPointCloudGenerator.MinPointBudget, FireworkPointCloudGenerator.MaxPointBudget);
+            initialDelay = Mathf.Max(0f, initialDelay);
+            delayBetweenShowcaseLaunches = Mathf.Max(0.1f, delayBetweenShowcaseLaunches);
+            pointCloudBurstAudioDelay = Mathf.Max(0f, pointCloudBurstAudioDelay);
+            launchAudioVolume = Mathf.Clamp01(launchAudioVolume);
+            burstAudioVolume = Mathf.Clamp01(burstAudioVolume);
+            showcaseText = FireworkPointCloudGenerator.SanitizeText(showcaseText);
+            EnsureShowcasePatterns();
+        }
+
         public void PlaySequence()
         {
-            if (playbackRoutine != null)
+            BeginShowcase(PlayConfiguredShowcaseRoutine());
+        }
+
+        public void PlayAllSequence()
+        {
+            BeginShowcase(PlayAllShowcaseRoutine());
+        }
+
+        private void BeginShowcase(IEnumerator routine)
+        {
+            if (showcaseRoutine != null)
             {
-                StopCoroutine(playbackRoutine);
+                StopCoroutine(showcaseRoutine);
             }
 
-            playbackRoutine = StartCoroutine(PlaySequenceRoutine());
+            showcaseRoutine = StartCoroutine(routine);
             SequenceStarted?.Invoke();
         }
 
         public void PlayPattern(int patternIndex)
         {
-            if (patternIndex < 0 || patternIndex >= patterns.Count)
+            EnsureShowcasePatterns();
+            int safeIndex = Mathf.Abs(patternIndex) % showcaseMathPatterns.Count;
+            LaunchMathFirework(showcaseMathPatterns[safeIndex]);
+        }
+
+        public void LaunchTextFirework(string text)
+        {
+            string sanitizedText = FireworkPointCloudGenerator.SanitizeText(text);
+            PointCloudFireworkRequest request = PointCloudFireworkRequest.Text(
+                sanitizedText,
+                textFireworkColor,
+                pointCloudScale * textPointCloudScaleMultiplier,
+                ResolveTextPointBudget(sanitizedText));
+            LaunchPointCloudFirework(request);
+        }
+
+        public void LaunchMathFirework(MathFireworkPattern pattern)
+        {
+            PointCloudFireworkRequest request = PointCloudFireworkRequest.Math(
+                pattern,
+                mathFireworkColor,
+                pointCloudScale * mathPointCloudScaleMultiplier,
+                ResolveMathPointBudget(pattern));
+            LaunchPointCloudFirework(request);
+        }
+
+        public void LaunchPointCloudFirework(PointCloudFireworkRequest request)
+        {
+            if (!Application.isPlaying)
             {
-                Debug.LogWarning($"Pattern index {patternIndex} is out of range for {nameof(FireworkController)} on {name}.", this);
+                Debug.Log("[Fireworks] Enter Play Mode to preview point-cloud fireworks safely.");
                 return;
             }
 
-            SpawnPattern(patterns[patternIndex]);
+            EnsurePointCloudRenderer();
+
+            List<Vector3> points = FireworkPointCloudGenerator.Generate(request);
+            Vector3 origin = launchPoint != null ? launchPoint.position : transform.position;
+            Vector3 center = ResolvePointCloudCenter();
+            PlayLaunchAudio();
+            pointCloudRenderer.Play(
+                points,
+                origin,
+                center,
+                request.color,
+                request.particleSizeMultiplier,
+                request.autoRotate,
+                request.rotationSpeedDegrees);
+            ScheduleBurstAudio(pointCloudBurstAudioDelay);
+            PointCloudFireworkSpawned?.Invoke(request, center);
         }
 
         public void StopSequence()
         {
-            if (playbackRoutine != null)
+            if (showcaseRoutine != null)
             {
-                StopCoroutine(playbackRoutine);
-                playbackRoutine = null;
+                StopCoroutine(showcaseRoutine);
+                showcaseRoutine = null;
             }
 
-            isPlaying = false;
             SequenceStopped?.Invoke();
         }
 
         public void RefreshPatternsFromLibrary()
         {
-            LoadPatternsFromLibraryIfNeeded(forceRefresh: true);
         }
 
-        private void OnValidate()
+        private IEnumerator PlayConfiguredShowcaseRoutine()
         {
-            if (patternLibrary != null)
-            {
-                LoadPatternsFromLibraryIfNeeded(forceRefresh: true);
-            }
-            else if (patterns == null || patterns.Count == 0)
-            {
-                patterns = GetDefaultPatterns();
-            }
-        }
-
-        public List<string> GetPatternNames()
-        {
-            return patterns.Select(pattern => string.IsNullOrWhiteSpace(pattern.patternName) ? "Pattern" : pattern.patternName).ToList();
-        }
-
-        private IEnumerator PlaySequenceRoutine()
-        {
-            isPlaying = true;
-
             if (initialDelay > 0f)
             {
                 yield return new WaitForSeconds(initialDelay);
@@ -128,48 +226,63 @@ namespace WonderfulWorld.Features.Fireworks
 
             do
             {
-                for (int i = 0; i < patterns.Count; i++)
-                {
-                    FireworkPattern pattern = patterns[i];
-                    SpawnPattern(pattern);
+                LaunchTextFirework(showcaseText);
+                yield return new WaitForSeconds(delayBetweenShowcaseLaunches);
 
-                    if (pattern.delayAfterLaunch > 0f)
-                    {
-                        yield return new WaitForSeconds(pattern.delayAfterLaunch);
-                    }
-                    else
-                    {
-                        yield return null;
-                    }
+                EnsureShowcasePatterns();
+                for (int i = 0; i < showcaseMathPatterns.Count; i++)
+                {
+                    LaunchMathFirework(showcaseMathPatterns[i]);
+                    yield return new WaitForSeconds(delayBetweenShowcaseLaunches);
                 }
             }
-            while (loopSequence);
+            while (loopShowcase);
 
-            isPlaying = false;
-            playbackRoutine = null;
+            showcaseRoutine = null;
             SequenceStopped?.Invoke();
         }
 
-        private void SpawnPattern(FireworkPattern pattern)
+        private IEnumerator PlayAllShowcaseRoutine()
         {
-            Vector3 spawnPosition = ResolveSpawnPosition(pattern);
-            PatternSpawned?.Invoke(pattern, spawnPosition);
-
-            if (pattern.effectPrefab != null)
+            if (initialDelay > 0f)
             {
-                ParticleSystem spawned = Instantiate(pattern.effectPrefab, spawnPosition, Quaternion.identity);
-                var main = spawned.main;
-                main.startColor = pattern.color;
-                main.startSizeMultiplier *= pattern.sizeMultiplier;
-                spawned.Play();
-                Destroy(spawned.gameObject, main.duration + main.startLifetime.constantMax + 1f);
-                return;
+                yield return new WaitForSeconds(initialDelay);
             }
 
-            SpawnDebugBurst(pattern, spawnPosition);
+            do
+            {
+                LaunchTextFirework(showcaseText);
+                yield return new WaitForSeconds(delayBetweenShowcaseLaunches);
+
+                for (int i = 0; i < AllShowcaseMathPatterns.Length; i++)
+                {
+                    LaunchMathFirework(AllShowcaseMathPatterns[i]);
+                    yield return new WaitForSeconds(delayBetweenShowcaseLaunches);
+                }
+            }
+            while (loopShowcase);
+
+            showcaseRoutine = null;
+            SequenceStopped?.Invoke();
         }
 
-        private Vector3 ResolveSpawnPosition(FireworkPattern pattern)
+        private void EnsureShowcasePatterns()
+        {
+            if (showcaseMathPatterns == null)
+            {
+                showcaseMathPatterns = new List<MathFireworkPattern>();
+            }
+
+            if (showcaseMathPatterns.Count == 0)
+            {
+                showcaseMathPatterns.Add(MathFireworkPattern.Heart);
+                showcaseMathPatterns.Add(MathFireworkPattern.Sphere);
+                showcaseMathPatterns.Add(MathFireworkPattern.Flower);
+                showcaseMathPatterns.Add(MathFireworkPattern.Mobius);
+            }
+        }
+
+        private Vector3 ResolvePointCloudCenter()
         {
             if (target != null)
             {
@@ -177,274 +290,132 @@ namespace WonderfulWorld.Features.Fireworks
             }
 
             Transform spawnRoot = launchPoint != null ? launchPoint : transform;
-            return spawnRoot.position + Vector3.up * pattern.heightOffset;
+            return spawnRoot.position
+                + Vector3.up * pointCloudHeightOffset
+                + spawnRoot.forward * pointCloudForwardOffset;
         }
 
-        private void SpawnDebugBurst(FireworkPattern pattern, Vector3 center)
+        private int ResolveTextPointBudget(string text)
         {
-            float step = 360f / Mathf.Max(1, pattern.debugBurstCount);
-
-            for (int i = 0; i < pattern.debugBurstCount; i++)
-            {
-                float angle = step * i;
-                Vector3 direction;
-                Vector3 point;
-
-                switch (pattern.shape)
-                {
-                    case FireworkShape.Heart:
-                        point = center + GetHeartPoint(i, pattern.debugBurstCount, pattern.radius);
-                        CreateDebugSpark(point, pattern);
-                        continue;
-                    case FireworkShape.Ring:
-                        direction = Quaternion.Euler(0f, angle, 0f) * Vector3.forward;
-                        break;
-                    case FireworkShape.Star:
-                        point = center + GetStarPoint(i, pattern.debugBurstCount, pattern.radius);
-                        CreateDebugSpark(point, pattern);
-                        continue;
-                    default:
-                        direction = Quaternion.Euler(0f, angle, angle * 0.5f) * Vector3.up;
-                        break;
-                }
-
-                point = center + direction.normalized * pattern.radius;
-                CreateDebugSpark(point, pattern);
-            }
+            int visibleLength = Mathf.Max(1, string.IsNullOrWhiteSpace(text) ? 0 : text.Trim().Length);
+            int lengthAwareBudget = 520 + visibleLength * 320;
+            return Mathf.Clamp(
+                Mathf.RoundToInt(Mathf.Max(textPointBudget, lengthAwareBudget) * ResolveQualityMultiplier()),
+                FireworkPointCloudGenerator.MinPointBudget,
+                FireworkPointCloudGenerator.MaxPointBudget);
         }
 
-        private static Vector3 GetStarPoint(int index, int count, float radius)
+        private int ResolveMathPointBudget(MathFireworkPattern pattern)
         {
-            const int vertexCount = 10;
-            Vector3[] vertices = new Vector3[vertexCount];
-            float outerRadius = radius;
-            float innerRadius = radius * 0.42f;
-
-            for (int i = 0; i < vertexCount; i++)
+            float multiplier = ResolveQualityMultiplier();
+            if (usePatternBudgetTuning)
             {
-                float angle = -Mathf.PI * 0.5f + i * Mathf.PI / 5f;
-                float currentRadius = i % 2 == 0 ? outerRadius : innerRadius;
-                vertices[i] = new Vector3(Mathf.Cos(angle) * currentRadius, Mathf.Sin(angle) * currentRadius, 0f);
+                multiplier *= ResolvePatternBudgetMultiplier(pattern);
             }
 
-            float normalized = count <= 1 ? 0f : index / (float)count;
-            float scaled = normalized * vertexCount;
-            int startIndex = Mathf.FloorToInt(scaled) % vertexCount;
-            int endIndex = (startIndex + 1) % vertexCount;
-            float edgeT = scaled - Mathf.Floor(scaled);
-            return Vector3.Lerp(vertices[startIndex], vertices[endIndex], edgeT);
+            return Mathf.Clamp(
+                Mathf.RoundToInt(mathPointBudget * multiplier),
+                FireworkPointCloudGenerator.MinPointBudget,
+                FireworkPointCloudGenerator.MaxPointBudget);
         }
 
-        private static Vector3 GetHeartPoint(int index, int count, float radius)
+        private float ResolveQualityMultiplier()
         {
-            float t = count <= 1 ? 0f : index / (float)(count - 1);
-            float angle = Mathf.Lerp(0f, Mathf.PI * 2f, t);
-            float x = 16f * Mathf.Pow(Mathf.Sin(angle), 3f);
-            float y =
-                13f * Mathf.Cos(angle) -
-                5f * Mathf.Cos(2f * angle) -
-                2f * Mathf.Cos(3f * angle) -
-                Mathf.Cos(4f * angle);
-
-            Vector3 point = new Vector3(x, y, 0f);
-            point.x *= radius / 18f;
-            point.y *= radius / 18f;
-            point.y += radius * 0.2f;
-            return point;
-        }
-
-        private void CreateDebugSpark(Vector3 position, FireworkPattern pattern)
-        {
-            GameObject spark = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            spark.name = $"FireworkSpark_{pattern.patternName}";
-            spark.transform.position = position;
-            spark.transform.localScale = Vector3.one * Mathf.Max(0.1f, pattern.sizeMultiplier * 0.35f);
-            spark.transform.SetParent(GetOrCreateDebugSparkRoot(), true);
-
-            if (Application.isPlaying)
+            return qualityMode switch
             {
-                spark.hideFlags = HideFlags.HideInHierarchy;
-            }
-
-            Collider collider = spark.GetComponent<Collider>();
-            if (collider != null)
-            {
-                SafeDestroy(collider);
-            }
-
-            Renderer renderer = spark.GetComponent<Renderer>();
-            if (renderer != null)
-            {
-                Material sparkMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                sparkMaterial.color = pattern.color;
-
-                if (!Application.isPlaying)
-                {
-                    sparkMaterial.hideFlags = HideFlags.HideAndDontSave;
-                }
-
-                renderer.sharedMaterial = sparkMaterial;
-                StartCoroutine(FadeAndDestroySpark(renderer, spark, sparkMaterial, pattern));
-                return;
-            }
-
-            SafeDestroy(spark);
-        }
-
-        private Transform GetOrCreateDebugSparkRoot()
-        {
-            if (debugSparkRoot != null)
-            {
-                return debugSparkRoot;
-            }
-
-            Transform existing = transform.Find("_DebugFireworkSparks");
-            if (existing != null)
-            {
-                debugSparkRoot = existing;
-                return debugSparkRoot;
-            }
-
-            GameObject root = new GameObject("_DebugFireworkSparks");
-            root.transform.SetParent(transform, false);
-
-            if (Application.isPlaying)
-            {
-                root.hideFlags = HideFlags.HideInHierarchy;
-            }
-
-            debugSparkRoot = root.transform;
-            return debugSparkRoot;
-        }
-
-        private IEnumerator FadeAndDestroySpark(Renderer renderer, GameObject spark, Material sparkMaterial, FireworkPattern pattern)
-        {
-            float visibleDuration = Mathf.Max(0f, debugSparkVisibleDuration);
-            float fadeDuration = Mathf.Max(0.1f, debugSparkFadeDuration);
-            Color startColor = sparkMaterial.color;
-
-            yield return new WaitForSeconds(visibleDuration);
-
-            float elapsed = 0f;
-            while (elapsed < fadeDuration)
-            {
-                elapsed += Time.deltaTime;
-                float t = Mathf.Clamp01(elapsed / fadeDuration);
-                Color fadedColor = startColor;
-                fadedColor.a = Mathf.Lerp(startColor.a, 0f, t);
-                sparkMaterial.color = fadedColor;
-                yield return null;
-            }
-
-            SafeDestroy(sparkMaterial);
-
-            if (spark != null)
-            {
-                SafeDestroy(spark);
-            }
-        }
-
-        private static void SafeDestroy(UnityEngine.Object target)
-        {
-            if (target == null)
-            {
-                return;
-            }
-
-            if (Application.isPlaying)
-            {
-                Destroy(target);
-            }
-            else
-            {
-                DestroyImmediate(target);
-            }
-        }
-
-        private void LoadPatternsFromLibraryIfNeeded(bool forceRefresh = false)
-        {
-            if (patternLibrary != null)
-            {
-                if (forceRefresh || patterns.Count == 0)
-                {
-                    patterns = patternLibrary.CreatePatternCopies();
-                }
-
-                return;
-            }
-
-            if (patterns.Count == 0)
-            {
-                patterns = GetDefaultPatterns();
-            }
-        }
-
-        internal static List<FireworkPattern> GetDefaultPatterns()
-        {
-            return new List<FireworkPattern>
-            {
-                new FireworkPattern
-                {
-                    patternName = "Star",
-                    shape = FireworkShape.Star,
-                    color = new Color(1f, 0.45f, 0.2f),
-                    heightOffset = 8f,
-                    radius = 2.5f,
-                    delayAfterLaunch = 1f,
-                    sizeMultiplier = 1.2f,
-                    sparkLifetime = 1f,
-                    debugBurstCount = 30
-                },
-                new FireworkPattern
-                {
-                    patternName = "Ring",
-                    shape = FireworkShape.Ring,
-                    color = new Color(0.3f, 0.8f, 1f),
-                    heightOffset = 11f,
-                    radius = 3.2f,
-                    delayAfterLaunch = 1.2f,
-                    sizeMultiplier = 1f,
-                    sparkLifetime = 1.1f,
-                    debugBurstCount = 14
-                },
-                new FireworkPattern
-                {
-                    patternName = "Heart",
-                    shape = FireworkShape.Heart,
-                    color = new Color(1f, 0.35f, 0.55f),
-                    heightOffset = 7f,
-                    radius = 3f,
-                    delayAfterLaunch = 1.1f,
-                    sizeMultiplier = 1.1f,
-                    sparkLifetime = 0.9f,
-                    debugBurstCount = 40,
-                    fanArc = 120f
-                }
+                FireworkQualityMode.Performance => 0.72f,
+                FireworkQualityMode.Showcase => 1.12f,
+                _ => 1f
             };
         }
-    }
 
-    public enum FireworkShape
-    {
-        Star,
-        Ring,
-        Heart
-    }
+        private static float ResolvePatternBudgetMultiplier(MathFireworkPattern pattern)
+        {
+            return pattern switch
+            {
+                MathFireworkPattern.Heart => 1.04f,
+                MathFireworkPattern.Sphere => 1.02f,
+                MathFireworkPattern.Flower => 1.04f,
+                MathFireworkPattern.Mobius => 0.82f,
+                MathFireworkPattern.Spiral => 0.78f,
+                MathFireworkPattern.Ring => 0.72f,
+                MathFireworkPattern.Star => 0.86f,
+                _ => 1f
+            };
+        }
 
-    [Serializable]
-    public class FireworkPattern
-    {
-        public string patternName = "Pattern";
-        public FireworkShape shape = FireworkShape.Star;
-        public ParticleSystem effectPrefab;
-        public Color color = Color.white;
-        public float heightOffset = 8f;
-        public float radius = 3f;
-        public float delayAfterLaunch = 1f;
-        public float sizeMultiplier = 1f;
-        public float sparkLifetime = 1f;
-        public int debugBurstCount = 12;
-        public float fanArc = 90f;
-    }
+        private void EnsurePointCloudRenderer()
+        {
+            if (pointCloudRenderer != null)
+            {
+                return;
+            }
 
+            pointCloudRenderer = GetComponentInChildren<PointCloudFireworkRenderer>(true);
+            if (pointCloudRenderer != null)
+            {
+                return;
+            }
+
+            GameObject rendererObject = new GameObject("PointCloudFireworkRenderer");
+            rendererObject.transform.SetParent(transform, false);
+            pointCloudRenderer = rendererObject.AddComponent<PointCloudFireworkRenderer>();
+        }
+
+        private void PlayLaunchAudio()
+        {
+            if (launchAudioClip == null)
+            {
+                return;
+            }
+
+            EnsureAudioSource();
+            audioSource.PlayOneShot(launchAudioClip, launchAudioVolume);
+        }
+
+        private void ScheduleBurstAudio(float delay)
+        {
+            if (burstAudioClip == null)
+            {
+                return;
+            }
+
+            if (pointCloudAudioRoutine != null)
+            {
+                StopCoroutine(pointCloudAudioRoutine);
+            }
+
+            pointCloudAudioRoutine = StartCoroutine(PlayBurstAudioAfterDelay(Mathf.Max(0f, delay)));
+        }
+
+        private IEnumerator PlayBurstAudioAfterDelay(float delay)
+        {
+            if (delay > 0f)
+            {
+                yield return new WaitForSeconds(delay);
+            }
+
+            EnsureAudioSource();
+            audioSource.PlayOneShot(burstAudioClip, burstAudioVolume);
+            pointCloudAudioRoutine = null;
+        }
+
+        private void EnsureAudioSource()
+        {
+            if (audioSource != null)
+            {
+                return;
+            }
+
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.playOnAwake = false;
+                audioSource.spatialBlend = 1f;
+                audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+                audioSource.maxDistance = 80f;
+            }
+        }
+    }
 }
