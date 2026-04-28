@@ -65,6 +65,7 @@ public class LotusEitherHandDriver : MonoBehaviour
 
         // Log the firing attempt
         Debug.Log($"[LotusDriver] {label} firing ray from {rayOrigin.name}");
+        Debug.DrawRay(rayOrigin.position, rayOrigin.forward * rayDistance, Color.red);
 
         if (Physics.Raycast(rayOrigin.position, rayOrigin.forward, out RaycastHit hit, rayDistance, rayMask, QueryTriggerInteraction.Collide))
         {
