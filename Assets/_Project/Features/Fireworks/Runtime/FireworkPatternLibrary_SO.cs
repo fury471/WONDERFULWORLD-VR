@@ -16,7 +16,7 @@ namespace WonderfulWorld.Features.Fireworks
         {
             if (patterns == null || patterns.Count == 0)
             {
-                patterns = FireworkController.GetDefaultPatterns();
+                patterns = LegacyFireworkPatternDefaults.Create();
             }
         }
 
@@ -24,7 +24,7 @@ namespace WonderfulWorld.Features.Fireworks
         {
             if (patterns == null || patterns.Count == 0)
             {
-                patterns = FireworkController.GetDefaultPatterns();
+                patterns = LegacyFireworkPatternDefaults.Create();
             }
 
             List<FireworkPattern> copies = new List<FireworkPattern>(patterns.Count);
@@ -53,7 +53,7 @@ namespace WonderfulWorld.Features.Fireworks
         [ContextMenu("Reset To Default M2 Patterns")]
         private void ResetToDefaults()
         {
-            patterns = FireworkController.GetDefaultPatterns();
+            patterns = LegacyFireworkPatternDefaults.Create();
         }
     }
 }

@@ -29,7 +29,7 @@ namespace WonderfulWorld.World.Shared.VfxHooks
 
             if (fireworkController != null)
             {
-                fireworkController.PatternSpawned += OnPatternSpawned;
+                fireworkController.PointCloudFireworkSpawned += OnPointCloudFireworkSpawned;
             }
         }
 
@@ -37,26 +37,21 @@ namespace WonderfulWorld.World.Shared.VfxHooks
         {
             if (fireworkController != null)
             {
-                fireworkController.PatternSpawned -= OnPatternSpawned;
+                fireworkController.PointCloudFireworkSpawned -= OnPointCloudFireworkSpawned;
             }
         }
 
-        private void OnPatternSpawned(FireworkPattern pattern, Vector3 worldPosition)
+        private void OnPointCloudFireworkSpawned(PointCloudFireworkRequest request, Vector3 worldPosition)
         {
-            if (pattern == null)
-            {
-                return;
-            }
-
             lastPatternIndex++;
 
             FireworkVfxEvent evt = new FireworkVfxEvent
             {
-                patternName = string.IsNullOrWhiteSpace(pattern.patternName) ? "Pattern" : pattern.patternName,
+                patternName = string.IsNullOrWhiteSpace(request.displayName) ? request.kind.ToString() : request.displayName,
                 patternIndex = lastPatternIndex,
                 worldPosition = worldPosition,
-                color = pattern.color,
-                sizeMultiplier = pattern.sizeMultiplier,
+                color = request.color,
+                sizeMultiplier = request.scale,
                 time = Time.time
             };
 
