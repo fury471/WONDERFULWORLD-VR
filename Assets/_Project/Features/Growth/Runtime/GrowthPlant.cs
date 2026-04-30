@@ -16,6 +16,14 @@ public class GrowthPlant : MonoBehaviour
     [SerializeField] private GrowthProfile_SO growthProfile;
     [SerializeField] private PlantPartBinding[] bindings;
     [SerializeField] private float growthDuration = 1.0f;
+    [SerializeField] private AnimationCurve growthCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+    [SerializeField] private string bloomPartName = "Bloom";
+    [SerializeField] private string bloomAnchorName = "BloomAnchor";
+    [SerializeField] private Transform bloomAnchor;
+    [SerializeField] private bool useBloomAnchorPosition = true;
+    [SerializeField] [Range(0f, 0.75f)] private float bloomDelay = 0.2f;
+    [SerializeField] [Range(0f, 0.2f)] private float overshootAmount = 0.05f;
+    [SerializeField] [Range(0f, 0.5f)] private float overshootWindow = 0.12f;
     [SerializeField] private bool playOnStart;
 
     [Header("Debug")]
@@ -36,6 +44,7 @@ public class GrowthPlant : MonoBehaviour
     {
         AutoAssignProfile();
         AutoAssignBindings();
+        AutoAssignBloomAnchor();
     }
 
     private void Start()
@@ -184,6 +193,16 @@ public class GrowthPlant : MonoBehaviour
         }
     }
 
+    private void AutoAssignBloomAnchor()
+    {
+        if (bloomAnchor != null || string.IsNullOrWhiteSpace(bloomAnchorName))
+        {
+            return;
+        }
+
+        bloomAnchor = FindChildRecursive(transform, bloomAnchorName);
+    }
+
     private static Transform FindChildRecursive(Transform root, string targetName)
     {
         if (root == null)
@@ -252,8 +271,20 @@ public class GrowthPlant : MonoBehaviour
                 continue;
             }
 
-            ApplyInterpolatedState(target, part.states, growthTime);
+            float partGrowthTime = ResolvePartGrowthTime(part.partName, growthTime);
+            ApplyInterpolatedState(target, part.partName, part.states, partGrowthTime);
         }
+    }
+
+    private float ResolvePartGrowthTime(string partName, float growthTime)
+    {
+        if (!string.IsNullOrWhiteSpace(bloomPartName) && partName == bloomPartName)
+        {
+            float delayedRange = Mathf.Max(0.0001f, 1f - bloomDelay);
+            return Mathf.Clamp01((growthTime - bloomDelay) / delayedRange);
+        }
+
+        return growthTime;
     }
 
     private Transform FindTarget(string partName)
@@ -274,23 +305,23 @@ public class GrowthPlant : MonoBehaviour
         return null;
     }
 
-    private void ApplyInterpolatedState(Transform target, GrowthProfile_SO.PartState[] states, float growthTime)
+    private void ApplyInterpolatedState(Transform target, string partName, GrowthProfile_SO.PartState[] states, float growthTime)
     {
         if (states.Length == 1)
         {
-            ApplyState(target, states[0]);
+            ApplyState(target, partName, states[0]);
             return;
         }
 
         if (growthTime <= states[0].time)
         {
-            ApplyState(target, states[0]);
+            ApplyState(target, partName, states[0]);
             return;
         }
 
         if (growthTime >= states[states.Length - 1].time)
         {
-            ApplyState(target, states[states.Length - 1]);
+            ApplyState(target, partName, states[states.Length - 1]);
             return;
         }
 
@@ -308,16 +339,54 @@ public class GrowthPlant : MonoBehaviour
         }
 
         float range = Mathf.Max(0.0001f, toState.time - fromState.time);
-        float t = Mathf.Clamp01((growthTime - fromState.time) / range);
+        float linearT = Mathf.Clamp01((growthTime - fromState.time) / range);
+        float t = growthCurve != null ? growthCurve.Evaluate(linearT) : linearT;
+        t = ApplyOvershoot(t);
 
         target.localScale = Vector3.Lerp(fromState.localScale, toState.localScale, t);
-        target.localPosition = Vector3.Lerp(fromState.localPosition, toState.localPosition, t);
+
+        Vector3 interpolatedPosition = Vector3.Lerp(fromState.localPosition, toState.localPosition, t);
+        target.localPosition = ResolvePartPosition(partName, interpolatedPosition);
     }
 
-    private void ApplyState(Transform target, GrowthProfile_SO.PartState state)
+    private void ApplyState(Transform target, string partName, GrowthProfile_SO.PartState state)
     {
         target.localScale = state.localScale;
-        target.localPosition = state.localPosition;
+        target.localPosition = ResolvePartPosition(partName, state.localPosition);
+    }
+
+    private Vector3 ResolvePartPosition(string partName, Vector3 statePosition)
+    {
+        if (useBloomAnchorPosition &&
+            bloomAnchor != null &&
+            !string.IsNullOrWhiteSpace(bloomPartName) &&
+            partName == bloomPartName)
+        {
+            Vector3 anchorPositionInPlantSpace = transform.InverseTransformPoint(bloomAnchor.position);
+            return anchorPositionInPlantSpace + statePosition;
+        }
+
+        return statePosition;
+    }
+
+    private float ApplyOvershoot(float t)
+    {
+        t = Mathf.Clamp01(t);
+
+        if (overshootAmount <= 0.0001f || overshootWindow <= 0.0001f)
+        {
+            return t;
+        }
+
+        float start = 1f - overshootWindow;
+        if (t <= start)
+        {
+            return t;
+        }
+
+        float normalized = Mathf.InverseLerp(start, 1f, t);
+        float overshoot = Mathf.Sin(normalized * Mathf.PI) * overshootAmount;
+        return t + overshoot;
     }
 
     private void ApplyTraversalBlocking()
