@@ -16,6 +16,25 @@ public class GrowthPlant : MonoBehaviour
     [SerializeField] private GrowthProfile_SO growthProfile;
     [SerializeField] private PlantPartBinding[] bindings;
     [SerializeField] private float growthDuration = 1.0f;
+    [SerializeField] private AnimationCurve growthCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+    [SerializeField] private string stemPartName = "Stem";
+    [SerializeField] private string bloomPartName = "Bloom";
+    [SerializeField] private string bloomAnchorName = "BloomAnchor";
+    [SerializeField] private Transform bloomAnchor;
+    [SerializeField] private bool useBloomAnchorPosition = true;
+    [SerializeField] private bool hideBloomUntilReveal = true;
+    [SerializeField] [Range(0f, 1f)] private float bloomRevealThreshold = 0.22f;
+    [SerializeField] [Range(0.01f, 0.5f)] private float bloomRevealWindow = 0.18f;
+    [SerializeField] [Range(0f, 0.5f)] private float bloomRevealStartScale = 0.06f;
+    [SerializeField] [Range(0f, 0.75f)] private float bloomDelay = 0.2f;
+    [SerializeField] [Range(0f, 0.2f)] private float overshootAmount = 0.05f;
+    [SerializeField] [Range(0f, 0.5f)] private float overshootWindow = 0.12f;
+    [SerializeField] private bool enableStemWobble = true;
+    [SerializeField] [Range(0f, 12f)] private float stemWobbleAngle = 4f;
+    [SerializeField] [Range(0f, 20f)] private float stemWobbleFrequency = 7f;
+    [SerializeField] [Range(0f, 1f)] private float stemWobbleJitter = 0.6f;
+    [SerializeField] [Range(0f, 1f)] private float stemWobbleStart = 0.08f;
+    [SerializeField] [Range(0f, 1f)] private float stemWobbleEnd = 0.82f;
     [SerializeField] private bool playOnStart;
 
     [Header("Debug")]
@@ -29,13 +48,20 @@ public class GrowthPlant : MonoBehaviour
 
     private float targetGrowthTime;
     private bool isTransitioning;
+    private float runtimeScaleMultiplier = 1f;
+    private float runtimeDurationMultiplier = 1f;
+    private float runtimeWobbleMultiplier = 1f;
+    private readonly System.Collections.Generic.Dictionary<Transform, Renderer[]> cachedRenderers = new();
 
     public GrowthProfile_SO Profile => growthProfile;
+    public float CurrentGrowthTime => currentGrowthTime;
+    public float TargetGrowthTime => targetGrowthTime;
 
     private void Awake()
     {
         AutoAssignProfile();
         AutoAssignBindings();
+        AutoAssignBloomAnchor();
     }
 
     private void Start()
@@ -60,7 +86,7 @@ public class GrowthPlant : MonoBehaviour
         currentGrowthTime = Mathf.MoveTowards(
             currentGrowthTime,
             targetGrowthTime,
-            Time.deltaTime / Mathf.Max(0.0001f, growthDuration));
+            Time.deltaTime / Mathf.Max(0.0001f, growthDuration * runtimeDurationMultiplier));
 
         ApplyGrowth(currentGrowthTime);
         ApplyTraversalBlocking();
@@ -70,6 +96,7 @@ public class GrowthPlant : MonoBehaviour
             currentGrowthTime = targetGrowthTime;
             isTransitioning = false;
             ApplyGrowth(currentGrowthTime);
+            ResetCompletedStemRotation();
         }
     }
 
@@ -130,6 +157,31 @@ public class GrowthPlant : MonoBehaviour
         return isTransitioning;
     }
 
+    public void GrowToFull()
+    {
+        targetGrowthTime = 1f;
+        isTransitioning = true;
+    }
+
+    public void ShrinkToSeed()
+    {
+        targetGrowthTime = 0f;
+        isTransitioning = true;
+    }
+
+    public void ConfigureRuntimeVariation(float scaleMultiplier, float durationMultiplier, float wobbleMultiplier)
+    {
+        runtimeScaleMultiplier = Mathf.Max(0.05f, scaleMultiplier);
+        runtimeDurationMultiplier = Mathf.Max(0.05f, durationMultiplier);
+        runtimeWobbleMultiplier = Mathf.Max(0f, wobbleMultiplier);
+        ApplyGrowth(currentGrowthTime);
+    }
+
+    public void ResetRuntimeVariation()
+    {
+        ConfigureRuntimeVariation(1f, 1f, 1f);
+    }
+
     private void AutoAssignProfile()
     {
         if (growthProfile != null)
@@ -182,6 +234,16 @@ public class GrowthPlant : MonoBehaviour
                 target = bloom
             };
         }
+    }
+
+    private void AutoAssignBloomAnchor()
+    {
+        if (bloomAnchor != null || string.IsNullOrWhiteSpace(bloomAnchorName))
+        {
+            return;
+        }
+
+        bloomAnchor = FindChildRecursive(transform, bloomAnchorName);
     }
 
     private static Transform FindChildRecursive(Transform root, string targetName)
@@ -252,8 +314,83 @@ public class GrowthPlant : MonoBehaviour
                 continue;
             }
 
-            ApplyInterpolatedState(target, part.states, growthTime);
+            float partGrowthTime = ResolvePartGrowthTime(part.partName, growthTime);
+            ApplyInterpolatedState(target, part.partName, part.states, partGrowthTime, growthTime);
+            UpdatePartVisibility(target, part.partName, growthTime);
         }
+    }
+
+    private float ResolvePartGrowthTime(string partName, float growthTime)
+    {
+        if (!string.IsNullOrWhiteSpace(bloomPartName) && partName == bloomPartName)
+        {
+            float delayedRange = Mathf.Max(0.0001f, 1f - bloomDelay);
+            return Mathf.Clamp01((growthTime - bloomDelay) / delayedRange);
+        }
+
+        return growthTime;
+    }
+
+    private void UpdatePartVisibility(Transform target, string partName, float growthProgress)
+    {
+        if (!hideBloomUntilReveal ||
+            string.IsNullOrWhiteSpace(bloomPartName) ||
+            partName != bloomPartName ||
+            target == null)
+        {
+            return;
+        }
+
+        float revealT = Mathf.InverseLerp(
+            bloomRevealThreshold,
+            bloomRevealThreshold + Mathf.Max(0.0001f, bloomRevealWindow),
+            growthProgress);
+        bool shouldShow = revealT > 0.001f;
+        Renderer[] renderers = GetCachedRenderers(target);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] != null)
+            {
+                renderers[i].enabled = shouldShow;
+            }
+        }
+    }
+
+    private Renderer[] GetCachedRenderers(Transform target)
+    {
+        if (target == null)
+        {
+            return System.Array.Empty<Renderer>();
+        }
+
+        if (!cachedRenderers.TryGetValue(target, out Renderer[] renderers) || renderers == null)
+        {
+            renderers = target.GetComponentsInChildren<Renderer>(includeInactive: true);
+            cachedRenderers[target] = renderers;
+        }
+
+        return renderers;
+    }
+
+    private Vector3 ResolvePartScale(string partName, Vector3 baseScale, float partGrowthTime)
+    {
+        if (!hideBloomUntilReveal ||
+            string.IsNullOrWhiteSpace(bloomPartName) ||
+            partName != bloomPartName)
+        {
+            return baseScale;
+        }
+
+        float revealT = Mathf.InverseLerp(
+            bloomRevealThreshold,
+            bloomRevealThreshold + Mathf.Max(0.0001f, bloomRevealWindow),
+            partGrowthTime);
+        float revealScale = Mathf.SmoothStep(
+            bloomRevealStartScale,
+            1f,
+            Mathf.Clamp01(revealT));
+
+        return baseScale * revealScale;
     }
 
     private Transform FindTarget(string partName)
@@ -274,23 +411,23 @@ public class GrowthPlant : MonoBehaviour
         return null;
     }
 
-    private void ApplyInterpolatedState(Transform target, GrowthProfile_SO.PartState[] states, float growthTime)
+    private void ApplyInterpolatedState(Transform target, string partName, GrowthProfile_SO.PartState[] states, float growthTime, float overallGrowthTime)
     {
         if (states.Length == 1)
         {
-            ApplyState(target, states[0]);
+            ApplyState(target, partName, states[0], overallGrowthTime);
             return;
         }
 
         if (growthTime <= states[0].time)
         {
-            ApplyState(target, states[0]);
+            ApplyState(target, partName, states[0], overallGrowthTime);
             return;
         }
 
         if (growthTime >= states[states.Length - 1].time)
         {
-            ApplyState(target, states[states.Length - 1]);
+            ApplyState(target, partName, states[states.Length - 1], overallGrowthTime);
             return;
         }
 
@@ -308,16 +445,102 @@ public class GrowthPlant : MonoBehaviour
         }
 
         float range = Mathf.Max(0.0001f, toState.time - fromState.time);
-        float t = Mathf.Clamp01((growthTime - fromState.time) / range);
+        float linearT = Mathf.Clamp01((growthTime - fromState.time) / range);
+        float t = growthCurve != null ? growthCurve.Evaluate(linearT) : linearT;
+        t = ApplyOvershoot(t);
 
-        target.localScale = Vector3.Lerp(fromState.localScale, toState.localScale, t);
-        target.localPosition = Vector3.Lerp(fromState.localPosition, toState.localPosition, t);
+        Vector3 interpolatedScale = Vector3.Lerp(fromState.localScale, toState.localScale, t) * runtimeScaleMultiplier;
+        target.localScale = ResolvePartScale(partName, interpolatedScale, overallGrowthTime);
+
+        Vector3 interpolatedPosition = Vector3.Lerp(fromState.localPosition, toState.localPosition, t);
+        target.localPosition = ResolvePartPosition(partName, interpolatedPosition);
+        target.localRotation = ResolvePartRotation(partName, growthTime);
     }
 
-    private void ApplyState(Transform target, GrowthProfile_SO.PartState state)
+    private void ApplyState(Transform target, string partName, GrowthProfile_SO.PartState state, float overallGrowthTime)
     {
-        target.localScale = state.localScale;
-        target.localPosition = state.localPosition;
+        Vector3 stateScale = state.localScale * runtimeScaleMultiplier;
+        target.localScale = ResolvePartScale(partName, stateScale, overallGrowthTime);
+        target.localPosition = ResolvePartPosition(partName, state.localPosition);
+        target.localRotation = ResolvePartRotation(partName, currentGrowthTime);
+    }
+
+    private Vector3 ResolvePartPosition(string partName, Vector3 statePosition)
+    {
+        if (useBloomAnchorPosition &&
+            bloomAnchor != null &&
+            !string.IsNullOrWhiteSpace(bloomPartName) &&
+            partName == bloomPartName)
+        {
+            Vector3 anchorPositionInPlantSpace = transform.InverseTransformPoint(bloomAnchor.position);
+            return anchorPositionInPlantSpace + statePosition;
+        }
+
+        return statePosition;
+    }
+
+    private float ApplyOvershoot(float t)
+    {
+        t = Mathf.Clamp01(t);
+
+        if (overshootAmount <= 0.0001f || overshootWindow <= 0.0001f)
+        {
+            return t;
+        }
+
+        float start = 1f - overshootWindow;
+        if (t <= start)
+        {
+            return t;
+        }
+
+        float normalized = Mathf.InverseLerp(start, 1f, t);
+        float overshoot = Mathf.Sin(normalized * Mathf.PI) * overshootAmount;
+        return t + overshoot;
+    }
+
+    private Quaternion ResolvePartRotation(string partName, float growthTime)
+    {
+        if (!enableStemWobble ||
+            !isTransitioning ||
+            string.IsNullOrWhiteSpace(stemPartName) ||
+            partName != stemPartName)
+        {
+            return Quaternion.identity;
+        }
+
+        if (growthTime <= stemWobbleStart || growthTime >= stemWobbleEnd)
+        {
+            return Quaternion.identity;
+        }
+
+        float normalizedWindow = Mathf.InverseLerp(stemWobbleStart, stemWobbleEnd, growthTime);
+        float envelope = Mathf.Sin(normalizedWindow * Mathf.PI);
+        float timePhase = Time.time * Mathf.Max(0.01f, stemWobbleFrequency);
+        float noiseX = Mathf.PerlinNoise(timePhase, 1.37f) * 2f - 1f;
+        float noiseZ = Mathf.PerlinNoise(2.91f, timePhase * 0.93f) * 2f - 1f;
+        float tremorX = Mathf.Sin(timePhase * 1.73f + 0.4f) * (1f - stemWobbleJitter);
+        float tremorZ = Mathf.Sin(timePhase * 2.11f + 1.2f) * (1f - stemWobbleJitter) * 0.7f;
+        float wobbleAngle = stemWobbleAngle * runtimeWobbleMultiplier;
+        float xAngle = (noiseX * stemWobbleJitter + tremorX) * wobbleAngle * envelope;
+        float zAngle = (noiseZ * stemWobbleJitter + tremorZ) * wobbleAngle * 0.7f * envelope;
+        return Quaternion.Euler(xAngle, 0f, zAngle);
+    }
+
+    private void ResetCompletedStemRotation()
+    {
+        if (bindings == null || string.IsNullOrWhiteSpace(stemPartName))
+        {
+            return;
+        }
+
+        foreach (var binding in bindings)
+        {
+            if (binding != null && binding.partName == stemPartName && binding.target != null)
+            {
+                binding.target.localRotation = Quaternion.identity;
+            }
+        }
     }
 
     private void ApplyTraversalBlocking()
