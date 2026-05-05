@@ -1,10 +1,14 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.InputSystem;
 
 public class LotusNoteTrigger : MonoBehaviour
 {
     public event System.Action<LotusNoteTrigger> NoteTriggered;
+    [Header("Unity Events (Editor Only)")]
+    // 2. 添加 UnityEvent，它会在 Inspector 面板显示面板
+    public UnityEvent onTriggered;
 
     public float CooldownSeconds => cooldownSeconds;
 
@@ -176,6 +180,7 @@ public class LotusNoteTrigger : MonoBehaviour
 
         // 3. Event Notification
         NoteTriggered?.Invoke(this);
+        onTriggered?.Invoke();
 
         if (logDebugMessages) Debug.Log(debugMessage);
 
