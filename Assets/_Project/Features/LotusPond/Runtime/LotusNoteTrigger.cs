@@ -261,7 +261,7 @@ public class LotusNoteTrigger : MonoBehaviour
         if (settings == null) return;
 
         cooldownSeconds = settings.cooldownSeconds;
-        if (settings.sharedNoteClip != null) noteClip = settings.sharedNoteClip;
+        // if (settings.sharedNoteClip != null) noteClip = settings.sharedNoteClip;
 
         if (audioSource != null)
         {
