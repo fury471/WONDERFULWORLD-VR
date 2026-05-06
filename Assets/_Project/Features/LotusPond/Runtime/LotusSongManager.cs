@@ -22,6 +22,8 @@ public class LotusSongManager : MonoBehaviour
     public bool IsSongActive => isSongActive;
     public LotusSongData CurrentSong => currentSong;
 
+    public LotusMusicStaff musicStaff;
+
     void Start()
     {
         // Find and map all controllers in the scene
@@ -69,6 +71,15 @@ public class LotusSongManager : MonoBehaviour
             return; 
         }
 
+        if (musicStaff != null)
+        {
+            // Pass the current song data and the starting step (usually 0)
+            musicStaff.OpenStaff(currentSong.sequence, 0);
+            
+            // You might also want to play a "Start" sound effect here
+            Debug.Log("Music Mode Activated!");
+        }
+
         if (song == null) return;
         currentSong = song;
         currentStep = 0;
@@ -88,6 +99,7 @@ public class LotusSongManager : MonoBehaviour
         isSongActive = false;
         currentStep = 0;
         HideAllGlows();
+        if (musicStaff != null) musicStaff.CloseStaff(); 
         Debug.Log("[LotusSongManager] Song Mode Stopped. Free Play enabled.");
     }
 
@@ -105,6 +117,10 @@ public class LotusSongManager : MonoBehaviour
             padMap[hitIndex].SetGlowActive(false);
 
             currentStep++;
+            if (musicStaff != null)
+            {
+                musicStaff.RefreshStaff(currentSong.sequence, currentStep);
+            }
 
             if (currentStep >= currentSong.sequence.Count)
             {
