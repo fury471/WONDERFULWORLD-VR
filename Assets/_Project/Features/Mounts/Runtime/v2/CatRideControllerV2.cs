@@ -62,8 +62,13 @@ public class CatRideControllerV2 : MonoBehaviour
     private bool simulatorKeyboardYWasEnabled;
     private bool simulatorKeyboardZWasEnabled;
 
+    public bool IsRideActive => currentState != RideState.Idle;
+
+
     private int currentAutoIndex = 0;
     private Coroutine stateRoutine;
+
+
 
     private void Awake()
     {
