@@ -3,5 +3,7 @@ public enum PetalPollenReleaseMode
     PetalRain,
     SpiralBloom,
     FlowerConstellation,
-    GalaxyVeil
+    MathRibbon,
+    GalaxyVeil,
+    TornadoVortex
 }
