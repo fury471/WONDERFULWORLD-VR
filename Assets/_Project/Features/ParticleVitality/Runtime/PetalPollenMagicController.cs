@@ -5,8 +5,6 @@ using UnityEngine.InputSystem;
 [DisallowMultipleComponent]
 public class PetalPollenMagicController : MonoBehaviour
 {
-    private static readonly int[] MagicBloomLayerPetalCounts = { 6, 9, 12 };
-
     private enum ParticleStage
     {
         FlowingToHand,
@@ -41,6 +39,7 @@ public class PetalPollenMagicController : MonoBehaviour
 
     [SerializeField] private InputActionReference collectAction;
     [SerializeField] private List<PetalPollenSource> sources = new List<PetalPollenSource>();
+    [SerializeField] private bool autoDiscoverSources = true;
 
     [Header("Beginner Debug")]
     [SerializeField] private bool enableKeyboardFallback = true;
@@ -63,20 +62,72 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private float sphereBreathingAmount = 0.07f;
     [SerializeField] private float sphereJitter = 0.025f;
 
+    [Header("Motion Trails")]
+    [SerializeField] private bool enableMotionTrails = true;
+    [SerializeField] private Color pollenTrailColor = new Color(1.25f, 0.9f, 0.22f, 1f);
+    [SerializeField] private Color petalTrailColor = new Color(1f, 0.78f, 0.9f, 1f);
+
+    [Header("VR Performance")]
+    [Range(0.35f, 1f)]
+    [SerializeField] private float effectParticleBudgetScale = 0.75f;
+    [SerializeField] private int maxRenderedParticlesPerSystem = 1600;
+
+    [Header("Gather Tail")]
+    [SerializeField] private float gatherTailLifetime = 0.28f;
+    [SerializeField] private float gatherTailMinVertexDistance = 0.018f;
+    [SerializeField] private float gatherPollenTailWidth = 0.026f;
+    [SerializeField] private float gatherPetalTailWidth = 0.036f;
+    [Range(0f, 1f)]
+    [SerializeField] private float gatherTailAlpha = 0.22f;
+
+    [Header("Release Tail")]
+    [SerializeField] private float releaseLongTailLifetime = 0.52f;
+    [SerializeField] private float releaseLongTailMinVertexDistance = 0.018f;
+    [SerializeField] private float releasePollenLongTailWidth = 0.038f;
+    [SerializeField] private float releasePetalLongTailWidth = 0.052f;
+    [Range(0f, 1f)]
+    [SerializeField] private float releaseLongTailAlpha = 0.38f;
+
     [Header("Release")]
     [SerializeField] private bool randomizeReleaseMode = true;
     [SerializeField] private PetalPollenReleaseMode fixedReleaseMode = PetalPollenReleaseMode.GalaxyVeil;
     [SerializeField] private float releaseDuration = 6.5f;
     [SerializeField] private float chargedHoldSeconds = 3f;
+    [SerializeField] private float chargedReleaseRadiusBoost = 0.28f;
+    [SerializeField] private float chargedReleaseHeightBoost = 0.18f;
+    [SerializeField] private float chargedReleaseBrightnessBoost = 0.22f;
+    [SerializeField] private float chargedReleaseSizeBoost = 0.16f;
     [SerializeField] private float releaseFlashSeconds = 0.38f;
+    [SerializeField] private float releaseModeBlendSeconds = 0.22f;
     [SerializeField] private float releaseSeedRadius = 0.07f;
     [SerializeField] private float releaseBloomSpeed = 3.2f;
     [SerializeField] private float burstRadius = 1.25f;
+
+    [Header("Release Impact")]
+    [SerializeField] private bool enableReleaseShockwave = true;
+    [SerializeField] private int releaseShockwaveParticleCount = 96;
+    [SerializeField] private float releaseShockwaveDuration = 0.62f;
+    [SerializeField] private float releaseShockwaveStartRadius = 0.18f;
+    [SerializeField] private float releaseShockwaveEndRadius = 1.15f;
+    [SerializeField] private float releaseShockwaveHeight = 0.18f;
+    [SerializeField] private float releaseShockwaveParticleSize = 0.052f;
+    [Range(0f, 1f)]
+    [SerializeField] private float releaseShockwaveAlpha = 0.46f;
+
+    [Header("Release Afterglow")]
+    [SerializeField] private bool enableReleaseAfterglow = true;
+    [SerializeField] private int releaseAfterglowParticleCount = 90;
+    [SerializeField] private float releaseAfterglowStart = 0.62f;
+    [SerializeField] private float releaseAfterglowRadius = 1.35f;
+    [SerializeField] private float releaseAfterglowHeight = 1.15f;
+    [SerializeField] private float releaseAfterglowParticleSize = 0.032f;
+    [Range(0f, 1f)]
+    [SerializeField] private float releaseAfterglowAlpha = 0.34f;
+    [SerializeField] private float releaseSettleSeconds = 0.8f;
+
+    [Header("Release Modes")]
     [SerializeField] private float galaxyRadius = 1.35f;
     [SerializeField] private float galaxyHeight = 0.7f;
-    [SerializeField] private float petalRainHeight = 1.65f;
-    [SerializeField] private float roseRotationXSpeed = 18f;
-    [SerializeField] private float roseRotationZSpeed = 12f;
     [SerializeField] private float mathRibbonScale = 0.38f;
     [SerializeField] private float mathRibbonB = 0.4f;
     [SerializeField] private float mathRibbonURange = 6f;
@@ -117,12 +168,10 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private float tornadoWispYawTurns = 1.05f;
 
     [Header("Weighted Surprise")]
-    [SerializeField] private float petalRainWeight = 0.3f;
-    [SerializeField] private float spiralBloomWeight = 0.25f;
-    [SerializeField] private float flowerConstellationWeight = 0.2f;
+    [SerializeField] private float spiralBloomWeight = 0.28f;
     [SerializeField] private float mathRibbonWeight = 0.25f;
-    [SerializeField] private float tornadoVortexWeight = 0.25f;
-    [SerializeField] private float galaxyVeilWeight = 0.25f;
+    [SerializeField] private float tornadoVortexWeight = 0.32f;
+    [SerializeField] private float galaxyVeilWeight = 0.3f;
     [SerializeField] private float chargedGalaxyBonusWeight = 0.35f;
 
     [Header("Look")]
@@ -131,6 +180,31 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private Color secondaryPollenColor = new Color(0.62f, 0.95f, 1f, 1f);
     [SerializeField] private Color galaxyViolet = new Color(0.72f, 0.48f, 1f, 1f);
 
+    [Header("Charge Halo")]
+    [SerializeField] private bool enableChargeHalo = true;
+    [SerializeField] private int chargeHaloParticleCount = 72;
+    [SerializeField] private float chargeHaloRadius = 0.46f;
+    [SerializeField] private float chargeHaloVerticalScale = 0.34f;
+    [SerializeField] private float chargeHaloParticleSize = 0.034f;
+    [Range(0f, 1f)]
+    [SerializeField] private float chargeHaloAlpha = 0.46f;
+
+    [Header("Feedback")]
+    [SerializeField] private AudioSource magicAudioSource;
+    [SerializeField] private AudioClip collectStartClip;
+    [SerializeField] private AudioClip releaseClip;
+    [SerializeField] private AudioClip chargedReleaseClip;
+    [SerializeField] private float collectStartVolume = 0.35f;
+    [SerializeField] private float releaseVolume = 0.7f;
+    [SerializeField] private bool enableReleaseLightFlash = true;
+    [SerializeField] private Color releaseLightColor = new Color(1f, 0.72f, 0.34f, 1f);
+    [SerializeField] private float releaseLightIntensity = 2.8f;
+    [SerializeField] private float releaseLightRange = 2.6f;
+    [SerializeField] private float releaseLightDuration = 0.42f;
+    [SerializeField] private bool enableSourceFocusFeedback = true;
+    [SerializeField] private float sourceFocusRadius = 2.4f;
+    [SerializeField] private float collectingSourceFocusBoost = 0.35f;
+
     private readonly List<MagicParticle> activeParticles = new List<MagicParticle>();
     private ParticleSystem.Particle[] particleBuffer = new ParticleSystem.Particle[0];
     private ParticleSystem.Particle[] petalBuffer = new ParticleSystem.Particle[0];
@@ -138,20 +212,28 @@ public class PetalPollenMagicController : MonoBehaviour
     private float spawnAccumulator;
     private float collectStartTime;
     private float releaseStartTime;
+    private float releaseCharge;
     private bool isCollecting;
     private bool releaseActive;
     private PetalPollenReleaseMode activeReleaseMode;
     private Vector3 releaseShowcaseCenter;
+    private Vector3 releaseOriginCenter;
     private Vector3 releaseMathRibbonGateCenter;
     private Vector3 releaseTornadoCenter;
     private Vector3 releaseTornadoGateCenter;
     private Quaternion releaseTornadoPose = Quaternion.identity;
     private Quaternion releaseShowcasePose = Quaternion.identity;
     private bool hasReleaseShowcasePose;
+    private Light releaseLight;
+    private float releaseLightAge;
+    private float releaseLightPeakIntensity;
+    private float releaseLightPeakRange;
+    private bool releaseLightActive;
 
     private void Awake()
     {
         EnsureParticleOutput();
+        RefreshSourcesIfNeeded();
     }
 
     private void OnEnable()
@@ -167,6 +249,7 @@ public class PetalPollenMagicController : MonoBehaviour
     private void Update()
     {
         UpdateInput();
+        UpdateSourceFocusFeedback();
 
         if (isCollecting)
         {
@@ -174,6 +257,7 @@ public class PetalPollenMagicController : MonoBehaviour
         }
 
         UpdateMagicParticles();
+        UpdateReleaseLightFeedback();
         RenderParticles();
     }
 
@@ -185,6 +269,8 @@ public class PetalPollenMagicController : MonoBehaviour
             return;
         }
 
+        RefreshSourcesIfNeeded();
+
         if (isCollecting)
         {
             return;
@@ -195,6 +281,7 @@ public class PetalPollenMagicController : MonoBehaviour
         hasReleaseShowcasePose = false;
         collectStartTime = Time.time;
         spawnAccumulator = 0f;
+        PlayMagicClip(collectStartClip, collectStartVolume);
     }
 
     public void Release()
@@ -207,10 +294,15 @@ public class PetalPollenMagicController : MonoBehaviour
         isCollecting = false;
         releaseActive = true;
         releaseStartTime = Time.time;
-        activeReleaseMode = randomizeReleaseMode ? PickReleaseMode(Time.time - collectStartTime) : fixedReleaseMode;
+        float holdSeconds = Time.time - collectStartTime;
+        releaseCharge = Mathf.Clamp01(holdSeconds / Mathf.Max(0.01f, chargedHoldSeconds));
+        activeReleaseMode = randomizeReleaseMode ? PickReleaseMode(holdSeconds) : fixedReleaseMode;
         CaptureReleaseShowcasePose();
+        PlayMagicClip(holdSeconds >= chargedHoldSeconds && chargedReleaseClip != null ? chargedReleaseClip : releaseClip, releaseVolume);
+        BeginReleaseLightFeedback(holdSeconds >= chargedHoldSeconds);
 
         Vector3 center = GetHoldCenter();
+        releaseOriginCenter = center;
         int releaseCount = Mathf.Max(1, activeParticles.Count - 1);
         for (int i = 0; i < activeParticles.Count; i++)
         {
@@ -236,6 +328,7 @@ public class PetalPollenMagicController : MonoBehaviour
         releaseActive = false;
         hasReleaseShowcasePose = false;
         activeParticles.Clear();
+        releaseCharge = 0f;
         if (particleOutput != null)
         {
             particleOutput.Clear(true);
@@ -245,6 +338,13 @@ public class PetalPollenMagicController : MonoBehaviour
         {
             petalOutput.Clear(true);
         }
+
+        if (releaseLight != null)
+        {
+            releaseLight.enabled = false;
+        }
+
+        releaseLightActive = false;
     }
 
     private void UpdateInput()
@@ -290,6 +390,7 @@ public class PetalPollenMagicController : MonoBehaviour
     private MagicParticle CreateParticle(PetalPollenSource source)
     {
         bool isPetal = source.EmitPetals && Random.value < petalChance;
+        source.NotifyExtracted(isPetal);
         Vector3 start = source.GetSpawnPosition();
         Vector3 holdCenter = GetHoldCenter();
         Vector3 sourceToHand = holdCenter - start;
@@ -305,7 +406,7 @@ public class PetalPollenMagicController : MonoBehaviour
             + side * Random.Range(-0.45f, 0.45f);
 
         Color color = isPetal
-            ? source.PetalColor
+            ? Color.Lerp(source.PetalColor, petalTrailColor, 0.32f)
             : Color.Lerp(source.PollenColor, secondaryPollenColor, Random.Range(0f, 0.35f));
 
         return new MagicParticle
@@ -349,7 +450,7 @@ public class PetalPollenMagicController : MonoBehaviour
             }
         }
 
-        if (releaseActive && activeParticles.Count == 0)
+        if (releaseActive && activeParticles.Count == 0 && Time.time - releaseStartTime > releaseDuration + releaseSettleSeconds)
         {
             releaseActive = false;
         }
@@ -386,8 +487,9 @@ public class PetalPollenMagicController : MonoBehaviour
             * Quaternion.AngleAxis(Mathf.Sin(particle.seed) * 35f, Vector3.right);
 
         float pulse = 1f + Mathf.Sin(Time.time * 2.1f + particle.seed) * sphereBreathingAmount;
+        float charge = GetCharge01();
         float petalOuter = particle.isPetal ? 1.22f : 1f;
-        Vector3 target = GetHoldCenter() + orbit * (spherePoint * holdRadius * pulse * petalOuter);
+        Vector3 target = GetHoldCenter() + orbit * (spherePoint * holdRadius * pulse * petalOuter * Mathf.Lerp(1f, 1.16f, charge));
         target += ResolveSoftJitter(particle.seed, Time.time, sphereJitter);
 
         particle.currentPosition = Vector3.Lerp(particle.currentPosition, target, Time.deltaTime * 8.5f);
@@ -407,38 +509,38 @@ public class PetalPollenMagicController : MonoBehaviour
         }
 
         float showT = Mathf.Clamp01((particle.releaseAge - releaseFlashSeconds) / Mathf.Max(0.01f, releaseDuration - releaseFlashSeconds));
+        Vector3 target;
         switch (activeReleaseMode)
         {
-            case PetalPollenReleaseMode.PetalRain:
-                particle.currentPosition = ResolvePetalRainPosition(particle, showT);
-                break;
             case PetalPollenReleaseMode.SpiralBloom:
-                particle.currentPosition = ResolveSpiralBloomPosition(particle, index, count, showT);
-                break;
-            case PetalPollenReleaseMode.FlowerConstellation:
-                particle.currentPosition = ResolveFlowerConstellationPosition(particle, index, count, showT);
+                target = ResolveSpiralBloomPosition(particle, index, count, showT);
                 break;
             case PetalPollenReleaseMode.MathRibbon:
-                particle.currentPosition = ResolveMathRibbonPosition(particle, index, count, showT);
+                target = ResolveMathRibbonPosition(particle, index, count, showT);
                 break;
             case PetalPollenReleaseMode.TornadoVortex:
-                particle.currentPosition = ResolveTornadoVortexPosition(particle, index, count, showT);
+                target = ResolveTornadoVortexPosition(particle, index, count, showT);
                 break;
             default:
-                particle.currentPosition = ResolveGalaxyVeilPosition(particle, index, count, showT);
+                target = ResolveGalaxyVeilPosition(particle, index, count, showT);
                 break;
         }
+
+        float blendT = Smoother01(Mathf.Clamp01((particle.releaseAge - releaseFlashSeconds) / Mathf.Max(0.01f, releaseModeBlendSeconds)));
+        particle.currentPosition = Vector3.Lerp(particle.releaseSeedPosition, target, blendT);
     }
 
     private Vector3 ResolveGalaxyVeilPosition(MagicParticle particle, int index, int count, float t)
     {
         float bloomT = ReleaseBloom01(t);
         Vector3 center = GetPlayerCenter();
+        float radiusImpact = GetChargedReleaseRadiusScale();
+        float heightImpact = GetChargedReleaseHeightScale();
         float strand = index % 2 == 0 ? 1f : -1f;
         float angle = particle.seed + (bloomT * Mathf.PI * 1.35f + t * Mathf.PI * 2.15f) * strand + index * 0.037f;
-        float radius = Mathf.Lerp(0.18f, galaxyRadius * (particle.isPetal ? 1.05f : 1f), bloomT);
+        float radius = Mathf.Lerp(0.18f, galaxyRadius * radiusImpact * (particle.isPetal ? 1.05f : 1f), bloomT);
         float arm = Mathf.Sin(angle * 2f + particle.seed) * 0.28f;
-        float height = Mathf.Sin(angle * 1.7f + particle.seed) * galaxyHeight * (0.35f + bloomT * 0.65f);
+        float height = Mathf.Sin(angle * 1.7f + particle.seed) * galaxyHeight * heightImpact * (0.35f + bloomT * 0.65f);
 
         Vector3 local = new Vector3(
             Mathf.Cos(angle) * (radius + arm),
@@ -450,46 +552,17 @@ public class PetalPollenMagicController : MonoBehaviour
         return Vector3.Lerp(particle.releaseSeedPosition, center + tilt * local + drift, bloomT);
     }
 
-    private Vector3 ResolvePetalRainPosition(MagicParticle particle, float t)
-    {
-        float bloomT = ReleaseBloom01(t);
-        Vector3 center = GetPlayerCenter();
-        float angle = particle.seed + t * Mathf.PI * 1.35f;
-        float radiusPulse = 0.18f + Mathf.Sin(t * Mathf.PI) * 0.18f;
-        float radius = Mathf.Lerp(0.22f, burstRadius + radiusPulse, bloomT);
-        float lift = Mathf.Sin(Mathf.Clamp01(t / 0.34f) * Mathf.PI) * 0.55f;
-
-        Vector3 blossomRing = center + new Vector3(
-            Mathf.Cos(angle) * radius,
-            petalRainHeight + lift,
-            Mathf.Sin(angle) * radius);
-
-        float driftAngle = angle * 0.72f + Mathf.Sin(t * Mathf.PI * 2f + particle.seed) * 0.5f;
-        Vector3 windDrift = new Vector3(Mathf.Cos(driftAngle), 0f, Mathf.Sin(driftAngle)) * (0.12f + t * 0.34f);
-        float fallT = Smoother01(Mathf.Clamp01((t - 0.18f) / 0.82f));
-        float slowFall = fallT * fallT * (petalRainHeight + (particle.isPetal ? 0.55f : 0.95f));
-        Vector3 shimmer = ResolveSoftJitter(particle.seed, Time.time, particle.isPetal ? 0.07f : 0.12f);
-
-        Vector3 target = blossomRing + windDrift + shimmer - Vector3.up * slowFall;
-
-        if (!particle.isPetal)
-        {
-            float fireflyAngle = angle * 1.6f + Time.time * 0.75f;
-            target += new Vector3(Mathf.Cos(fireflyAngle), Mathf.Sin(fireflyAngle * 1.3f), Mathf.Sin(fireflyAngle)) * 0.12f;
-        }
-
-        return Vector3.Lerp(particle.releaseSeedPosition, target, bloomT);
-    }
-
     private Vector3 ResolveSpiralBloomPosition(MagicParticle particle, int index, int count, float t)
     {
         float bloomT = ReleaseBloom01(t);
         Vector3 center = GetHoldCenter();
+        float radiusImpact = GetChargedReleaseRadiusScale();
+        float heightImpact = GetChargedReleaseHeightScale();
         float progress = index / Mathf.Max(1f, count - 1f);
         float strand = index % 2 == 0 ? 1f : -1f;
         float angle = progress * Mathf.PI * 10f + (bloomT * Mathf.PI * 2f + t * Mathf.PI * 3f) * strand + particle.seed;
-        float radius = Mathf.Lerp(0.08f, burstRadius, bloomT);
-        float height = Mathf.Lerp(-0.7f, 1.4f, progress) + Mathf.Sin(angle * 1.6f) * 0.18f;
+        float radius = Mathf.Lerp(0.08f, burstRadius * radiusImpact, bloomT);
+        float height = (Mathf.Lerp(-0.7f, 1.4f, progress) + Mathf.Sin(angle * 1.6f) * 0.18f) * heightImpact;
         Vector3 target = center + new Vector3(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius);
         return Vector3.Lerp(particle.releaseSeedPosition, target, bloomT);
     }
@@ -516,10 +589,15 @@ public class PetalPollenMagicController : MonoBehaviour
         float surfaceOffset = (Mathf.Repeat(index * 0.6180339f + particle.seed * 0.01f, 1f) - 0.5f) * mathRibbonSurfaceWidth;
         float v = vCenter + surfaceOffset;
 
+        float radiusImpact = GetChargedReleaseRadiusScale();
+        float heightImpact = GetChargedReleaseHeightScale();
         Vector3 breatherPoint = ResolveBreatherSurfacePoint(u, v);
         float safeDepthScale = Mathf.Clamp(mathRibbonDepthScale, 0.65f, 1.15f);
         float safeForwardPush = Mathf.Clamp(mathRibbonForwardPush, 0.08f, 0.75f);
         breatherPoint.z = Mathf.Abs(breatherPoint.z) * safeDepthScale + safeForwardPush;
+        breatherPoint.x *= radiusImpact;
+        breatherPoint.y *= heightImpact;
+        breatherPoint.z *= Mathf.Lerp(1f, radiusImpact, 0.45f);
         breatherPoint += ResolveSoftJitter(particle.seed, Time.time, particle.isPetal ? 0.01f : 0.006f);
         Quaternion pose = ResolveMathRibbonPose(center, t);
         Vector3 target = center + pose * breatherPoint;
@@ -545,6 +623,9 @@ public class PetalPollenMagicController : MonoBehaviour
             Mathf.Lerp(-mathRibbonURange * 0.5f, mathRibbonURange * 0.5f, revealHead),
             Mathf.Lerp(-mathRibbonVRange * 0.5f, mathRibbonVRange * 0.5f, revealHead));
         headLocal.z = Mathf.Abs(headLocal.z) * safeDepthScale + safeForwardPush;
+        headLocal.x *= radiusImpact;
+        headLocal.y *= heightImpact;
+        headLocal.z *= Mathf.Lerp(1f, radiusImpact, 0.45f);
         Vector3 headPoint = center + pose * headLocal;
         Vector3 revealPoint = Vector3.Lerp(headPoint, target, revealT);
         Vector3 launchLift = Vector3.up * Mathf.Sin(bloomT * Mathf.PI) * 0.42f;
@@ -571,13 +652,15 @@ public class PetalPollenMagicController : MonoBehaviour
 
         bool isDust = IsTornadoDustParticle(particle);
         float height01 = ResolveTornadoFlow01(particle, index, count, isDust);
+        float radiusImpact = GetChargedReleaseRadiusScale();
+        float heightImpact = GetChargedReleaseHeightScale();
         float strand = index % 2 == 0 ? 1f : -1f;
-        float safeHeight = Mathf.Clamp(tornadoHeight, 1.2f, 3.4f);
-        float baseRadius = Mathf.Clamp(tornadoBaseRadius, 0.08f, 0.55f);
-        float topRadius = Mathf.Clamp(tornadoTopRadius, baseRadius + 0.1f, 1.45f);
+        float safeHeight = Mathf.Clamp(tornadoHeight * heightImpact, 1.2f, 3.8f);
+        float baseRadius = Mathf.Clamp(tornadoBaseRadius * radiusImpact, 0.08f, 0.68f);
+        float topRadius = Mathf.Clamp(tornadoTopRadius * radiusImpact, baseRadius + 0.1f, 1.7f);
         float spinSpeed = Mathf.Clamp(tornadoSpinSpeed, 2f, 13f);
         float tremble = Mathf.Clamp(tornadoTremble, 0.02f, 0.36f);
-        float dissolveRadius = Mathf.Clamp(tornadoDissolveRadius, 0.45f, 2f);
+        float dissolveRadius = Mathf.Clamp(tornadoDissolveRadius * radiusImpact, 0.45f, 2.4f);
 
         float twist = height01 * Mathf.PI * 7.5f + particle.seed * 0.19f;
         float spin = Time.time * spinSpeed * strand + t * Mathf.PI * 10f + twist;
@@ -687,131 +770,10 @@ public class PetalPollenMagicController : MonoBehaviour
         return Mathf.Clamp01(index / Mathf.Max(1f, count - 1f) + orderNoise);
     }
 
-    private Vector3 ResolveFlowerConstellationPosition(MagicParticle particle, int index, int count, float t)
-    {
-        float gatherT = Smoother01(Mathf.Clamp01(t / 0.16f));
-        float openT = Smoother01(Mathf.Clamp01((t - 0.12f) / 0.38f));
-        float holdT = Smoother01(Mathf.Clamp01((t - 0.48f) / 0.2f));
-        float scatterT = Smoother01(Mathf.Clamp01((t - 0.74f) / 0.26f));
-
-        Vector3 center = Vector3.Lerp(GetHoldCenter(), GetPlayerCenter() + Vector3.up * 0.38f, 0.5f);
-        Vector3 budLocal = ResolveMagicBloomBudPoint(index, count, particle.seed);
-        Vector3 flowerLocal = particle.isPetal
-            ? ResolveMagicBloomPetalSurface(index, count, particle.seed)
-            : ResolveMagicBloomPollenCore(index, count, particle.seed);
-
-        float unfurlDelay = ResolveMagicBloomUnfurlDelay(index, count);
-        float delayedOpenT = Smoother01(Mathf.Clamp01((openT - unfurlDelay) / Mathf.Max(0.001f, 1f - unfurlDelay)));
-        Vector3 local = Vector3.Lerp(budLocal, flowerLocal, delayedOpenT);
-
-        float lifePulse = Mathf.Sin(t * Mathf.PI * 2f + particle.seed) * 0.018f * (1f - scatterT);
-        local += ResolveSoftJitter(particle.seed, Time.time, Mathf.Lerp(0.012f, 0.004f, delayedOpenT)) + local.normalized * lifePulse;
-
-        Quaternion flowerPose = ResolveMagicBloomPose(center, scatterT, holdT);
-        Vector3 shapedPosition = center + flowerPose * local;
-
-        if (scatterT > 0f)
-        {
-            Vector3 scatterDirection = (flowerPose * local).normalized;
-            if (scatterDirection.sqrMagnitude < 0.001f)
-            {
-                scatterDirection = particle.releaseDirection;
-            }
-
-            float scatterDistance = Mathf.Lerp(0f, particle.isPetal ? 1.35f : 0.95f, scatterT);
-            Vector3 spiralWind = new Vector3(
-                Mathf.Sin(Time.time * 0.9f + particle.seed),
-                0f,
-                Mathf.Cos(Time.time * 0.62f + particle.seed)) * scatterT * 0.36f;
-            Vector3 liftThenFall = Vector3.up * Mathf.Sin(scatterT * Mathf.PI) * 0.42f
-                + Vector3.down * scatterT * scatterT * (particle.isPetal ? 0.9f : 0.5f);
-            shapedPosition += scatterDirection * scatterDistance + spiralWind + liftThenFall;
-        }
-
-        return Vector3.Lerp(particle.releaseSeedPosition, shapedPosition, gatherT);
-    }
-
-    private Quaternion ResolveMagicBloomPose(Vector3 center, float scatterT, float holdT)
-    {
-        Camera camera = Camera.main;
-        Vector3 facing = camera != null ? center - camera.transform.position : transform.forward;
-        facing.y = 0f;
-        if (facing.sqrMagnitude < 0.001f)
-        {
-            facing = transform.forward;
-            facing.y = 0f;
-        }
-
-        Quaternion faceYaw = Quaternion.LookRotation(facing.normalized, Vector3.up);
-        float spinFade = 1f - scatterT * 0.55f;
-        return faceYaw * Quaternion.Euler(
-            -28f + Mathf.Sin(Time.time * 0.48f) * 5f + Time.time * roseRotationXSpeed * spinFade,
-            Time.time * Mathf.Lerp(18f, 38f, holdT) * spinFade,
-            Mathf.Cos(Time.time * 0.42f) * 6f + Time.time * roseRotationZSpeed * spinFade);
-    }
-
-    private static Vector3 ResolveMagicBloomPetalSurface(int index, int count, float seed)
-    {
-        int layer = Mathf.Abs(index) % MagicBloomLayerPetalCounts.Length;
-        int petalsInLayer = MagicBloomLayerPetalCounts[layer];
-        int petalIndex = (index / MagicBloomLayerPetalCounts.Length) % petalsInLayer;
-        float layerT = layer / (float)(MagicBloomLayerPetalCounts.Length - 1);
-
-        float u = Mathf.Repeat(index * 0.7548777f + seed * 0.017f, 1f);
-        float v = Mathf.Repeat(index * 0.5698403f + seed * 0.023f, 1f);
-        float width = (u - 0.5f) * 2f;
-        float length = Mathf.Sqrt(v);
-
-        if (index % 7 == 0)
-        {
-            width = Mathf.Sign(width == 0f ? 1f : width) * Mathf.Lerp(0.72f, 1f, u);
-        }
-
-        float baseAngle = petalIndex / (float)petalsInLayer * Mathf.PI * 2f + layer * 0.27f;
-        float petalSpread = Mathf.Lerp(0.26f, 0.13f, layerT);
-        float angle = baseAngle + width * petalSpread * Mathf.Lerp(0.35f, 1f, length);
-
-        float rootRadius = Mathf.Lerp(0.08f, 0.28f, layerT);
-        float petalLength = Mathf.Lerp(0.34f, 0.82f, layerT);
-        float edgeTaper = 1f - Mathf.Abs(width);
-        float radius = rootRadius + petalLength * length * Mathf.Lerp(0.74f, 1.13f, edgeTaper);
-
-        float bowlHeight = Mathf.Lerp(0.28f, -0.16f, layerT);
-        float petalSlope = Mathf.Lerp(0.18f, -0.34f, layerT) * length;
-        float edgeCurl = Mathf.Sin(length * Mathf.PI) * Mathf.Lerp(0.05f, 0.18f, layerT);
-        float sideCurl = Mathf.Abs(width) * Mathf.Abs(width) * Mathf.Lerp(0.05f, 0.16f, layerT);
-        float y = bowlHeight + petalSlope + edgeCurl + sideCurl;
-
-        return new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius);
-    }
-
-    private static Vector3 ResolveMagicBloomPollenCore(int index, int count, float seed)
-    {
-        float u = Mathf.Repeat(index * 0.6180339f + seed * 0.013f, 1f);
-        float angle = u * Mathf.PI * 2f * 2.6f;
-        float radius = Mathf.Lerp(0.018f, 0.2f, Mathf.Sqrt(u));
-        float height = Mathf.Lerp(0.02f, 0.22f, Mathf.Repeat(index * 0.371f + seed, 1f));
-        return new Vector3(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius);
-    }
-
-    private static Vector3 ResolveMagicBloomBudPoint(int index, int count, float seed)
-    {
-        float t = index / Mathf.Max(1f, count - 1f);
-        float angle = index * Mathf.PI * (3f - Mathf.Sqrt(5f)) + seed * 0.011f;
-        float bulge = Mathf.Sin(t * Mathf.PI);
-        float radius = Mathf.Lerp(0.025f, 0.16f, bulge);
-        float y = Mathf.Lerp(-0.24f, 0.46f, t);
-        return new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius);
-    }
-
-    private static float ResolveMagicBloomUnfurlDelay(int index, int count)
-    {
-        float normalized = index / Mathf.Max(1f, count - 1f);
-        return Mathf.Clamp01(normalized * 0.22f);
-    }
-
     private PetalPollenSource PickNearestSource()
     {
+        RefreshSourcesIfNeeded();
+
         PetalPollenSource best = null;
         float bestDistance = float.MaxValue;
         Vector3 handPosition = handAnchor != null ? handAnchor.position : transform.position;
@@ -836,6 +798,149 @@ public class PetalPollenMagicController : MonoBehaviour
         return best;
     }
 
+    private void UpdateSourceFocusFeedback()
+    {
+        if (!enableSourceFocusFeedback)
+        {
+            return;
+        }
+
+        RefreshSourcesIfNeeded();
+
+        Vector3 handPosition = handAnchor != null ? handAnchor.position : transform.position;
+        float radius = Mathf.Max(0.01f, sourceFocusRadius);
+        for (int i = sources.Count - 1; i >= 0; i--)
+        {
+            PetalPollenSource source = sources[i];
+            if (source == null)
+            {
+                sources.RemoveAt(i);
+                continue;
+            }
+
+            float distance = Vector3.Distance(handPosition, source.transform.position);
+            if (distance > radius)
+            {
+                continue;
+            }
+
+            float focus = 1f - Mathf.Clamp01(distance / radius);
+            focus = Smoother01(focus);
+            if (isCollecting && distance <= collectionRadius)
+            {
+                focus = Mathf.Clamp01(focus + collectingSourceFocusBoost);
+            }
+
+            source.SetInteractionFocus(focus);
+        }
+    }
+
+    private void RefreshSourcesIfNeeded()
+    {
+        if (!autoDiscoverSources)
+        {
+            return;
+        }
+
+        for (int i = 0; i < sources.Count; i++)
+        {
+            if (sources[i] != null)
+            {
+                return;
+            }
+        }
+
+        sources.Clear();
+        PetalPollenSource[] discovered = FindObjectsOfType<PetalPollenSource>(true);
+        sources.AddRange(discovered);
+    }
+
+    private void PlayMagicClip(AudioClip clip, float volume)
+    {
+        if (clip == null)
+        {
+            return;
+        }
+
+        EnsureMagicAudioSource();
+        magicAudioSource.PlayOneShot(clip, Mathf.Clamp01(volume));
+    }
+
+    private void EnsureMagicAudioSource()
+    {
+        if (magicAudioSource != null)
+        {
+            return;
+        }
+
+        magicAudioSource = GetComponentInChildren<AudioSource>(true);
+        if (magicAudioSource == null)
+        {
+            magicAudioSource = gameObject.AddComponent<AudioSource>();
+        }
+
+        magicAudioSource.playOnAwake = false;
+        magicAudioSource.spatialBlend = 1f;
+        magicAudioSource.rolloffMode = AudioRolloffMode.Linear;
+        magicAudioSource.maxDistance = 8f;
+    }
+
+    private void BeginReleaseLightFeedback(bool charged)
+    {
+        if (!enableReleaseLightFlash)
+        {
+            return;
+        }
+
+        EnsureReleaseLight();
+        releaseLight.transform.position = GetHoldCenter();
+        releaseLight.color = releaseLightColor;
+        releaseLightPeakRange = releaseLightRange * (charged ? 1.25f : 1f);
+        releaseLightPeakIntensity = releaseLightIntensity * (charged ? 1.35f : 1f);
+        releaseLight.range = releaseLightPeakRange;
+        releaseLight.intensity = releaseLightPeakIntensity;
+        releaseLight.enabled = true;
+        releaseLightAge = 0f;
+        releaseLightActive = true;
+    }
+
+    private void UpdateReleaseLightFeedback()
+    {
+        if (!releaseLightActive || releaseLight == null)
+        {
+            return;
+        }
+
+        releaseLightAge += Time.deltaTime;
+        float duration = Mathf.Max(0.05f, releaseLightDuration);
+        float t = Mathf.Clamp01(releaseLightAge / duration);
+        float fade = 1f - Smoother01(t);
+        releaseLight.transform.position = Vector3.Lerp(releaseLight.transform.position, GetHoldCenter(), Time.deltaTime * 10f);
+        releaseLight.intensity = releaseLightPeakIntensity * fade;
+        releaseLight.range = releaseLightPeakRange * Mathf.Lerp(1.1f, 0.55f, t);
+
+        if (t >= 1f)
+        {
+            releaseLight.enabled = false;
+            releaseLightActive = false;
+        }
+    }
+
+    private void EnsureReleaseLight()
+    {
+        if (releaseLight != null)
+        {
+            return;
+        }
+
+        GameObject child = new GameObject("PetalPollen_ReleaseLight");
+        child.transform.SetParent(transform, false);
+        releaseLight = child.AddComponent<Light>();
+        releaseLight.type = LightType.Point;
+        releaseLight.shadows = LightShadows.None;
+        releaseLight.enabled = false;
+    }
+
     private PetalPollenReleaseMode PickReleaseMode(float holdSeconds)
     {
         float galaxyWeight = galaxyVeilWeight;
@@ -844,9 +949,7 @@ public class PetalPollenMagicController : MonoBehaviour
             galaxyWeight += chargedGalaxyBonusWeight;
         }
 
-        float total = Mathf.Max(0f, petalRainWeight)
-            + Mathf.Max(0f, spiralBloomWeight)
-            + Mathf.Max(0f, flowerConstellationWeight)
+        float total = Mathf.Max(0f, spiralBloomWeight)
             + Mathf.Max(0f, mathRibbonWeight)
             + Mathf.Max(0f, tornadoVortexWeight)
             + Mathf.Max(0f, galaxyWeight);
@@ -857,22 +960,10 @@ public class PetalPollenMagicController : MonoBehaviour
         }
 
         float roll = Random.value * total;
-        roll -= Mathf.Max(0f, petalRainWeight);
-        if (roll <= 0f)
-        {
-            return PetalPollenReleaseMode.PetalRain;
-        }
-
         roll -= Mathf.Max(0f, spiralBloomWeight);
         if (roll <= 0f)
         {
             return PetalPollenReleaseMode.SpiralBloom;
-        }
-
-        roll -= Mathf.Max(0f, flowerConstellationWeight);
-        if (roll <= 0f)
-        {
-            return PetalPollenReleaseMode.FlowerConstellation;
         }
 
         roll -= Mathf.Max(0f, mathRibbonWeight);
@@ -909,8 +1000,15 @@ public class PetalPollenMagicController : MonoBehaviour
             }
         }
 
-        EnsureBufferSize(pollenCount);
-        EnsurePetalBufferSize(petalCount);
+        int chargeHaloCount = GetChargeHaloParticleCount();
+        int releaseShockwaveCount = GetReleaseShockwaveParticleCount();
+        int releaseAfterglowCount = GetReleaseAfterglowParticleCount();
+
+        int totalPollenCount = pollenCount + chargeHaloCount + releaseShockwaveCount + releaseAfterglowCount;
+        int totalPetalCount = petalCount;
+
+        EnsureBufferSize(totalPollenCount);
+        EnsurePetalBufferSize(totalPetalCount);
 
         int pollenIndex = 0;
         int petalIndex = 0;
@@ -927,6 +1025,7 @@ public class PetalPollenMagicController : MonoBehaviour
                 remainingLifetime = releaseDuration + 1f,
                 startColor = ResolveColor(magic),
                 startSize = ResolveSize(magic),
+                randomSeed = (uint)Mathf.Max(1, Mathf.RoundToInt(Mathf.Abs(magic.seed) * 100000f)),
                 rotation3D = new Vector3(
                     0f,
                     0f,
@@ -945,27 +1044,300 @@ public class PetalPollenMagicController : MonoBehaviour
             }
         }
 
+        for (int i = 0; i < chargeHaloCount; i++)
+        {
+            particleBuffer[pollenIndex] = BuildChargeHaloParticle(i, chargeHaloCount);
+            pollenIndex++;
+        }
+
+        for (int i = 0; i < releaseShockwaveCount; i++)
+        {
+            particleBuffer[pollenIndex] = BuildReleaseShockwaveParticle(i, releaseShockwaveCount);
+            pollenIndex++;
+        }
+
+        for (int i = 0; i < releaseAfterglowCount; i++)
+        {
+            particleBuffer[pollenIndex] = BuildReleaseAfterglowParticle(i, releaseAfterglowCount);
+            pollenIndex++;
+        }
+
         if (particleOutput != null)
         {
+            ParticleSystem.MainModule main = particleOutput.main;
+            main.maxParticles = Mathf.Max(maxRenderedParticlesPerSystem, totalPollenCount);
+            ConfigureLongTail(particleOutput, false);
+
             if (!particleOutput.isPlaying)
             {
                 particleOutput.Play(true);
             }
 
-            particleOutput.SetParticles(particleBuffer, pollenCount);
+            particleOutput.SetParticles(particleBuffer, totalPollenCount);
         }
 
         if (petalOutput != null)
         {
+            ParticleSystem.MainModule main = petalOutput.main;
+            main.maxParticles = Mathf.Max(maxRenderedParticlesPerSystem, totalPetalCount);
+            ConfigureLongTail(petalOutput, true);
+
             if (!petalOutput.isPlaying)
             {
                 petalOutput.Play(true);
             }
 
-            petalOutput.SetParticles(petalBuffer, petalCount);
+            petalOutput.SetParticles(petalBuffer, totalPetalCount);
         }
     }
 
+    private int GetChargeHaloParticleCount()
+    {
+        if (!enableChargeHalo || !isCollecting)
+        {
+            return 0;
+        }
+
+        float charge = GetCharge01();
+        if (charge <= 0.02f)
+        {
+            return 0;
+        }
+
+        int budgetedCount = ApplyEffectParticleBudget(chargeHaloParticleCount);
+        return Mathf.Clamp(Mathf.CeilToInt(budgetedCount * Smoother01(charge)), 0, budgetedCount);
+    }
+
+    private ParticleSystem.Particle BuildChargeHaloParticle(int index, int count)
+    {
+        float charge = GetCharge01();
+        float normalized = index / Mathf.Max(1f, count);
+        float ring = index % 2 == 0 ? 0f : 1f;
+        float angle = normalized * Mathf.PI * 2f + Time.time * Mathf.Lerp(0.7f, 2.8f, charge) * (ring == 0f ? 1f : -1.25f);
+        float wobble = Mathf.Sin(Time.time * 3.1f + index * 0.73f) * 0.035f;
+
+        Vector3 forward = playerHead != null ? playerHead.forward : (handAnchor != null ? handAnchor.forward : transform.forward);
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.001f)
+        {
+            forward = transform.forward;
+        }
+
+        forward.Normalize();
+        Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+        Vector3 up = Vector3.up;
+
+        float radius = chargeHaloRadius * Mathf.Lerp(0.72f, 1.18f, Smoother01(charge));
+        float verticalScale = chargeHaloVerticalScale * Mathf.Lerp(0.75f, 1.1f, charge);
+        Vector3 center = GetHoldCenter();
+        Vector3 ringOffset = right * (Mathf.Cos(angle) * radius)
+            + up * (Mathf.Sin(angle) * radius * verticalScale)
+            + forward * (Mathf.Sin(angle * 1.7f + ring * 2.1f) * (0.055f + wobble));
+
+        Color color = Color.Lerp(pollenTrailColor, galaxyViolet, 0.35f + charge * 0.35f);
+        color.a = chargeHaloAlpha * Mathf.Lerp(0.45f, 1f, charge) * (0.74f + Mathf.Sin(angle * 2f + Time.time * 4.2f) * 0.26f);
+
+        return new ParticleSystem.Particle
+        {
+            position = center + ringOffset,
+            velocity = Vector3.zero,
+            startLifetime = 1f,
+            remainingLifetime = 1f,
+            startColor = color,
+            startSize = chargeHaloParticleSize * Mathf.Lerp(0.65f, 1.15f, charge),
+            randomSeed = (uint)Mathf.Max(1, index + 9137),
+            rotation3D = Vector3.zero
+        };
+    }
+
+    private int GetReleaseShockwaveParticleCount()
+    {
+        if (!enableReleaseShockwave || !releaseActive)
+        {
+            return 0;
+        }
+
+        float age = Time.time - releaseStartTime;
+        if (age < 0f || age > releaseShockwaveDuration)
+        {
+            return 0;
+        }
+
+        return Mathf.Max(0, ApplyEffectParticleBudget(releaseShockwaveParticleCount));
+    }
+
+    private ParticleSystem.Particle BuildReleaseShockwaveParticle(int index, int count)
+    {
+        float age = Mathf.Max(0f, Time.time - releaseStartTime);
+        float lifeT = Mathf.Clamp01(age / Mathf.Max(0.01f, releaseShockwaveDuration));
+        float expandT = EaseOutCubic(lifeT);
+        float fade = 1f - Smoother01(lifeT);
+
+        float normalized = index / Mathf.Max(1f, count);
+        float angle = normalized * Mathf.PI * 2f + Time.time * 0.55f;
+        float radiusScale = GetChargedReleaseRadiusScale();
+        float radius = Mathf.Lerp(releaseShockwaveStartRadius, releaseShockwaveEndRadius * radiusScale, expandT);
+        float lift = Mathf.Sin(normalized * Mathf.PI * 2f * 3f + Time.time * 5.8f) * releaseShockwaveHeight * (1f - lifeT);
+
+        Vector3 forward = playerHead != null ? playerHead.forward : (handAnchor != null ? handAnchor.forward : transform.forward);
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.001f)
+        {
+            forward = transform.forward;
+        }
+
+        forward.Normalize();
+        Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+        Vector3 up = Vector3.up;
+
+        Vector3 position = releaseOriginCenter
+            + right * (Mathf.Cos(angle) * radius)
+            + forward * (Mathf.Sin(angle) * radius * 0.72f)
+            + up * lift;
+
+        Color color = Color.Lerp(pollenTrailColor, galaxyViolet, 0.35f + releaseCharge * 0.22f);
+        color.a = releaseShockwaveAlpha * fade * Mathf.Lerp(0.72f, 1.15f, releaseCharge);
+
+        return new ParticleSystem.Particle
+        {
+            position = position,
+            velocity = Vector3.zero,
+            startLifetime = 1f,
+            remainingLifetime = 1f,
+            startColor = color,
+            startSize = releaseShockwaveParticleSize * Mathf.Lerp(0.9f, 1.25f, releaseCharge) * Mathf.Lerp(1.05f, 0.28f, lifeT),
+            randomSeed = (uint)Mathf.Max(1, index + 27119),
+            rotation3D = Vector3.zero
+        };
+    }
+
+    private int GetReleaseAfterglowParticleCount()
+    {
+        if (!enableReleaseAfterglow || !releaseActive)
+        {
+            return 0;
+        }
+
+        float age = Time.time - releaseStartTime;
+        float releaseT = Mathf.Clamp01(age / Mathf.Max(0.01f, releaseDuration));
+        if (releaseT < releaseAfterglowStart || age > releaseDuration + releaseSettleSeconds)
+        {
+            return 0;
+        }
+
+        float reveal = Smoother01(Mathf.Clamp01((releaseT - releaseAfterglowStart) / Mathf.Max(0.001f, 1f - releaseAfterglowStart)));
+        if (age > releaseDuration)
+        {
+            float settleT = Mathf.Clamp01((age - releaseDuration) / Mathf.Max(0.01f, releaseSettleSeconds));
+            reveal *= 1f - Smoother01(settleT);
+        }
+
+        int budgetedCount = ApplyEffectParticleBudget(releaseAfterglowParticleCount);
+        return Mathf.Clamp(Mathf.CeilToInt(budgetedCount * reveal), 0, budgetedCount);
+    }
+
+    private int ApplyEffectParticleBudget(int requestedCount)
+    {
+        return Mathf.Max(0, Mathf.RoundToInt(requestedCount * Mathf.Clamp(effectParticleBudgetScale, 0.35f, 1f)));
+    }
+
+    private ParticleSystem.Particle BuildReleaseAfterglowParticle(int index, int count)
+    {
+        float age = Time.time - releaseStartTime;
+        float releaseT = Mathf.Clamp01(age / Mathf.Max(0.01f, releaseDuration));
+        float afterT = Smoother01(Mathf.Clamp01((releaseT - releaseAfterglowStart) / Mathf.Max(0.001f, 1f - releaseAfterglowStart)));
+        float settleFade = 1f;
+        if (age > releaseDuration)
+        {
+            float settleT = Mathf.Clamp01((age - releaseDuration) / Mathf.Max(0.01f, releaseSettleSeconds));
+            settleFade = 1f - Smoother01(settleT);
+        }
+        float normalized = index / Mathf.Max(1f, count);
+        float seed = index * 12.9898f + 78.233f;
+        float ring = Mathf.Repeat(normalized * 3.7f + Deterministic01(seed), 1f);
+        float angle = normalized * Mathf.PI * 2f * 2.3f + Time.time * Mathf.Lerp(0.12f, 0.38f, releaseCharge) + seed * 0.013f;
+        float radius = releaseAfterglowRadius * GetChargedReleaseRadiusScale() * Mathf.Lerp(0.45f, 1f, ring);
+        float height = Mathf.Lerp(-0.18f, releaseAfterglowHeight * GetChargedReleaseHeightScale(), Deterministic01(seed * 0.37f));
+
+        Vector3 center = GetPlayerCenter();
+        Vector3 position = center
+            + new Vector3(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius)
+            + ResolveSoftJitter(seed, Time.time, Mathf.Lerp(0.035f, 0.11f, afterT));
+
+        float sparkle = 0.72f + Mathf.Sin(Time.time * 5.7f + seed) * 0.28f;
+        float fade = Mathf.Lerp(0.25f, 1f, afterT) * settleFade;
+        Color color = Color.Lerp(pollenTrailColor, galaxyViolet, 0.48f + releaseCharge * 0.22f);
+        color.a = releaseAfterglowAlpha * fade * sparkle;
+
+        return new ParticleSystem.Particle
+        {
+            position = position,
+            velocity = Vector3.zero,
+            startLifetime = 1f,
+            remainingLifetime = 1f,
+            startColor = color,
+            startSize = releaseAfterglowParticleSize * Mathf.Lerp(0.7f, 1.25f, sparkle),
+            randomSeed = (uint)Mathf.Max(1, index + 49157),
+            rotation3D = Vector3.zero
+        };
+    }
+
+    private void ConfigureLongTail(ParticleSystem output, bool isPetal)
+    {
+        ParticleSystem.TrailModule trails = output.trails;
+        trails.enabled = enableMotionTrails;
+        if (!enableMotionTrails)
+        {
+            return;
+        }
+
+        trails.mode = ParticleSystemTrailMode.PerParticle;
+        trails.ratio = 1f;
+        bool useReleaseTail = releaseActive;
+        float lifetime = useReleaseTail ? releaseLongTailLifetime : gatherTailLifetime;
+        float minVertexDistance = useReleaseTail ? releaseLongTailMinVertexDistance : gatherTailMinVertexDistance;
+        float pollenWidth = useReleaseTail ? releasePollenLongTailWidth : gatherPollenTailWidth;
+        float petalWidth = useReleaseTail ? releasePetalLongTailWidth : gatherPetalTailWidth;
+        float alpha = useReleaseTail ? releaseLongTailAlpha : gatherTailAlpha;
+
+        trails.lifetime = new ParticleSystem.MinMaxCurve(lifetime);
+        trails.minVertexDistance = minVertexDistance;
+        trails.worldSpace = true;
+        trails.dieWithParticles = false;
+        trails.sizeAffectsWidth = false;
+        trails.sizeAffectsLifetime = false;
+        trails.inheritParticleColor = true;
+
+        float width = isPetal ? petalWidth : pollenWidth;
+        AnimationCurve widthCurve = new AnimationCurve(
+            new Keyframe(0f, width),
+            new Keyframe(0.22f, width * (isPetal ? 0.68f : 0.72f)),
+            new Keyframe(1f, 0f));
+        trails.widthOverTrail = new ParticleSystem.MinMaxCurve(1f, widthCurve);
+
+        Gradient gradient = new Gradient();
+        Color tint = isPetal ? petalTrailColor : pollenTrailColor;
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(tint, 0f),
+                new GradientColorKey(tint, 0.55f),
+                new GradientColorKey(tint, 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(alpha * (isPetal ? 0.82f : 1f), 0f),
+                new GradientAlphaKey(alpha * (isPetal ? 0.34f : 0.43f), 0.55f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        trails.colorOverTrail = new ParticleSystem.MinMaxGradient(gradient);
+
+        ParticleSystemRenderer renderer = output.GetComponent<ParticleSystemRenderer>();
+        if (renderer != null && renderer.sharedMaterial != null)
+        {
+            renderer.trailMaterial = renderer.sharedMaterial;
+        }
+    }
 
     private Color ResolveColor(MagicParticle magic)
     {
@@ -983,8 +1355,23 @@ public class PetalPollenMagicController : MonoBehaviour
             color.a *= Mathf.Lerp(0.32f, 1f, revealAlpha);
         }
 
+        if (magic.stage == ParticleStage.Holding && isCollecting)
+        {
+            float charge = GetCharge01();
+            float pulse = 0.88f + Mathf.Sin(Time.time * 5.2f + magic.seed) * 0.12f;
+            color = Color.Lerp(color, magic.isPetal ? galaxyViolet : secondaryPollenColor, charge * 0.28f);
+            color.r *= Mathf.Lerp(1f, 1.25f, charge) * pulse;
+            color.g *= Mathf.Lerp(1f, 1.25f, charge) * pulse;
+            color.b *= Mathf.Lerp(1f, 1.25f, charge) * pulse;
+        }
+
         if (magic.stage == ParticleStage.Releasing)
         {
+            float chargedBrightness = 1f + releaseCharge * Mathf.Max(0f, chargedReleaseBrightnessBoost);
+            color.r *= chargedBrightness;
+            color.g *= chargedBrightness;
+            color.b *= chargedBrightness;
+
             float t = Mathf.Clamp01(magic.releaseAge / Mathf.Max(0.01f, releaseDuration));
             float fadeStart = 0.72f;
             if (activeReleaseMode == PetalPollenReleaseMode.TornadoVortex)
@@ -1005,6 +1392,11 @@ public class PetalPollenMagicController : MonoBehaviour
     private float ResolveSize(MagicParticle magic)
     {
         float size = magic.size;
+        if (magic.stage == ParticleStage.Releasing)
+        {
+            size *= 1f + releaseCharge * Mathf.Max(0f, chargedReleaseSizeBoost);
+        }
+
         if (magic.stage == ParticleStage.Releasing && magic.releaseAge < releaseFlashSeconds * 1.5f)
         {
             float flash = 1f - Mathf.Clamp01(magic.releaseAge / Mathf.Max(0.01f, releaseFlashSeconds * 1.5f));
@@ -1036,6 +1428,16 @@ public class PetalPollenMagicController : MonoBehaviour
         return size;
     }
 
+    private float GetChargedReleaseRadiusScale()
+    {
+        return 1f + releaseCharge * Mathf.Max(0f, chargedReleaseRadiusBoost);
+    }
+
+    private float GetChargedReleaseHeightScale()
+    {
+        return 1f + releaseCharge * Mathf.Max(0f, chargedReleaseHeightBoost);
+    }
+
     private bool IsTornadoDustParticle(MagicParticle magic)
     {
         if (magic.isPetal)
@@ -1044,6 +1446,16 @@ public class PetalPollenMagicController : MonoBehaviour
         }
 
         return Deterministic01(magic.seed * 0.173f + 11.7f) < Mathf.Clamp01(tornadoDustFraction);
+    }
+
+    private float GetCharge01()
+    {
+        if (!isCollecting)
+        {
+            return 0f;
+        }
+
+        return Mathf.Clamp01((Time.time - collectStartTime) / Mathf.Max(0.01f, chargedHoldSeconds));
     }
 
     private Vector3 GetHoldCenter()
@@ -1066,17 +1478,57 @@ public class PetalPollenMagicController : MonoBehaviour
     {
         if (particleOutput == null)
         {
-            particleOutput = GetComponentInChildren<ParticleSystem>(true);
+            particleOutput = ResolveParticleOutput("PollenRenderer");
         }
 
         if (particleOutput == null)
         {
-            GameObject child = new GameObject("_PetalPollenMagicParticles");
-            child.transform.SetParent(transform, false);
-            particleOutput = child.AddComponent<ParticleSystem>();
+            particleOutput = CreateParticleOutput("PollenRenderer");
         }
 
-        ParticleSystem.MainModule main = particleOutput.main;
+        if (petalOutput == null)
+        {
+            petalOutput = ResolveParticleOutput("PetalRenderer");
+        }
+
+        if (petalOutput == null)
+        {
+            petalOutput = CreateParticleOutput("PetalRenderer");
+        }
+
+        ConfigureParticleOutput(particleOutput);
+        ConfigureParticleOutput(petalOutput);
+    }
+
+    private ParticleSystem ResolveParticleOutput(string childName)
+    {
+        Transform child = transform.Find("Renderers/" + childName);
+        return child != null ? child.GetComponent<ParticleSystem>() : null;
+    }
+
+    private ParticleSystem CreateParticleOutput(string childName)
+    {
+        Transform renderers = transform.Find("Renderers");
+        if (renderers == null)
+        {
+            GameObject renderersObject = new GameObject("Renderers");
+            renderersObject.transform.SetParent(transform, false);
+            renderers = renderersObject.transform;
+        }
+
+        GameObject child = new GameObject(childName);
+        child.transform.SetParent(renderers, false);
+        return child.AddComponent<ParticleSystem>();
+    }
+
+    private void ConfigureParticleOutput(ParticleSystem output)
+    {
+        if (output == null)
+        {
+            return;
+        }
+
+        ParticleSystem.MainModule main = output.main;
         main.playOnAwake = false;
         main.loop = false;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
@@ -1084,13 +1536,18 @@ public class PetalPollenMagicController : MonoBehaviour
         main.startSpeed = 0f;
         main.startLifetime = releaseDuration + 1f;
 
-        ParticleSystem.EmissionModule emission = particleOutput.emission;
+        ParticleSystem.EmissionModule emission = output.emission;
         emission.enabled = false;
 
-        ParticleSystem.ShapeModule shape = particleOutput.shape;
+        ParticleSystem.ShapeModule shape = output.shape;
         shape.enabled = false;
 
-        ParticleSystemRenderer renderer = particleOutput.GetComponent<ParticleSystemRenderer>();
+        ParticleSystemRenderer renderer = output.GetComponent<ParticleSystemRenderer>();
+        if (renderer == null)
+        {
+            renderer = output.gameObject.AddComponent<ParticleSystemRenderer>();
+        }
+
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
         renderer.alignment = ParticleSystemRenderSpace.View;
     }
@@ -1110,7 +1567,6 @@ public class PetalPollenMagicController : MonoBehaviour
             petalBuffer = new ParticleSystem.Particle[Mathf.Max(1, count)];
         }
     }
-
 
     private static Vector3 FibonacciSphere(int index, int count)
     {
