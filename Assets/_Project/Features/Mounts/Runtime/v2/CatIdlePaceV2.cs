@@ -29,7 +29,7 @@ public class CatIdlePaceV2 : MonoBehaviour
     {
         if (rideController != null && rideController.IsRideActive)
         {
-            SetIdleAnimation();
+            
             return;
         }
 
