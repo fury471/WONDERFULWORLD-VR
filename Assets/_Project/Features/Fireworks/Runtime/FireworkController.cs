@@ -51,6 +51,16 @@ namespace WonderfulWorld.Features.Fireworks
         [SerializeField] private Color textFireworkColor = new Color(1f, 0.76f, 0.48f, 1f);
         [SerializeField] private Color mathFireworkColor = new Color(0.56f, 0.95f, 1f, 1f);
 
+        [Header("Pattern Palette")]
+        [SerializeField] private bool usePatternPalette = true;
+        [SerializeField] private Color heartColor = new Color(1f, 0.33f, 0.62f, 1f);
+        [SerializeField] private Color ringColor = new Color(0.38f, 0.92f, 1f, 1f);
+        [SerializeField] private Color spiralColor = new Color(0.7f, 0.96f, 0.45f, 1f);
+        [SerializeField] private Color sphereColor = new Color(0.82f, 0.88f, 1f, 1f);
+        [SerializeField] private Color flowerColor = new Color(1f, 0.48f, 0.95f, 1f);
+        [SerializeField] private Color starColor = new Color(1f, 0.78f, 0.26f, 1f);
+        [SerializeField] private Color mobiusColor = new Color(0.62f, 0.72f, 1f, 1f);
+
         [Header("Performance")]
         [SerializeField] private FireworkQualityMode qualityMode = FireworkQualityMode.Balanced;
         [SerializeField] private bool usePatternBudgetTuning = true;
@@ -61,10 +71,13 @@ namespace WonderfulWorld.Features.Fireworks
         [SerializeField] private AudioClip burstAudioClip;
         [SerializeField] private float launchAudioVolume = 0.55f;
         [SerializeField] private float burstAudioVolume = 0.9f;
-        [SerializeField] private float pointCloudBurstAudioDelay = 1.05f;
+        [SerializeField] private float pointCloudBurstAudioDelay = 0.82f;
+        [SerializeField] private bool useProceduralAudioFallback = true;
 
         private Coroutine showcaseRoutine;
         private Coroutine pointCloudAudioRoutine;
+        private static AudioClip proceduralLaunchClip;
+        private static AudioClip proceduralBurstClip;
 
         public event Action SequenceStarted;
         public event Action SequenceStopped;
@@ -75,14 +88,13 @@ namespace WonderfulWorld.Features.Fireworks
 
         public int PatternCount => showcaseMathPatterns?.Count ?? 0;
 
-        public string GetText()
-        {
-            return showcaseText;
-        }
+        public string ShowcaseText => showcaseText;
 
         private void Reset()
         {
             launchPoint = transform;
+            pointCloudRenderer = GetComponentInChildren<PointCloudFireworkRenderer>(true);
+            audioSource = GetComponentInChildren<AudioSource>(true);
             EnsureShowcasePatterns();
         }
 
@@ -137,6 +149,21 @@ namespace WonderfulWorld.Features.Fireworks
             BeginShowcase(PlayAllShowcaseRoutine());
         }
 
+        public void SetShowcaseText(string text)
+        {
+            showcaseText = FireworkPointCloudGenerator.SanitizeText(text);
+        }
+
+        public void LaunchShowcaseText()
+        {
+            LaunchTextFirework(showcaseText);
+        }
+
+        public void SetQualityMode(FireworkQualityMode mode)
+        {
+            qualityMode = mode;
+        }
+
         private void BeginShowcase(IEnumerator routine)
         {
             if (showcaseRoutine != null)
@@ -170,7 +197,7 @@ namespace WonderfulWorld.Features.Fireworks
         {
             PointCloudFireworkRequest request = PointCloudFireworkRequest.Math(
                 pattern,
-                mathFireworkColor,
+                ResolvePatternColor(pattern),
                 pointCloudScale * mathPointCloudScaleMultiplier,
                 ResolveMathPointBudget(pattern));
             LaunchPointCloudFirework(request);
@@ -197,7 +224,9 @@ namespace WonderfulWorld.Features.Fireworks
                 request.color,
                 request.particleSizeMultiplier,
                 request.autoRotate,
-                request.rotationSpeedDegrees);
+                request.rotationSpeedDegrees,
+                request.rotationAxis,
+                request.extraHoldDuration);
             ScheduleBurstAudio(pointCloudBurstAudioDelay);
             PointCloudFireworkSpawned?.Invoke(request, center);
         }
@@ -211,10 +240,6 @@ namespace WonderfulWorld.Features.Fireworks
             }
 
             SequenceStopped?.Invoke();
-        }
-
-        public void RefreshPatternsFromLibrary()
-        {
         }
 
         private IEnumerator PlayConfiguredShowcaseRoutine()
@@ -338,9 +363,29 @@ namespace WonderfulWorld.Features.Fireworks
                 MathFireworkPattern.Flower => 1.04f,
                 MathFireworkPattern.Mobius => 0.82f,
                 MathFireworkPattern.Spiral => 0.78f,
-                MathFireworkPattern.Ring => 0.72f,
+                MathFireworkPattern.Ring => 0.94f,
                 MathFireworkPattern.Star => 0.86f,
                 _ => 1f
+            };
+        }
+
+        private Color ResolvePatternColor(MathFireworkPattern pattern)
+        {
+            if (!usePatternPalette)
+            {
+                return mathFireworkColor;
+            }
+
+            return pattern switch
+            {
+                MathFireworkPattern.Heart => heartColor,
+                MathFireworkPattern.Ring => ringColor,
+                MathFireworkPattern.Spiral => spiralColor,
+                MathFireworkPattern.Sphere => sphereColor,
+                MathFireworkPattern.Flower => flowerColor,
+                MathFireworkPattern.Star => starColor,
+                MathFireworkPattern.Mobius => mobiusColor,
+                _ => mathFireworkColor
             };
         }
 
@@ -364,18 +409,21 @@ namespace WonderfulWorld.Features.Fireworks
 
         private void PlayLaunchAudio()
         {
-            if (launchAudioClip == null)
+            AudioClip clip = launchAudioClip != null
+                ? launchAudioClip
+                : (useProceduralAudioFallback ? GetProceduralLaunchClip() : null);
+            if (clip == null)
             {
                 return;
             }
 
             EnsureAudioSource();
-            audioSource.PlayOneShot(launchAudioClip, launchAudioVolume);
+            audioSource.PlayOneShot(clip, launchAudioVolume);
         }
 
         private void ScheduleBurstAudio(float delay)
         {
-            if (burstAudioClip == null)
+            if (burstAudioClip == null && !useProceduralAudioFallback)
             {
                 return;
             }
@@ -396,7 +444,12 @@ namespace WonderfulWorld.Features.Fireworks
             }
 
             EnsureAudioSource();
-            audioSource.PlayOneShot(burstAudioClip, burstAudioVolume);
+            AudioClip clip = burstAudioClip != null ? burstAudioClip : GetProceduralBurstClip();
+            if (clip != null)
+            {
+                audioSource.PlayOneShot(clip, burstAudioVolume);
+            }
+
             pointCloudAudioRoutine = null;
         }
 
@@ -407,7 +460,7 @@ namespace WonderfulWorld.Features.Fireworks
                 return;
             }
 
-            audioSource = GetComponent<AudioSource>();
+            audioSource = GetComponentInChildren<AudioSource>(true);
             if (audioSource == null)
             {
                 audioSource = gameObject.AddComponent<AudioSource>();
@@ -415,6 +468,88 @@ namespace WonderfulWorld.Features.Fireworks
                 audioSource.spatialBlend = 1f;
                 audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
                 audioSource.maxDistance = 80f;
+            }
+        }
+
+        private static AudioClip GetProceduralLaunchClip()
+        {
+            if (proceduralLaunchClip == null)
+            {
+                proceduralLaunchClip = CreateProceduralLaunchClip();
+            }
+
+            return proceduralLaunchClip;
+        }
+
+        private static AudioClip GetProceduralBurstClip()
+        {
+            if (proceduralBurstClip == null)
+            {
+                proceduralBurstClip = CreateProceduralBurstClip();
+            }
+
+            return proceduralBurstClip;
+        }
+
+        private static AudioClip CreateProceduralLaunchClip()
+        {
+            const int sampleRate = 24000;
+            const float duration = 0.82f;
+            int samples = Mathf.RoundToInt(sampleRate * duration);
+            float[] data = new float[samples];
+            float phase = 0f;
+
+            for (int i = 0; i < samples; i++)
+            {
+                float t = i / (float)sampleRate;
+                float normalized = t / duration;
+                float frequency = Mathf.Lerp(520f, 1380f, Mathf.Pow(normalized, 0.55f));
+                phase += frequency * Mathf.PI * 2f / sampleRate;
+                float envelope = Mathf.Sin(Mathf.Clamp01(normalized) * Mathf.PI);
+                float hiss = HashSigned(i) * 0.16f;
+                data[i] = (Mathf.Sin(phase) * 0.78f + hiss) * envelope * 0.42f;
+            }
+
+            AudioClip clip = AudioClip.Create("Fireworks_ProceduralLaunch", samples, 1, sampleRate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        private static AudioClip CreateProceduralBurstClip()
+        {
+            const int sampleRate = 24000;
+            const float duration = 0.95f;
+            int samples = Mathf.RoundToInt(sampleRate * duration);
+            float[] data = new float[samples];
+
+            for (int i = 0; i < samples; i++)
+            {
+                float t = i / (float)sampleRate;
+                float normalized = t / duration;
+                float boomEnvelope = Mathf.Exp(-normalized * 8.5f);
+                float crackleEnvelope = Mathf.Exp(-normalized * 3.2f);
+                float lowBoom = Mathf.Sin(t * Mathf.PI * 2f * Mathf.Lerp(92f, 42f, normalized)) * boomEnvelope;
+                float crackle = HashSigned(i * 7) * crackleEnvelope;
+                float sparkle = Mathf.Sin(t * Mathf.PI * 2f * 880f + HashSigned(i) * 0.8f) * Mathf.Exp(-normalized * 5.5f);
+                data[i] = Mathf.Clamp((lowBoom * 0.72f + crackle * 0.34f + sparkle * 0.12f) * 0.78f, -1f, 1f);
+            }
+
+            AudioClip clip = AudioClip.Create("Fireworks_ProceduralBurst", samples, 1, sampleRate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        private static float HashSigned(int value)
+        {
+            unchecked
+            {
+                uint hash = (uint)value;
+                hash ^= hash >> 16;
+                hash *= 0x7FEB352Du;
+                hash ^= hash >> 15;
+                hash *= 0x846CA68Bu;
+                hash ^= hash >> 16;
+                return ((hash & 0xFFFFu) / 32767.5f) - 1f;
             }
         }
     }
