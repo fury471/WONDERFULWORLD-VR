@@ -4,6 +4,7 @@ using UnityEngine.UI;
 
 namespace WonderfulWorld.Features.Fireworks
 {
+    [DisallowMultipleComponent]
     public class VRFireworkMenuController : MonoBehaviour
     {
         [Header("References")]

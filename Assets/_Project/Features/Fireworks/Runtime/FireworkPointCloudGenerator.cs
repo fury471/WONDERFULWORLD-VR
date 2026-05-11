@@ -253,19 +253,108 @@ namespace WonderfulWorld.Features.Fireworks
 
         private static void AddRingPattern(List<Vector3> points, int count)
         {
-            int outlineCount = Mathf.RoundToInt(count * 0.42f);
-            int tubeCount = count - outlineCount;
-            AddCircleLayers(points, outlineCount, 4, 0.96f, 1.04f, 0.1f);
+            int helixCount = Mathf.RoundToInt(count * 0.58f);
+            int rungCount = Mathf.RoundToInt(count * 0.3f);
+            int glowCount = count - helixCount - rungCount;
 
-            for (int i = 0; i < tubeCount; i++)
+            AddDnaHelixStrands(points, helixCount);
+            AddDnaRungs(points, rungCount);
+            AddDnaGlowCloud(points, glowCount);
+            TrimToCount(points, count);
+        }
+
+        private static void AddDnaHelixStrands(List<Vector3> points, int pointCount)
+        {
+            if (pointCount <= 0)
             {
-                float u = i * GoldenAngle;
-                float v = (i % 19) / 19f * Mathf.PI * 2f;
-                float major = 0.82f;
-                float minor = 0.24f + ((i / 19) % 3) * 0.035f;
-                float radial = major + Mathf.Cos(v) * minor;
-                points.Add(new Vector3(Mathf.Cos(u) * radial, Mathf.Sin(v) * minor, Mathf.Sin(u) * radial));
+                return;
             }
+
+            int strands = 2;
+            int perStrand = Mathf.Max(24, Mathf.CeilToInt(pointCount / (float)strands));
+            int targetCount = points.Count + pointCount;
+            for (int strand = 0; strand < strands && points.Count < targetCount; strand++)
+            {
+                float phase = strand * Mathf.PI;
+
+                for (int i = 0; i < perStrand && points.Count < targetCount; i++)
+                {
+                    float t = perStrand <= 1 ? 0f : i / (float)(perStrand - 1);
+                    float angle = t * Mathf.PI * 2f * 2.35f + phase;
+                    Vector3 point = DnaPoint(angle, t, 1f);
+                    points.Add(point);
+                }
+            }
+        }
+
+        private static void AddDnaRungs(List<Vector3> points, int pointCount)
+        {
+            if (pointCount <= 0)
+            {
+                return;
+            }
+
+            int rungSegments = 22;
+            int pointsPerRung = Mathf.Max(3, Mathf.CeilToInt(pointCount / (float)rungSegments));
+            int targetCount = points.Count + pointCount;
+            for (int rung = 0; rung < rungSegments && points.Count < targetCount; rung++)
+            {
+                float t = rungSegments <= 1 ? 0f : rung / (float)(rungSegments - 1);
+                float angle = t * Mathf.PI * 2f * 2.35f;
+                Vector3 a = DnaPoint(angle, t, 0.78f);
+                Vector3 b = DnaPoint(angle + Mathf.PI, t, 0.78f);
+
+                for (int i = 0; i < pointsPerRung && points.Count < targetCount; i++)
+                {
+                    float u = pointsPerRung <= 1 ? 0.5f : i / (float)(pointsPerRung - 1);
+                    Vector3 point = Vector3.Lerp(a, b, u);
+                    point += DnaNormalJitter(angle, 0.018f);
+                    points.Add(point);
+                }
+            }
+        }
+
+        private static void AddDnaGlowCloud(List<Vector3> points, int pointCount)
+        {
+            if (pointCount <= 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < pointCount; i++)
+            {
+                float t = pointCount <= 1 ? 0.5f : (i + 0.5f) / pointCount;
+                float angle = t * Mathf.PI * 2f * 2.35f + (i % 2) * Mathf.PI;
+                Vector3 center = DnaPoint(angle, t, Mathf.Lerp(0.85f, 1.12f, Hash01(i, 17)));
+                float halo = Mathf.Sqrt(Hash01(i, 23)) * Mathf.Lerp(0.035f, 0.12f, Hash01(i, 29));
+                float haloAngle = i * GoldenAngle;
+                Vector3 offset = new Vector3(Mathf.Cos(haloAngle) * halo, Mathf.Lerp(-0.035f, 0.035f, Hash01(i, 31)), Mathf.Sin(haloAngle) * halo);
+                points.Add(center + TiltDnaPoint(offset));
+            }
+        }
+
+        private static Vector3 DnaPoint(float angle, float t, float radiusMultiplier)
+        {
+            float radius = 0.56f * radiusMultiplier;
+            float length = Mathf.Lerp(-1.15f, 1.15f, t);
+            Vector3 point = new Vector3(
+                length,
+                Mathf.Cos(angle) * radius,
+                Mathf.Sin(angle) * radius);
+            return TiltDnaPoint(point);
+        }
+
+        private static Vector3 DnaNormalJitter(float angle, float amount)
+        {
+            Vector3 normal = new Vector3(0f, Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+            float signed = Mathf.Sin(angle * 12.9898f + 78.233f);
+            return TiltDnaPoint(normal * signed * amount);
+        }
+
+        private static Vector3 TiltDnaPoint(Vector3 point)
+        {
+            Quaternion tilt = Quaternion.Euler(0f, 0f, -7f);
+            return tilt * point;
         }
 
         private static void AddSpiralPattern(List<Vector3> points, int count)
@@ -287,24 +376,16 @@ namespace WonderfulWorld.Features.Fireworks
 
         private static void AddSpherePattern(List<Vector3> points, int count)
         {
-            int silhouetteCount = Mathf.RoundToInt(count * 0.36f);
-            int latitudeCount = Mathf.RoundToInt(count * 0.44f);
-            int interiorCount = count - silhouetteCount - latitudeCount;
+            int silhouetteCount = Mathf.RoundToInt(count * 0.26f);
+            int guideCount = Mathf.RoundToInt(count * 0.24f);
+            int shellCount = Mathf.RoundToInt(count * 0.34f);
+            int coreCount = count - silhouetteCount - guideCount - shellCount;
 
-            AddCircleLayers(points, silhouetteCount, 5, 0.98f, 1.02f, 0.09f);
-            AddSphereLatitudeRings(points, latitudeCount, 18);
-
-            for (int i = 0; i < interiorCount; i++)
-            {
-                float t = interiorCount <= 1 ? 0f : i / (float)(interiorCount - 1);
-                float angle = i * GoldenAngle;
-                float radius = Mathf.Sqrt(t) * 0.72f;
-                float wave = Mathf.Sin(t * Mathf.PI * 8f);
-                points.Add(new Vector3(
-                    Mathf.Cos(angle) * radius,
-                    Mathf.Sin(angle) * radius,
-                    wave * 0.42f));
-            }
+            AddCircleLayers(points, silhouetteCount, 6, 0.98f, 1.025f, 0.075f);
+            AddSphereGuideCurves(points, guideCount);
+            AddFibonacciSphereShell(points, shellCount, 0.96f, 0.018f);
+            AddFibonacciSphereShell(points, Mathf.Max(0, coreCount), 0.62f, 0.026f);
+            TrimToCount(points, count);
         }
 
         private static void AddFlowerPattern(List<Vector3> points, int count)
@@ -481,7 +562,75 @@ namespace WonderfulWorld.Features.Fireworks
                     points.Add(new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius));
                 }
 
-                used += samples;
+            used += samples;
+        }
+    }
+
+        private static void AddSphereGuideCurves(List<Vector3> points, int pointCount)
+        {
+            if (pointCount <= 0)
+            {
+                return;
+            }
+
+            int curveCount = 7;
+            int perCurve = Mathf.Max(16, Mathf.CeilToInt(pointCount / (float)curveCount));
+            int targetCount = points.Count + pointCount;
+            for (int curve = 0; curve < curveCount && points.Count < targetCount; curve++)
+            {
+                Quaternion rotation = ResolveSphereGuideRotation(curve);
+                float radius = curve < 3 ? 1f : Mathf.Lerp(0.38f, 0.82f, (curve - 3) / 3f);
+                float y = curve < 3 ? 0f : Mathf.Lerp(-0.52f, 0.52f, (curve - 3) / 3f);
+                float phase = curve * 0.031f;
+
+                for (int i = 0; i < perCurve && points.Count < targetCount; i++)
+                {
+                    float angle = ((i + 0.5f) / perCurve + phase) * Mathf.PI * 2f;
+                    Vector3 point = new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius);
+                    if (curve < 3)
+                    {
+                        point = rotation * point;
+                    }
+
+                    points.Add(point);
+                }
+            }
+        }
+
+        private static Quaternion ResolveSphereGuideRotation(int curve)
+        {
+            switch (curve)
+            {
+                case 0:
+                    return Quaternion.identity;
+                case 1:
+                    return Quaternion.Euler(90f, 0f, 0f);
+                case 2:
+                    return Quaternion.Euler(0f, 90f, 0f);
+                default:
+                    return Quaternion.identity;
+            }
+        }
+
+        private static void AddFibonacciSphereShell(List<Vector3> points, int pointCount, float radius, float wave)
+        {
+            if (pointCount <= 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < pointCount; i++)
+            {
+                float t = pointCount <= 1 ? 0.5f : (i + 0.5f) / pointCount;
+                float y = 1f - 2f * t;
+                float ringRadius = Mathf.Sqrt(Mathf.Max(0f, 1f - y * y));
+                float angle = i * GoldenAngle;
+                float shellWave = 1f + Mathf.Sin(i * 0.47f) * wave;
+
+                points.Add(new Vector3(
+                    Mathf.Cos(angle) * ringRadius * radius * shellWave,
+                    y * radius * shellWave,
+                    Mathf.Sin(angle) * ringRadius * radius * shellWave));
             }
         }
 
@@ -531,11 +680,29 @@ namespace WonderfulWorld.Features.Fireworks
             for (int i = 0; i < pointBudget; i++)
             {
                 Vector3 point = basePoints[i % basePoints.Count];
-                Vector2 jitter = UnityEngine.Random.insideUnitCircle * scatter;
-                expanded.Add(point + new Vector3(jitter.x, jitter.y, UnityEngine.Random.Range(-scatter, scatter) * 0.35f));
+                float angle = i * GoldenAngle;
+                float radius = Mathf.Sqrt(Hash01(i, 41)) * scatter;
+                Vector2 jitter = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+                float depthJitter = Mathf.Lerp(-scatter, scatter, Hash01(i, 43)) * 0.35f;
+                expanded.Add(point + new Vector3(jitter.x, jitter.y, depthJitter));
             }
 
             return expanded;
+        }
+
+        private static float Hash01(int index, int salt)
+        {
+            unchecked
+            {
+                uint hash = (uint)index;
+                hash ^= (uint)salt * 0x9E3779B9u;
+                hash ^= hash >> 16;
+                hash *= 0x7FEB352Du;
+                hash ^= hash >> 15;
+                hash *= 0x846CA68Bu;
+                hash ^= hash >> 16;
+                return (hash & 0x00FFFFFFu) / 16777215f;
+            }
         }
 
     }

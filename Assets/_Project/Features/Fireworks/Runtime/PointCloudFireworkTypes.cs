@@ -38,6 +38,8 @@ namespace WonderfulWorld.Features.Fireworks
         public float particleSizeMultiplier;
         public bool autoRotate;
         public float rotationSpeedDegrees;
+        public Vector3 rotationAxis;
+        public float extraHoldDuration;
         public int pointBudget;
         public string displayName;
 
@@ -54,6 +56,8 @@ namespace WonderfulWorld.Features.Fireworks
                 particleSizeMultiplier = 1f,
                 autoRotate = false,
                 rotationSpeedDegrees = 0f,
+                rotationAxis = Vector3.zero,
+                extraHoldDuration = 1.5f,
                 pointBudget = pointBudget,
                 displayName = string.IsNullOrWhiteSpace(sanitized) ? "Text" : sanitized
             };
@@ -69,10 +73,44 @@ namespace WonderfulWorld.Features.Fireworks
                 color = color,
                 scale = scale,
                 particleSizeMultiplier = 1.8f,
-                autoRotate = pattern == MathFireworkPattern.Mobius,
-                rotationSpeedDegrees = pattern == MathFireworkPattern.Mobius ? 14f : 0f,
+                autoRotate = IsRotatingPattern(pattern),
+                rotationSpeedDegrees = ResolveRotationSpeed(pattern),
+                rotationAxis = ResolveRotationAxis(pattern),
+                extraHoldDuration = 0f,
                 pointBudget = pointBudget,
-                displayName = pattern.ToString()
+                displayName = pattern == MathFireworkPattern.Ring ? "DNA Helix" : pattern.ToString()
+            };
+        }
+
+        private static bool IsRotatingPattern(MathFireworkPattern pattern)
+        {
+            return pattern == MathFireworkPattern.Sphere
+                || pattern == MathFireworkPattern.Ring
+                || pattern == MathFireworkPattern.Spiral
+                || pattern == MathFireworkPattern.Mobius;
+        }
+
+        private static float ResolveRotationSpeed(MathFireworkPattern pattern)
+        {
+            return pattern switch
+            {
+                MathFireworkPattern.Ring => 18f,
+                MathFireworkPattern.Spiral => 14f,
+                MathFireworkPattern.Sphere => 12f,
+                MathFireworkPattern.Mobius => 14f,
+                _ => 0f
+            };
+        }
+
+        private static Vector3 ResolveRotationAxis(MathFireworkPattern pattern)
+        {
+            return pattern switch
+            {
+                MathFireworkPattern.Ring => Vector3.right,
+                MathFireworkPattern.Spiral => Vector3.up,
+                MathFireworkPattern.Sphere => Vector3.up,
+                MathFireworkPattern.Mobius => new Vector3(0.62f, 1f, 0f),
+                _ => Vector3.zero
             };
         }
     }
