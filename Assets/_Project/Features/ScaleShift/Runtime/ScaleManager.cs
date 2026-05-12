@@ -21,8 +21,12 @@ public class ScaleManager : MonoBehaviour
     [SerializeField] private Component[] moveSpeedTargets;
     [SerializeField] private Component[] interactionDistanceTargets;
 
-    [Header("Debug")]
+    [Header("Production Debug")]
     [SerializeField] private bool enableDebugKeyboardScaleShortcuts = false;
+    [SerializeField] private InputActionReference normalScaleAction;
+    [SerializeField] private InputActionReference smallScaleAction;
+    [SerializeField] private InputActionReference largeScaleAction;
+    [SerializeField] private bool logDebug = false;
 
     [SerializeField] private ScaleState currentState = ScaleState.Normal;
 
@@ -56,25 +60,26 @@ public class ScaleManager : MonoBehaviour
 
     private void Update()
     {
-        // Temporary debug input for sandbox only. Keep disabled in integrated scenes
-        // so it doesn't conflict with other number-key driven systems.
-        if (!enableDebugKeyboardScaleShortcuts)
-        {
-            return;
-        }
-
-        var keyboard = Keyboard.current;
-        
-        if (keyboard == null) return;
-
-        if (keyboard.digit1Key.wasPressedThisFrame)
+        if (WasPressed(normalScaleAction, Key.Digit1))
             SetScale(ScaleState.Normal);
 
-        if (keyboard.digit2Key.wasPressedThisFrame)
+        if (WasPressed(smallScaleAction, Key.Digit2))
             SetScale(ScaleState.Small);
 
-        if (keyboard.digit3Key.wasPressedThisFrame)
+        if (WasPressed(largeScaleAction, Key.Digit3))
             SetScale(ScaleState.Large);
+    }
+
+    private bool WasPressed(InputActionReference actionReference, Key debugKey)
+    {
+        if (actionReference != null && actionReference.action != null && actionReference.action.WasPressedThisFrame())
+        {
+            return true;
+        }
+
+        return enableDebugKeyboardScaleShortcuts &&
+               Keyboard.current != null &&
+               Keyboard.current[debugKey].wasPressedThisFrame;
     }
 
     private void AutoAssignReferences()
@@ -188,12 +193,15 @@ public class ScaleManager : MonoBehaviour
         ApplyCharacterController(profile.controllerHeightMultiplier, profile.controllerRadiusMultiplier);
         RestoreGroundAnchorPosition(preScaleAnchorPosition);
 
-        Debug.Log(
-            $"[ScaleShift] Applied {state} | " +
-            $"playerScale={profile.playerScale}, " +
-            $"moveSpeedMultiplier={profile.moveSpeedMultiplier}, " +
-            $"interactionDistanceMultiplier={profile.interactionDistanceMultiplier}, " +
-            $"nearClip={profile.nearClip}");
+        if (logDebug)
+        {
+            Debug.Log(
+                $"[ScaleShift] Applied {state} | " +
+                $"playerScale={profile.playerScale}, " +
+                $"moveSpeedMultiplier={profile.moveSpeedMultiplier}, " +
+                $"interactionDistanceMultiplier={profile.interactionDistanceMultiplier}, " +
+                $"nearClip={profile.nearClip}");
+        }
     }
 
     private void CacheBaseValues()
