@@ -2,13 +2,14 @@ using UnityEngine;
 
 namespace WonderfulWorld.Features.Fireworks
 {
+    [DisallowMultipleComponent]
     public class FireworksZoneTrigger : MonoBehaviour
     {
         [SerializeField] private FireworkLaunchPad launchPad;
         [SerializeField] private GameFlowManager gameFlowManager;
         [SerializeField] private string attractionId = "FireworksClearing";
         [SerializeField] private bool triggerOnlyOnce = true;
-        [SerializeField] private bool logDebug = true;
+        [SerializeField] private bool logDebug;
 
         private bool hasTriggered;
 
