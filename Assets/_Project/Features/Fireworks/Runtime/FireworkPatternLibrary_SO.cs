@@ -5,7 +5,7 @@ namespace WonderfulWorld.Features.Fireworks
 {
     [CreateAssetMenu(
         fileName = "FireworkPatternLibrary_SO",
-        menuName = "WonderfulWorld/Fireworks/Pattern Library")]
+        menuName = "WonderfulWorld/Fireworks/Legacy Pattern Library")]
     public class FireworkPatternLibrary_SO : ScriptableObject
     {
         [SerializeField] private List<FireworkPattern> patterns = new List<FireworkPattern>();
@@ -50,7 +50,7 @@ namespace WonderfulWorld.Features.Fireworks
             return copies;
         }
 
-        [ContextMenu("Reset To Default M2 Patterns")]
+        [ContextMenu("Reset To Legacy Defaults")]
         private void ResetToDefaults()
         {
             patterns = LegacyFireworkPatternDefaults.Create();

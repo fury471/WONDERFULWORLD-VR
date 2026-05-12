@@ -1,7 +1,9 @@
+using System;
 using UnityEngine;
 
 namespace WonderfulWorld.Features.Fireworks
 {
+    [DisallowMultipleComponent]
     public class FireworkLaunchPad : MonoBehaviour
     {
         [SerializeField] private FireworkController controller;
@@ -84,14 +86,20 @@ namespace WonderfulWorld.Features.Fireworks
         }
 
         [ContextMenu("Showcase/Text")]
-        public void TriggerDreamText()
+        public void TriggerShowcaseText()
         {
             if (!CanTriggerManualFirework())
             {
                 return;
             }
 
-            controller.LaunchTextFirework(controller.GetText());
+            controller.LaunchShowcaseText();
+        }
+
+        [Obsolete("Use TriggerShowcaseText. This alias is kept only for older scene/menu bindings.")]
+        public void TriggerDreamText()
+        {
+            TriggerShowcaseText();
         }
 
         [ContextMenu("Showcase/Math Heart")]
@@ -100,7 +108,7 @@ namespace WonderfulWorld.Features.Fireworks
             TriggerMathFirework(MathFireworkPattern.Heart);
         }
 
-        [ContextMenu("Showcase/Math Ring")]
+        [ContextMenu("Showcase/Math DNA Helix")]
         public void TriggerMathRing()
         {
             TriggerMathFirework(MathFireworkPattern.Ring);
