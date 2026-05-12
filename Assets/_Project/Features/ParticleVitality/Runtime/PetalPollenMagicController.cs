@@ -125,6 +125,19 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private float releaseAfterglowAlpha = 0.34f;
     [SerializeField] private float releaseSettleSeconds = 0.8f;
 
+    [Header("Release Density Layer")]
+    [SerializeField] private bool enableReleaseDensityLayer = true;
+    [SerializeField] private int releaseDensityParticleCount = 900;
+    [SerializeField] private float spiralBloomDensityMultiplier = 0.32f;
+    [SerializeField] private float mathRibbonDensityMultiplier = 0.62f;
+    [SerializeField] private float tornadoVortexDensityMultiplier = 0.58f;
+    [SerializeField] private float aizawaFountainDensityMultiplier = 1f;
+    [SerializeField] private float dreamAttractorDensityMultiplier = 1f;
+    [SerializeField] private float galaxyVeilDensityMultiplier = 0.45f;
+    [SerializeField] private float releaseDensityParticleSize = 0.024f;
+    [Range(0f, 1f)]
+    [SerializeField] private float releaseDensityAlpha = 0.42f;
+
     [Header("Release Modes")]
     [SerializeField] private float galaxyRadius = 1.35f;
     [SerializeField] private float galaxyHeight = 0.7f;
@@ -166,11 +179,24 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private float tornadoWispStrandWidth = 0.16f;
     [SerializeField] private float tornadoWispPreludePortion = 0.34f;
     [SerializeField] private float tornadoWispYawTurns = 1.05f;
+    [SerializeField] private float attractorGateDistance = 1.05f;
+    [SerializeField] private float attractorViewDistance = 2.35f;
+    [SerializeField] private float attractorViewHeight = 0.72f;
+    [SerializeField] private float attractorSideOffset = 0f;
+    [SerializeField] private float attractorScale = 1.65f;
+    [SerializeField] private float attractorVerticalScale = 1.55f;
+    [SerializeField] private float attractorDepthScale = 1.12f;
+    [SerializeField] private float attractorSpinSpeed = 7.5f;
+    [SerializeField] private float attractorScatterRadius = 0.68f;
+    [SerializeField] private float attractorParticleSizeMultiplier = 1.08f;
+    [SerializeField] private int attractorIntegrationSteps = 380;
 
     [Header("Weighted Surprise")]
     [SerializeField] private float spiralBloomWeight = 0.28f;
     [SerializeField] private float mathRibbonWeight = 0.25f;
     [SerializeField] private float tornadoVortexWeight = 0.32f;
+    [SerializeField] private float aizawaFountainWeight = 0.22f;
+    [SerializeField] private float dreamAttractorWeight = 0.22f;
     [SerializeField] private float galaxyVeilWeight = 0.3f;
     [SerializeField] private float chargedGalaxyBonusWeight = 0.35f;
 
@@ -221,7 +247,16 @@ public class PetalPollenMagicController : MonoBehaviour
     private Vector3 releaseMathRibbonGateCenter;
     private Vector3 releaseTornadoCenter;
     private Vector3 releaseTornadoGateCenter;
+    private Vector3 releaseAttractorCenter;
+    private Vector3 releaseAttractorGateCenter;
+    private Vector3 releaseAttractorBoundsCenter;
+    private Vector3 releaseAttractorBoundsMin;
+    private Vector3 releaseAttractorBoundsMax;
+    private Vector3[] releaseAttractorSamples = new Vector3[0];
+    private float releaseAttractorBoundsScale = 1f;
+    private int releaseAttractorSampleCount;
     private Quaternion releaseTornadoPose = Quaternion.identity;
+    private Quaternion releaseAttractorPose = Quaternion.identity;
     private Quaternion releaseShowcasePose = Quaternion.identity;
     private bool hasReleaseShowcasePose;
     private Light releaseLight;
@@ -298,6 +333,7 @@ public class PetalPollenMagicController : MonoBehaviour
         releaseCharge = Mathf.Clamp01(holdSeconds / Mathf.Max(0.01f, chargedHoldSeconds));
         activeReleaseMode = randomizeReleaseMode ? PickReleaseMode(holdSeconds) : fixedReleaseMode;
         CaptureReleaseShowcasePose();
+        PrepareAttractorSamples(activeReleaseMode, Mathf.Max(activeParticles.Count, GetReleaseDensitySampleCount(activeReleaseMode)));
         PlayMagicClip(holdSeconds >= chargedHoldSeconds && chargedReleaseClip != null ? chargedReleaseClip : releaseClip, releaseVolume);
         BeginReleaseLightFeedback(holdSeconds >= chargedHoldSeconds);
 
@@ -329,6 +365,7 @@ public class PetalPollenMagicController : MonoBehaviour
         hasReleaseShowcasePose = false;
         activeParticles.Clear();
         releaseCharge = 0f;
+        releaseAttractorSampleCount = 0;
         if (particleOutput != null)
         {
             particleOutput.Clear(true);
@@ -520,6 +557,12 @@ public class PetalPollenMagicController : MonoBehaviour
                 break;
             case PetalPollenReleaseMode.TornadoVortex:
                 target = ResolveTornadoVortexPosition(particle, index, count, showT);
+                break;
+            case PetalPollenReleaseMode.AizawaFountain:
+                target = ResolveAizawaFountainPosition(particle, index, count, showT);
+                break;
+            case PetalPollenReleaseMode.DreamAttractor:
+                target = ResolveDreamAttractorPosition(particle, index, count, showT);
                 break;
             default:
                 target = ResolveGalaxyVeilPosition(particle, index, count, showT);
@@ -759,6 +802,276 @@ public class PetalPollenMagicController : MonoBehaviour
         return Vector3.Lerp(start, rotatedTarget + liftDraw, revealT);
     }
 
+    private Vector3 ResolveAizawaFountainPosition(MagicParticle particle, int index, int count, float t)
+    {
+        Vector3 target = ResolveAttractorTargetPoint(particle, index, count, t, true);
+        float bloomT = ReleaseBloom01(t);
+        Vector3 gate = ResolveAttractorGateCenter();
+        Vector3 lift = Vector3.up * Mathf.Sin(bloomT * Mathf.PI) * 0.28f;
+        float gateT = Smoother01(Mathf.Clamp01(bloomT / 0.34f));
+        float revealT = Smoother01(Mathf.Clamp01((bloomT - 0.12f) / 0.78f));
+        Vector3 gatePoint = Vector3.Lerp(particle.releaseSeedPosition, gate, gateT);
+        return Vector3.Lerp(gatePoint, target + lift, revealT);
+    }
+
+    private Vector3 ResolveDreamAttractorPosition(MagicParticle particle, int index, int count, float t)
+    {
+        Vector3 target = ResolveAttractorTargetPoint(particle, index, count, t, false);
+        float bloomT = ReleaseBloom01(t);
+        Vector3 gate = ResolveAttractorGateCenter();
+        Vector3 lift = Vector3.up * Mathf.Sin(bloomT * Mathf.PI) * 0.18f;
+        float gateT = Smoother01(Mathf.Clamp01(bloomT / 0.28f));
+        float revealT = Smoother01(Mathf.Clamp01((bloomT - 0.08f) / 0.82f));
+        Vector3 gatePoint = Vector3.Lerp(particle.releaseSeedPosition, gate, gateT);
+        return Vector3.Lerp(gatePoint, target + lift, revealT);
+    }
+
+    private Vector3 ResolveAttractorTargetPoint(MagicParticle particle, int index, int count, float t, bool fountainShape)
+    {
+        Vector3 center = ResolveAttractorCenter();
+        Quaternion pose = ResolveAttractorPose(center, t);
+        Vector3 local = ResolveAttractorLocalPoint(index, fountainShape);
+
+        float radiusImpact = GetChargedReleaseRadiusScale();
+        float heightImpact = GetChargedReleaseHeightScale();
+        local.x *= radiusImpact;
+        local.y *= heightImpact;
+        local.z *= Mathf.Lerp(1f, radiusImpact, 0.35f);
+
+        float swirl = Time.time * Mathf.Clamp(attractorSpinSpeed, 0f, 28f) + particle.seed * 0.07f;
+        Vector3 orbit = new Vector3(Mathf.Cos(swirl), 0f, Mathf.Sin(swirl));
+        Vector3 shimmer = orbit * (particle.isPetal ? 0.026f : 0.016f)
+            + ResolveSoftJitter(particle.seed, Time.time, particle.isPetal ? 0.018f : 0.01f);
+
+        float scatterT = Smoother01(Mathf.Clamp01((t - 0.58f) / 0.42f));
+        if (scatterT > 0f)
+        {
+            float scatterRadius = Mathf.Clamp(attractorScatterRadius, 0.08f, 0.9f);
+            Vector3 outward = local.sqrMagnitude > 0.001f ? local.normalized : orbit;
+            Vector3 drift = pose * outward * scatterRadius * scatterT * scatterT * (particle.isPetal ? 1f : 0.62f);
+            Vector3 fall = Vector3.down * scatterT * scatterT * (particle.isPetal ? 0.22f : 0.07f);
+            return center + pose * (local + shimmer) + drift + fall;
+        }
+
+        return center + pose * (local + shimmer);
+    }
+
+    private Vector3 ResolveAttractorLocalPoint(int index, bool fountainShape)
+    {
+        if (releaseAttractorSamples.Length == 0 || index < 0)
+        {
+            return FibonacciSphere(index, Mathf.Max(1, releaseAttractorSampleCount)) * 0.7f;
+        }
+
+        Vector3 sample = releaseAttractorSamples[index % releaseAttractorSamples.Length];
+        Vector3 normalized = (sample - releaseAttractorBoundsCenter) / Mathf.Max(0.001f, releaseAttractorBoundsScale);
+        float height01 = Mathf.InverseLerp(releaseAttractorBoundsMin.y, releaseAttractorBoundsMax.y, sample.y);
+        float angle = Mathf.Atan2(sample.z, sample.x);
+        float formulaRadius = new Vector2(normalized.x, normalized.z).magnitude;
+        float lane = Deterministic01(index * 0.137f + sample.x * 3.1f + sample.y * 1.7f + sample.z * 2.4f);
+        float baseScale = Mathf.Clamp(attractorScale, 0.45f, 2.8f);
+
+        return fountainShape
+            ? ResolveAizawaStageLocal(normalized, height01, angle, formulaRadius, lane, baseScale)
+            : ResolveDreamStageLocal(normalized, height01, angle, formulaRadius, lane, baseScale);
+    }
+
+    private Vector3 ResolveAizawaStageLocal(Vector3 normalized, float height01, float angle, float formulaRadius, float lane, float baseScale)
+    {
+        float verticalScale = Mathf.Clamp(attractorVerticalScale, 0.7f, 2.4f);
+        float depthScale = Mathf.Clamp(attractorDepthScale, 0.6f, 1.9f);
+        float height = Mathf.Lerp(-0.9f, 1.65f, height01) * verticalScale;
+        float radius;
+
+        if (lane < 0.42f)
+        {
+            float columnWave = Mathf.Sin(height01 * Mathf.PI * 8f + angle) * 0.035f;
+            radius = Mathf.Lerp(0.045f, 0.18f, Mathf.Clamp01(formulaRadius)) + columnWave;
+            height += Mathf.Sin(angle * 1.7f) * 0.08f;
+        }
+        else if (lane < 0.82f)
+        {
+            float dome01 = Smoother01(Mathf.Clamp01((height01 - 0.12f) / 0.88f));
+            float domeArc = Mathf.Sin(dome01 * Mathf.PI);
+            radius = Mathf.Lerp(0.38f, 1.42f, domeArc) + formulaRadius * 0.18f;
+            height = Mathf.Lerp(-0.28f, 1.42f, dome01) * verticalScale;
+            height += Mathf.Cos(angle * 3f) * 0.05f;
+        }
+        else
+        {
+            bool topRing = lane > 0.91f;
+            float ringT = topRing ? 1f : 0f;
+            radius = Mathf.Lerp(0.55f, 1.35f, Mathf.Clamp01(formulaRadius * 0.8f + 0.25f));
+            height = Mathf.Lerp(-0.78f, 1.55f, ringT) * verticalScale + normalized.y * 0.08f;
+            angle += formulaRadius * 1.7f;
+        }
+
+        Vector3 local = new Vector3(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius * depthScale);
+        local.x += normalized.x * 0.12f;
+        local.z += normalized.z * 0.12f;
+        return local * baseScale;
+    }
+
+    private Vector3 ResolveDreamStageLocal(Vector3 normalized, float height01, float angle, float formulaRadius, float lane, float baseScale)
+    {
+        float verticalScale = Mathf.Clamp(attractorVerticalScale, 0.7f, 2.4f);
+        float depthScale = Mathf.Clamp(attractorDepthScale, 0.6f, 1.9f);
+        float signedHeight = Mathf.Lerp(-1f, 1f, height01);
+        float waist = Mathf.Abs(signedHeight);
+        float radius;
+        float height = signedHeight * 1.38f * verticalScale;
+
+        if (lane < 0.36f)
+        {
+            radius = Mathf.Lerp(0.045f, 0.24f, waist) + formulaRadius * 0.08f;
+            angle += signedHeight * Mathf.PI * 4.5f;
+        }
+        else if (lane < 0.76f)
+        {
+            radius = Mathf.Lerp(0.18f, 1.62f, Smoother01(waist)) + formulaRadius * 0.22f;
+            height += Mathf.Sin(angle * 2.2f) * 0.08f;
+            angle += signedHeight * Mathf.PI * 2.8f;
+        }
+        else
+        {
+            bool upper = lane > 0.88f;
+            float ringHeight = upper ? 1f : -1f;
+            radius = Mathf.Lerp(1.15f, 2.05f, Mathf.Clamp01(formulaRadius * 0.65f + 0.35f));
+            height = ringHeight * Mathf.Lerp(0.72f, 1.22f, formulaRadius) * verticalScale;
+            angle += normalized.y * 2.2f;
+        }
+
+        Vector3 local = new Vector3(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius * depthScale);
+        local.x += normalized.x * 0.16f;
+        local.z += normalized.z * 0.16f;
+        return local * baseScale;
+    }
+
+    private void PrepareAttractorSamples(PetalPollenReleaseMode mode, int count)
+    {
+        if (!IsAttractorReleaseMode(mode))
+        {
+            releaseAttractorSampleCount = 0;
+            return;
+        }
+
+        int safeCount = Mathf.Clamp(count, 1, Mathf.Max(1, maxParticles));
+        if (releaseAttractorSamples.Length < safeCount)
+        {
+            releaseAttractorSamples = new Vector3[safeCount];
+        }
+
+        releaseAttractorSampleCount = safeCount;
+
+        Vector3 min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+        Vector3 max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+        int baseSteps = Mathf.Clamp(attractorIntegrationSteps, 120, 520);
+        for (int i = 0; i < safeCount; i++)
+        {
+            float n = i / Mathf.Max(1f, safeCount - 1f);
+            float seed = Deterministic01(i * 19.19f + releaseStartTime * 0.37f);
+            int steps = Mathf.RoundToInt(baseSteps * Mathf.Lerp(0.35f, 1.15f, n));
+            if (mode == PetalPollenReleaseMode.DreamAttractor)
+            {
+                steps = Mathf.RoundToInt(steps * 1.45f);
+            }
+
+            Vector3 mathPoint = mode == PetalPollenReleaseMode.AizawaFountain
+                ? SampleAizawaAttractor(seed, steps)
+                : SampleDreamAttractor(seed, steps);
+
+            Vector3 unityPoint = MathToUnityAttractor(mathPoint);
+            releaseAttractorSamples[i] = unityPoint;
+            min = Vector3.Min(min, unityPoint);
+            max = Vector3.Max(max, unityPoint);
+        }
+
+        releaseAttractorBoundsCenter = (min + max) * 0.5f;
+        releaseAttractorBoundsMin = min;
+        releaseAttractorBoundsMax = max;
+        Vector3 size = max - min;
+        releaseAttractorBoundsScale = Mathf.Max(0.001f, Mathf.Max(size.x, Mathf.Max(size.y, size.z)) * 0.5f);
+    }
+
+    private static Vector3 SampleAizawaAttractor(float seed, int steps)
+    {
+        const float a = 0.95f;
+        const float b = 0.7f;
+        const float c = 0.6f;
+        const float d = 3.5f;
+        const float e = 0.25f;
+        const float f = 0.1f;
+        const float dt = 0.0085f;
+
+        float angle = seed * Mathf.PI * 2f;
+        Vector3 p = new Vector3(
+            0.12f * Mathf.Cos(angle),
+            0.12f * Mathf.Sin(angle),
+            0.08f + (seed - 0.5f) * 0.12f);
+
+        for (int i = 0; i < steps; i++)
+        {
+            float x = p.x;
+            float y = p.y;
+            float z = p.z;
+            Vector3 derivative = new Vector3(
+                (z - b) * x - d * y,
+                d * x + (z - b) * y,
+                c + a * z - (z * z * z) / 3f - (x * x + y * y) * (1f + e * z) + f * z * x * x * x);
+            p += derivative * dt;
+            if (!IsFinite(p) || p.sqrMagnitude > 64f)
+            {
+                p = new Vector3(0.12f * Mathf.Cos(angle), 0.12f * Mathf.Sin(angle), 0.08f);
+            }
+        }
+
+        return p;
+    }
+
+    private static Vector3 SampleDreamAttractor(float seed, int steps)
+    {
+        const float a = 0.1f;
+        const float b = 0.1f;
+        const float c = 0.5f;
+        const float dt = 0.01f;
+
+        float angle = seed * Mathf.PI * 2f;
+        Vector3 p = new Vector3(
+            0.08f * Mathf.Cos(angle),
+            0.08f * Mathf.Sin(angle),
+            0.08f + (seed - 0.5f) * 0.04f);
+
+        for (int i = 0; i < steps; i++)
+        {
+            float x = p.x;
+            float y = p.y;
+            float z = p.z;
+            Vector3 derivative = new Vector3(
+                a * x - y * z,
+                b * y + x * z,
+                c * z + x * y / 3f);
+            p += derivative * dt;
+            if (!IsFinite(p) || p.sqrMagnitude > 49f)
+            {
+                p = new Vector3(0.08f * Mathf.Cos(angle), 0.08f * Mathf.Sin(angle), 0.08f);
+            }
+        }
+
+        return p;
+    }
+
+    private static Vector3 MathToUnityAttractor(Vector3 mathPoint)
+    {
+        // The reference formulas use z as height; Unity uses y as height.
+        return new Vector3(mathPoint.x, mathPoint.z, mathPoint.y);
+    }
+
+    private static bool IsAttractorReleaseMode(PetalPollenReleaseMode mode)
+    {
+        return mode == PetalPollenReleaseMode.AizawaFountain
+            || mode == PetalPollenReleaseMode.DreamAttractor;
+    }
+
     private float ResolveTornadoFlow01(MagicParticle particle, int index, int count, bool isDust)
     {
         if (isDust)
@@ -952,6 +1265,8 @@ public class PetalPollenMagicController : MonoBehaviour
         float total = Mathf.Max(0f, spiralBloomWeight)
             + Mathf.Max(0f, mathRibbonWeight)
             + Mathf.Max(0f, tornadoVortexWeight)
+            + Mathf.Max(0f, aizawaFountainWeight)
+            + Mathf.Max(0f, dreamAttractorWeight)
             + Mathf.Max(0f, galaxyWeight);
 
         if (total <= 0.001f)
@@ -978,6 +1293,18 @@ public class PetalPollenMagicController : MonoBehaviour
             return PetalPollenReleaseMode.TornadoVortex;
         }
 
+        roll -= Mathf.Max(0f, aizawaFountainWeight);
+        if (roll <= 0f)
+        {
+            return PetalPollenReleaseMode.AizawaFountain;
+        }
+
+        roll -= Mathf.Max(0f, dreamAttractorWeight);
+        if (roll <= 0f)
+        {
+            return PetalPollenReleaseMode.DreamAttractor;
+        }
+
         return PetalPollenReleaseMode.GalaxyVeil;
     }
 
@@ -1002,9 +1329,10 @@ public class PetalPollenMagicController : MonoBehaviour
 
         int chargeHaloCount = GetChargeHaloParticleCount();
         int releaseShockwaveCount = GetReleaseShockwaveParticleCount();
+        int releaseDensityCount = GetReleaseDensityParticleCount();
         int releaseAfterglowCount = GetReleaseAfterglowParticleCount();
 
-        int totalPollenCount = pollenCount + chargeHaloCount + releaseShockwaveCount + releaseAfterglowCount;
+        int totalPollenCount = pollenCount + chargeHaloCount + releaseShockwaveCount + releaseDensityCount + releaseAfterglowCount;
         int totalPetalCount = petalCount;
 
         EnsureBufferSize(totalPollenCount);
@@ -1053,6 +1381,12 @@ public class PetalPollenMagicController : MonoBehaviour
         for (int i = 0; i < releaseShockwaveCount; i++)
         {
             particleBuffer[pollenIndex] = BuildReleaseShockwaveParticle(i, releaseShockwaveCount);
+            pollenIndex++;
+        }
+
+        for (int i = 0; i < releaseDensityCount; i++)
+        {
+            particleBuffer[pollenIndex] = BuildReleaseDensityParticle(i, releaseDensityCount);
             pollenIndex++;
         }
 
@@ -1241,6 +1575,158 @@ public class PetalPollenMagicController : MonoBehaviour
         return Mathf.Max(0, Mathf.RoundToInt(requestedCount * Mathf.Clamp(effectParticleBudgetScale, 0.35f, 1f)));
     }
 
+    private int GetReleaseDensitySampleCount(PetalPollenReleaseMode mode)
+    {
+        if (!enableReleaseDensityLayer)
+        {
+            return 0;
+        }
+
+        return ApplyEffectParticleBudget(Mathf.RoundToInt(releaseDensityParticleCount * GetReleaseDensityMultiplier(mode)));
+    }
+
+    private int GetReleaseDensityParticleCount()
+    {
+        if (!enableReleaseDensityLayer || !releaseActive)
+        {
+            return 0;
+        }
+
+        float age = Time.time - releaseStartTime;
+        if (age < releaseFlashSeconds || age > releaseDuration)
+        {
+            return 0;
+        }
+
+        float showT = Mathf.Clamp01((age - releaseFlashSeconds) / Mathf.Max(0.01f, releaseDuration - releaseFlashSeconds));
+        float reveal = Smoother01(Mathf.Clamp01(showT / 0.42f));
+        float fade = 1f - Smoother01(Mathf.Clamp01((showT - 0.86f) / 0.14f));
+        int budgetedCount = GetReleaseDensitySampleCount(activeReleaseMode);
+        return Mathf.Clamp(Mathf.CeilToInt(budgetedCount * reveal * fade), 0, budgetedCount);
+    }
+
+    private float GetReleaseDensityMultiplier(PetalPollenReleaseMode mode)
+    {
+        switch (mode)
+        {
+            case PetalPollenReleaseMode.SpiralBloom:
+                return Mathf.Max(0f, spiralBloomDensityMultiplier);
+            case PetalPollenReleaseMode.MathRibbon:
+                return Mathf.Max(0f, mathRibbonDensityMultiplier);
+            case PetalPollenReleaseMode.TornadoVortex:
+                return Mathf.Max(0f, tornadoVortexDensityMultiplier);
+            case PetalPollenReleaseMode.AizawaFountain:
+                return Mathf.Max(0f, aizawaFountainDensityMultiplier);
+            case PetalPollenReleaseMode.DreamAttractor:
+                return Mathf.Max(0f, dreamAttractorDensityMultiplier);
+            default:
+                return Mathf.Max(0f, galaxyVeilDensityMultiplier);
+        }
+    }
+
+    private ParticleSystem.Particle BuildReleaseDensityParticle(int index, int count)
+    {
+        float age = Time.time - releaseStartTime;
+        float showT = Mathf.Clamp01((age - releaseFlashSeconds) / Mathf.Max(0.01f, releaseDuration - releaseFlashSeconds));
+        float seed = index * 17.371f + 43.17f;
+        Vector3 position = ResolveReleaseDensityPosition(index, count, showT, seed);
+        float sparkle = 0.72f + Mathf.Sin(Time.time * 6.3f + seed) * 0.28f;
+        float reveal = Smoother01(Mathf.Clamp01(showT / 0.32f));
+        float fade = 1f - Smoother01(Mathf.Clamp01((showT - 0.82f) / 0.18f));
+
+        Color accent = activeReleaseMode == PetalPollenReleaseMode.DreamAttractor ? secondaryPollenColor : pollenTrailColor;
+        Color color = Color.Lerp(pollenTrailColor, accent, Deterministic01(seed * 0.17f));
+        color.a = releaseDensityAlpha * reveal * fade * Mathf.Lerp(0.62f, 1.25f, sparkle);
+
+        return new ParticleSystem.Particle
+        {
+            position = position,
+            velocity = Vector3.zero,
+            startLifetime = 1f,
+            remainingLifetime = 1f,
+            startColor = color,
+            startSize = releaseDensityParticleSize * Mathf.Lerp(0.72f, 1.18f, sparkle),
+            randomSeed = (uint)Mathf.Max(1, index + 76091),
+            rotation3D = Vector3.zero
+        };
+    }
+
+    private Vector3 ResolveReleaseDensityPosition(int index, int count, float showT, float seed)
+    {
+        switch (activeReleaseMode)
+        {
+            case PetalPollenReleaseMode.AizawaFountain:
+                return ResolveAttractorDensityPosition(index, showT, true, seed);
+            case PetalPollenReleaseMode.DreamAttractor:
+                return ResolveAttractorDensityPosition(index, showT, false, seed);
+            case PetalPollenReleaseMode.MathRibbon:
+                return ResolveMathRibbonDensityPosition(index, count, showT, seed);
+            case PetalPollenReleaseMode.TornadoVortex:
+                return ResolveTornadoDensityPosition(index, count, showT, seed);
+            case PetalPollenReleaseMode.SpiralBloom:
+                return ResolveSpiralDensityPosition(index, count, showT, seed);
+            default:
+                return ResolveGalaxyDensityPosition(index, count, showT, seed);
+        }
+    }
+
+    private Vector3 ResolveAttractorDensityPosition(int index, float showT, bool fountainShape, float seed)
+    {
+        Vector3 center = ResolveAttractorCenter();
+        Quaternion pose = ResolveAttractorPose(center, showT);
+        Vector3 local = ResolveAttractorLocalPoint(index + activeParticles.Count, fountainShape);
+        float radiusImpact = GetChargedReleaseRadiusScale();
+        local.x *= radiusImpact;
+        local.y *= GetChargedReleaseHeightScale();
+        local.z *= Mathf.Lerp(1f, radiusImpact, 0.35f);
+        Vector3 shimmer = ResolveSoftJitter(seed, Time.time, fountainShape ? 0.018f : 0.022f);
+        float scatterT = Smoother01(Mathf.Clamp01((showT - 0.62f) / 0.38f));
+        Vector3 outward = local.sqrMagnitude > 0.001f ? local.normalized : Vector3.up;
+        return center + pose * (local + shimmer + outward * attractorScatterRadius * 0.35f * scatterT);
+    }
+
+    private Vector3 ResolveMathRibbonDensityPosition(int index, int count, float showT, float seed)
+    {
+        Vector3 center = ResolveMathRibbonCenter();
+        Quaternion pose = ResolveMathRibbonPose(center, showT);
+        float u = Mathf.Lerp(-mathRibbonURange * 0.5f, mathRibbonURange * 0.5f, Deterministic01(seed * 0.11f));
+        float v = Mathf.Lerp(-mathRibbonVRange * 0.5f, mathRibbonVRange * 0.5f, index / Mathf.Max(1f, count - 1f));
+        Vector3 local = ResolveBreatherSurfacePoint(u, v);
+        local.z = Mathf.Abs(local.z) * Mathf.Clamp(mathRibbonDepthScale, 0.65f, 1.15f) + Mathf.Clamp(mathRibbonForwardPush, 0.08f, 0.75f);
+        local.x *= GetChargedReleaseRadiusScale();
+        local.y *= GetChargedReleaseHeightScale();
+        return center + pose * (local + ResolveSoftJitter(seed, Time.time, 0.012f));
+    }
+
+    private Vector3 ResolveTornadoDensityPosition(int index, int count, float showT, float seed)
+    {
+        Vector3 center = ResolveTornadoCenter();
+        Quaternion pose = ResolveTornadoPose(center);
+        float height01 = index / Mathf.Max(1f, count - 1f);
+        float radius = Mathf.Lerp(tornadoBaseRadius, tornadoTopRadius, height01) * Mathf.Lerp(0.3f, 1f, Smoother01(showT));
+        float angle = height01 * Mathf.PI * 7.5f + Time.time * tornadoSpinSpeed + seed;
+        Vector3 local = new Vector3(Mathf.Cos(angle) * radius, Mathf.Lerp(-0.45f, tornadoHeight, height01), Mathf.Sin(angle) * radius);
+        return center + pose * (local + ResolveSoftJitter(seed, Time.time, 0.025f));
+    }
+
+    private Vector3 ResolveSpiralDensityPosition(int index, int count, float showT, float seed)
+    {
+        float progress = index / Mathf.Max(1f, count - 1f);
+        float angle = progress * Mathf.PI * 10f + Time.time * 1.5f + seed;
+        float radius = Mathf.Lerp(0.18f, burstRadius * GetChargedReleaseRadiusScale(), Smoother01(showT));
+        Vector3 center = GetHoldCenter();
+        return center + new Vector3(Mathf.Cos(angle) * radius, Mathf.Lerp(-0.7f, 1.35f, progress), Mathf.Sin(angle) * radius);
+    }
+
+    private Vector3 ResolveGalaxyDensityPosition(int index, int count, float showT, float seed)
+    {
+        float progress = index / Mathf.Max(1f, count - 1f);
+        float angle = progress * Mathf.PI * 2f * 3.4f + Time.time * 0.7f + seed;
+        float radius = galaxyRadius * GetChargedReleaseRadiusScale() * Mathf.Lerp(0.2f, 1f, Smoother01(showT));
+        Vector3 center = GetPlayerCenter();
+        return center + new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle * 1.7f) * galaxyHeight, Mathf.Sin(angle) * radius);
+    }
+
     private ParticleSystem.Particle BuildReleaseAfterglowParticle(int index, int count)
     {
         float age = Time.time - releaseStartTime;
@@ -1355,6 +1841,16 @@ public class PetalPollenMagicController : MonoBehaviour
             color.a *= Mathf.Lerp(0.32f, 1f, revealAlpha);
         }
 
+        if (IsAttractorReleaseMode(activeReleaseMode) && magic.stage == ParticleStage.Releasing && magic.releaseAge > releaseFlashSeconds)
+        {
+            float showT = Mathf.Clamp01((magic.releaseAge - releaseFlashSeconds) / Mathf.Max(0.01f, releaseDuration - releaseFlashSeconds));
+            Color accent = activeReleaseMode == PetalPollenReleaseMode.AizawaFountain
+                ? new Color(1f, 0.88f, 0.44f, 1f)
+                : secondaryPollenColor;
+            color = Color.Lerp(color, accent, magic.isPetal ? 0.18f : 0.36f);
+            color.a *= Mathf.Lerp(0.42f, 1f, Smoother01(Mathf.Clamp01(showT / 0.36f)));
+        }
+
         if (magic.stage == ParticleStage.Holding && isCollecting)
         {
             float charge = GetCharge01();
@@ -1377,6 +1873,10 @@ public class PetalPollenMagicController : MonoBehaviour
             if (activeReleaseMode == PetalPollenReleaseMode.TornadoVortex)
             {
                 fadeStart = magic.isPetal ? 0.78f : 0.88f;
+            }
+            else if (IsAttractorReleaseMode(activeReleaseMode))
+            {
+                fadeStart = magic.isPetal ? 0.8f : 0.9f;
             }
 
             color.a *= 1f - Smoother01(Mathf.Clamp01((t - fadeStart) / Mathf.Max(0.001f, 1f - fadeStart)));
@@ -1423,6 +1923,13 @@ public class PetalPollenMagicController : MonoBehaviour
                     ? Mathf.Lerp(0.38f, Mathf.Clamp(tornadoParticleSizeMultiplier, 1f, 1.55f), burstSizeT)
                     : Mathf.Lerp(0.72f, Mathf.Clamp(tornadoParticleSizeMultiplier, 1f, 1.55f), burstSizeT);
             size *= tornadoSize * buildBoost;
+        }
+
+        if (IsAttractorReleaseMode(activeReleaseMode) && magic.stage == ParticleStage.Releasing)
+        {
+            float showT = Mathf.Clamp01((magic.releaseAge - releaseFlashSeconds) / Mathf.Max(0.01f, releaseDuration - releaseFlashSeconds));
+            float revealBoost = Mathf.Lerp(1.28f, 1f, Smoother01(Mathf.Clamp01((showT - 0.36f) / 0.42f)));
+            size *= Mathf.Clamp(attractorParticleSizeMultiplier, 0.8f, 1.6f) * revealBoost;
         }
 
         return size;
@@ -1777,6 +2284,71 @@ public class PetalPollenMagicController : MonoBehaviour
         return hasReleaseShowcasePose ? releaseTornadoPose : ResolveFallbackMathRibbonPose(center);
     }
 
+    private Vector3 ResolveAttractorCenter()
+    {
+        if (hasReleaseShowcasePose)
+        {
+            return releaseAttractorCenter;
+        }
+
+        float safeDistance = Mathf.Clamp(attractorViewDistance, 1.35f, 3.2f);
+        float safeHeight = Mathf.Clamp(attractorViewHeight, 0.05f, 1.45f);
+        float safeSideOffset = Mathf.Clamp(attractorSideOffset, -0.55f, 0.55f);
+        Vector3 viewPosition;
+        Vector3 viewForward;
+        Vector3 viewRight;
+        if (TryResolveViewFrame(out viewPosition, out viewForward, out viewRight))
+        {
+            return viewPosition
+                + viewForward * safeDistance
+                + viewRight * safeSideOffset
+                + Vector3.up * safeHeight;
+        }
+
+        Transform anchor = handAnchor != null ? handAnchor : transform;
+        return anchor.position
+            + anchor.forward * safeDistance
+            + anchor.right * safeSideOffset
+            + Vector3.up * safeHeight;
+    }
+
+    private Vector3 ResolveAttractorGateCenter()
+    {
+        if (hasReleaseShowcasePose)
+        {
+            return releaseAttractorGateCenter;
+        }
+
+        float safeDistance = Mathf.Clamp(attractorGateDistance, 0.65f, 1.55f);
+        float safeHeight = Mathf.Clamp(attractorViewHeight * 0.35f, 0.02f, 0.6f);
+        float safeSideOffset = Mathf.Clamp(attractorSideOffset, -0.55f, 0.55f);
+        Vector3 viewPosition;
+        Vector3 viewForward;
+        Vector3 viewRight;
+        if (TryResolveViewFrame(out viewPosition, out viewForward, out viewRight))
+        {
+            return viewPosition
+                + viewForward * safeDistance
+                + viewRight * safeSideOffset
+                + Vector3.up * safeHeight;
+        }
+
+        Transform anchor = handAnchor != null ? handAnchor : transform;
+        return anchor.position
+            + anchor.forward * safeDistance
+            + anchor.right * safeSideOffset
+            + Vector3.up * safeHeight;
+    }
+
+    private Quaternion ResolveAttractorPose(Vector3 center, float t)
+    {
+        Quaternion basePose = hasReleaseShowcasePose ? releaseAttractorPose : ResolveFallbackMathRibbonPose(center);
+        return basePose * Quaternion.Euler(
+            Mathf.Sin(Time.time * 0.34f) * 2.5f,
+            Time.time * Mathf.Clamp(attractorSpinSpeed, 0f, 28f) + t * 28f,
+            Mathf.Cos(Time.time * 0.29f) * 3.5f);
+    }
+
     private void CaptureReleaseShowcasePose()
     {
         releaseShowcaseCenter = ResolveMathRibbonCenter();
@@ -1785,6 +2357,9 @@ public class PetalPollenMagicController : MonoBehaviour
         releaseTornadoCenter = ResolveTornadoCenter();
         releaseTornadoGateCenter = ResolveTornadoGateCenter();
         releaseTornadoPose = ResolveFallbackMathRibbonPose(releaseTornadoCenter);
+        releaseAttractorCenter = ResolveAttractorCenter();
+        releaseAttractorGateCenter = ResolveAttractorGateCenter();
+        releaseAttractorPose = ResolveFallbackMathRibbonPose(releaseAttractorCenter);
         hasReleaseShowcasePose = true;
     }
 
