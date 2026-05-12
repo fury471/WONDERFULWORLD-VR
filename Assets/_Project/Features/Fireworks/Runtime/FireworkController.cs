@@ -2,16 +2,17 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace WonderfulWorld.Features.Fireworks
 {
     [DisallowMultipleComponent]
     public class FireworkController : MonoBehaviour
     {
-        private static readonly MathFireworkPattern[] AllShowcaseMathPatterns =
+        private static readonly MathFireworkPattern[] DefaultShowcaseMathPatterns =
         {
             MathFireworkPattern.Heart,
-            MathFireworkPattern.Ring,
+            MathFireworkPattern.DoubleHelix,
             MathFireworkPattern.Spiral,
             MathFireworkPattern.Sphere,
             MathFireworkPattern.Flower,
@@ -31,13 +32,7 @@ namespace WonderfulWorld.Features.Fireworks
         [SerializeField] private float delayBetweenShowcaseLaunches = 3.6f;
         [SerializeField] private string showcaseText = "DREAM";
         [SerializeField]
-        private List<MathFireworkPattern> showcaseMathPatterns = new List<MathFireworkPattern>
-        {
-            MathFireworkPattern.Heart,
-            MathFireworkPattern.Sphere,
-            MathFireworkPattern.Flower,
-            MathFireworkPattern.Mobius
-        };
+        private List<FireworkShowcaseStep> showcaseSequence = CreateDefaultShowcaseSequence();
 
         [Header("Point Cloud Fireworks")]
         [SerializeField] private PointCloudFireworkRenderer pointCloudRenderer;
@@ -54,7 +49,8 @@ namespace WonderfulWorld.Features.Fireworks
         [Header("Pattern Palette")]
         [SerializeField] private bool usePatternPalette = true;
         [SerializeField] private Color heartColor = new Color(1f, 0.33f, 0.62f, 1f);
-        [SerializeField] private Color ringColor = new Color(0.38f, 0.92f, 1f, 1f);
+        [FormerlySerializedAs("ringColor")]
+        [SerializeField] private Color doubleHelixColor = new Color(0.38f, 0.92f, 1f, 1f);
         [SerializeField] private Color spiralColor = new Color(0.7f, 0.96f, 0.45f, 1f);
         [SerializeField] private Color sphereColor = new Color(0.82f, 0.88f, 1f, 1f);
         [SerializeField] private Color flowerColor = new Color(1f, 0.48f, 0.95f, 1f);
@@ -86,7 +82,7 @@ namespace WonderfulWorld.Features.Fireworks
         public bool IsPlaying => showcaseRoutine != null || (pointCloudRenderer != null && pointCloudRenderer.IsPlaying);
         public bool IsShowcasePlaying => showcaseRoutine != null;
 
-        public int PatternCount => showcaseMathPatterns?.Count ?? 0;
+        public int ShowcaseStepCount => showcaseSequence?.Count ?? 0;
 
         public string ShowcaseText => showcaseText;
 
@@ -95,7 +91,7 @@ namespace WonderfulWorld.Features.Fireworks
             launchPoint = transform;
             pointCloudRenderer = GetComponentInChildren<PointCloudFireworkRenderer>(true);
             audioSource = GetComponentInChildren<AudioSource>(true);
-            EnsureShowcasePatterns();
+            EnsureShowcaseSequence();
         }
 
         private void Awake()
@@ -110,7 +106,7 @@ namespace WonderfulWorld.Features.Fireworks
                 audioSource = GetComponent<AudioSource>();
             }
 
-            EnsureShowcasePatterns();
+            EnsureShowcaseSequence();
         }
 
         private void Start()
@@ -136,7 +132,7 @@ namespace WonderfulWorld.Features.Fireworks
             launchAudioVolume = Mathf.Clamp01(launchAudioVolume);
             burstAudioVolume = Mathf.Clamp01(burstAudioVolume);
             showcaseText = FireworkPointCloudGenerator.SanitizeText(showcaseText);
-            EnsureShowcasePatterns();
+            EnsureShowcaseSequence();
         }
 
         public void PlaySequence()
@@ -146,7 +142,7 @@ namespace WonderfulWorld.Features.Fireworks
 
         public void PlayAllSequence()
         {
-            BeginShowcase(PlayAllShowcaseRoutine());
+            PlaySequence();
         }
 
         public void SetShowcaseText(string text)
@@ -175,11 +171,20 @@ namespace WonderfulWorld.Features.Fireworks
             SequenceStarted?.Invoke();
         }
 
-        public void PlayPattern(int patternIndex)
+        public void PlayShowcaseStep(int stepIndex)
         {
-            EnsureShowcasePatterns();
-            int safeIndex = Mathf.Abs(patternIndex) % showcaseMathPatterns.Count;
-            LaunchMathFirework(showcaseMathPatterns[safeIndex]);
+            EnsureShowcaseSequence();
+            if (showcaseSequence.Count == 0)
+            {
+                return;
+            }
+
+            int safeIndex = Mathf.Abs(stepIndex) % showcaseSequence.Count;
+            FireworkShowcaseStep step = showcaseSequence[safeIndex];
+            if (step != null && step.enabled)
+            {
+                LaunchShowcaseStep(step);
+            }
         }
 
         public void LaunchTextFirework(string text)
@@ -251,13 +256,16 @@ namespace WonderfulWorld.Features.Fireworks
 
             do
             {
-                LaunchTextFirework(showcaseText);
-                yield return new WaitForSeconds(delayBetweenShowcaseLaunches);
-
-                EnsureShowcasePatterns();
-                for (int i = 0; i < showcaseMathPatterns.Count; i++)
+                EnsureShowcaseSequence();
+                for (int i = 0; i < showcaseSequence.Count; i++)
                 {
-                    LaunchMathFirework(showcaseMathPatterns[i]);
+                    FireworkShowcaseStep step = showcaseSequence[i];
+                    if (step == null || !step.enabled)
+                    {
+                        continue;
+                    }
+
+                    LaunchShowcaseStep(step);
                     yield return new WaitForSeconds(delayBetweenShowcaseLaunches);
                 }
             }
@@ -267,44 +275,62 @@ namespace WonderfulWorld.Features.Fireworks
             SequenceStopped?.Invoke();
         }
 
-        private IEnumerator PlayAllShowcaseRoutine()
+        private void EnsureShowcaseSequence()
         {
-            if (initialDelay > 0f)
+            if (showcaseSequence == null)
             {
-                yield return new WaitForSeconds(initialDelay);
+                showcaseSequence = new List<FireworkShowcaseStep>();
             }
 
-            do
+            for (int i = showcaseSequence.Count - 1; i >= 0; i--)
             {
-                LaunchTextFirework(showcaseText);
-                yield return new WaitForSeconds(delayBetweenShowcaseLaunches);
-
-                for (int i = 0; i < AllShowcaseMathPatterns.Length; i++)
+                FireworkShowcaseStep step = showcaseSequence[i];
+                if (step == null)
                 {
-                    LaunchMathFirework(AllShowcaseMathPatterns[i]);
-                    yield return new WaitForSeconds(delayBetweenShowcaseLaunches);
+                    showcaseSequence.RemoveAt(i);
+                    continue;
                 }
-            }
-            while (loopShowcase);
 
-            showcaseRoutine = null;
-            SequenceStopped?.Invoke();
+                if (step.kind == FireworkShowcaseStepKind.Text && !string.IsNullOrWhiteSpace(step.textOverride))
+                {
+                    step.textOverride = FireworkPointCloudGenerator.SanitizeText(step.textOverride);
+                }
+
+            }
+
+            if (showcaseSequence.Count == 0)
+            {
+                showcaseSequence.AddRange(CreateDefaultShowcaseSequence());
+            }
         }
 
-        private void EnsureShowcasePatterns()
+        private void LaunchShowcaseStep(FireworkShowcaseStep step)
         {
-            if (showcaseMathPatterns == null)
+            if (step.kind == FireworkShowcaseStepKind.Text)
             {
-                showcaseMathPatterns = new List<MathFireworkPattern>();
+                string text = string.IsNullOrWhiteSpace(step.textOverride)
+                    ? showcaseText
+                    : step.textOverride;
+                LaunchTextFirework(text);
+                return;
             }
 
-            if (showcaseMathPatterns.Count == 0)
+            LaunchMathFirework(step.mathPattern);
+        }
+
+        private static List<FireworkShowcaseStep> CreateDefaultShowcaseSequence()
+        {
+            List<FireworkShowcaseStep> steps = new List<FireworkShowcaseStep>
             {
-                showcaseMathPatterns.Add(MathFireworkPattern.Heart);
-                showcaseMathPatterns.Add(MathFireworkPattern.Sphere);
-                showcaseMathPatterns.Add(MathFireworkPattern.Flower);
-                showcaseMathPatterns.Add(MathFireworkPattern.Mobius);
+                FireworkShowcaseStep.Text(),
+            };
+
+            for (int i = 0; i < DefaultShowcaseMathPatterns.Length; i++)
+            {
+                steps.Add(FireworkShowcaseStep.Math(DefaultShowcaseMathPatterns[i]));
             }
+
+            return steps;
         }
 
         private Vector3 ResolvePointCloudCenter()
@@ -363,7 +389,7 @@ namespace WonderfulWorld.Features.Fireworks
                 MathFireworkPattern.Flower => 1.04f,
                 MathFireworkPattern.Mobius => 0.82f,
                 MathFireworkPattern.Spiral => 0.78f,
-                MathFireworkPattern.Ring => 0.94f,
+                MathFireworkPattern.DoubleHelix => 0.94f,
                 MathFireworkPattern.Star => 0.86f,
                 _ => 1f
             };
@@ -379,7 +405,7 @@ namespace WonderfulWorld.Features.Fireworks
             return pattern switch
             {
                 MathFireworkPattern.Heart => heartColor,
-                MathFireworkPattern.Ring => ringColor,
+                MathFireworkPattern.DoubleHelix => doubleHelixColor,
                 MathFireworkPattern.Spiral => spiralColor,
                 MathFireworkPattern.Sphere => sphereColor,
                 MathFireworkPattern.Flower => flowerColor,

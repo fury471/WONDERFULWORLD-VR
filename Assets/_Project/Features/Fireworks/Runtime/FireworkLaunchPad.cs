@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 
 namespace WonderfulWorld.Features.Fireworks
@@ -17,19 +16,16 @@ namespace WonderfulWorld.Features.Fireworks
 
         private void Start()
         {
-            if (controller == null)
-            {
-                controller = GetComponentInChildren<FireworkController>();
-            }
+            ResolveController();
 
             if (triggerOnStart)
             {
-                TriggerLaunch();
+                TriggerShowcase();
             }
         }
 
-        [ContextMenu("Showcase/Run Configured Sequence")]
-        public void TriggerLaunch()
+        [ContextMenu("Fireworks/Trigger Showcase")]
+        public void TriggerShowcase()
         {
             if (!CanTriggerShowcase())
             {
@@ -39,43 +35,17 @@ namespace WonderfulWorld.Features.Fireworks
             controller.PlaySequence();
         }
 
-        [ContextMenu("Showcase/Run All Sequence")]
-        public void TriggerAllShowcase()
+        public void TriggerShowcaseStep(int stepIndex)
         {
-            if (!CanTriggerShowcase())
+            if (!CanTriggerManualFirework())
             {
                 return;
             }
 
-            controller.PlayAllSequence();
+            controller.PlayShowcaseStep(stepIndex);
         }
 
-        public void TriggerStar()
-        {
-            TriggerMathFirework(MathFireworkPattern.Star);
-        }
-
-        public void TriggerRing()
-        {
-            TriggerMathFirework(MathFireworkPattern.Ring);
-        }
-
-        public void TriggerHeart()
-        {
-            TriggerMathFirework(MathFireworkPattern.Heart);
-        }
-
-        public void TriggerFlower()
-        {
-            TriggerMathFirework(MathFireworkPattern.Flower);
-        }
-
-        public void TriggerSpiral()
-        {
-            TriggerMathFirework(MathFireworkPattern.Spiral);
-        }
-
-        public void TriggerTextFirework(string text)
+        public void TriggerText(string text)
         {
             if (!CanTriggerManualFirework())
             {
@@ -85,7 +55,6 @@ namespace WonderfulWorld.Features.Fireworks
             controller.LaunchTextFirework(text);
         }
 
-        [ContextMenu("Showcase/Text")]
         public void TriggerShowcaseText()
         {
             if (!CanTriggerManualFirework())
@@ -96,77 +65,17 @@ namespace WonderfulWorld.Features.Fireworks
             controller.LaunchShowcaseText();
         }
 
-        [Obsolete("Use TriggerShowcaseText. This alias is kept only for older scene/menu bindings.")]
-        public void TriggerDreamText()
+        public void StopShowcase()
         {
-            TriggerShowcaseText();
-        }
-
-        [ContextMenu("Showcase/Math Heart")]
-        public void TriggerMathHeart()
-        {
-            TriggerMathFirework(MathFireworkPattern.Heart);
-        }
-
-        [ContextMenu("Showcase/Math DNA Helix")]
-        public void TriggerMathRing()
-        {
-            TriggerMathFirework(MathFireworkPattern.Ring);
-        }
-
-        [ContextMenu("Showcase/Math Spiral")]
-        public void TriggerMathSpiral()
-        {
-            TriggerMathFirework(MathFireworkPattern.Spiral);
-        }
-
-        [ContextMenu("Showcase/Math Sphere")]
-        public void TriggerMathSphere()
-        {
-            TriggerMathFirework(MathFireworkPattern.Sphere);
-        }
-
-        [ContextMenu("Showcase/Math Flower")]
-        public void TriggerMathFlower()
-        {
-            TriggerMathFirework(MathFireworkPattern.Flower);
-        }
-
-        [ContextMenu("Showcase/Math Star")]
-        public void TriggerMathStar()
-        {
-            TriggerMathFirework(MathFireworkPattern.Star);
-        }
-
-        [ContextMenu("Showcase/Math Mobius")]
-        public void TriggerMathMobius()
-        {
-            TriggerMathFirework(MathFireworkPattern.Mobius);
-        }
-
-        public void TriggerPattern(int patternIndex)
-        {
-            if (!CanTriggerManualFirework())
+            if (ResolveController())
             {
-                return;
+                controller.StopSequence();
             }
-
-            controller.PlayPattern(patternIndex);
-        }
-
-        private void TriggerMathFirework(MathFireworkPattern pattern)
-        {
-            if (!CanTriggerManualFirework())
-            {
-                return;
-            }
-
-            controller.LaunchMathFirework(pattern);
         }
 
         private bool CanTriggerShowcase()
         {
-            if (!CanResolveController())
+            if (!ResolveController())
             {
                 return false;
             }
@@ -176,29 +85,23 @@ namespace WonderfulWorld.Features.Fireworks
 
         private bool CanTriggerManualFirework()
         {
-            return CanResolveController();
+            return ResolveController();
         }
 
-        private bool CanResolveController()
+        private bool ResolveController()
         {
-            if (!Application.isPlaying)
-            {
-                Debug.Log("[Fireworks] Enter Play Mode to preview launches safely.");
-                return false;
-            }
-
             if (controller == null)
             {
                 controller = GetComponentInChildren<FireworkController>();
             }
 
-            if (controller == null)
+            if (controller != null)
             {
-                Debug.LogWarning($"{nameof(FireworkLaunchPad)} on {name} has no {nameof(FireworkController)} assigned.", this);
-                return false;
+                return true;
             }
 
-            return true;
+            Debug.LogWarning($"{nameof(FireworkLaunchPad)} on {name} has no {nameof(FireworkController)} assigned.", this);
+            return false;
         }
     }
 }

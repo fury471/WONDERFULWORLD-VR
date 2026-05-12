@@ -19,12 +19,49 @@ namespace WonderfulWorld.Features.Fireworks
     public enum MathFireworkPattern
     {
         Heart,
-        Ring,
+        DoubleHelix,
         Spiral,
         Sphere,
         Flower,
         Star,
         Mobius
+    }
+
+    public enum FireworkShowcaseStepKind
+    {
+        Text,
+        MathPattern
+    }
+
+    [Serializable]
+    public class FireworkShowcaseStep
+    {
+        public bool enabled = true;
+        public FireworkShowcaseStepKind kind = FireworkShowcaseStepKind.MathPattern;
+        public string textOverride = string.Empty;
+        public MathFireworkPattern mathPattern = MathFireworkPattern.Heart;
+
+        public static FireworkShowcaseStep Text(string textOverride = "")
+        {
+            return new FireworkShowcaseStep
+            {
+                enabled = true,
+                kind = FireworkShowcaseStepKind.Text,
+                textOverride = textOverride,
+                mathPattern = MathFireworkPattern.Heart
+            };
+        }
+
+        public static FireworkShowcaseStep Math(MathFireworkPattern pattern)
+        {
+            return new FireworkShowcaseStep
+            {
+                enabled = true,
+                kind = FireworkShowcaseStepKind.MathPattern,
+                textOverride = string.Empty,
+                mathPattern = pattern
+            };
+        }
     }
 
     [Serializable]
@@ -78,14 +115,14 @@ namespace WonderfulWorld.Features.Fireworks
                 rotationAxis = ResolveRotationAxis(pattern),
                 extraHoldDuration = 0f,
                 pointBudget = pointBudget,
-                displayName = pattern == MathFireworkPattern.Ring ? "DNA Helix" : pattern.ToString()
+                displayName = pattern == MathFireworkPattern.DoubleHelix ? "Double Helix" : pattern.ToString()
             };
         }
 
         private static bool IsRotatingPattern(MathFireworkPattern pattern)
         {
             return pattern == MathFireworkPattern.Sphere
-                || pattern == MathFireworkPattern.Ring
+                || pattern == MathFireworkPattern.DoubleHelix
                 || pattern == MathFireworkPattern.Spiral
                 || pattern == MathFireworkPattern.Mobius;
         }
@@ -94,7 +131,7 @@ namespace WonderfulWorld.Features.Fireworks
         {
             return pattern switch
             {
-                MathFireworkPattern.Ring => 18f,
+                MathFireworkPattern.DoubleHelix => 18f,
                 MathFireworkPattern.Spiral => 14f,
                 MathFireworkPattern.Sphere => 12f,
                 MathFireworkPattern.Mobius => 14f,
@@ -106,7 +143,7 @@ namespace WonderfulWorld.Features.Fireworks
         {
             return pattern switch
             {
-                MathFireworkPattern.Ring => Vector3.right,
+                MathFireworkPattern.DoubleHelix => Vector3.right,
                 MathFireworkPattern.Spiral => Vector3.up,
                 MathFireworkPattern.Sphere => Vector3.up,
                 MathFireworkPattern.Mobius => new Vector3(0.62f, 1f, 0f),

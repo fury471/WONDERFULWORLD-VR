@@ -163,49 +163,19 @@ namespace WonderfulWorld.Features.Fireworks
         public void LaunchTypedText()
         {
             SyncTextFromInput();
-            launchPad?.TriggerTextFirework(currentText);
+            launchPad?.TriggerText(currentText);
             CloseAfterLaunch();
         }
 
-        public void LaunchHeart()
+        public void LaunchConfiguredShowcase()
         {
-            launchPad?.TriggerMathHeart();
+            launchPad?.TriggerShowcase();
             CloseAfterLaunch();
         }
 
-        public void LaunchRing()
+        public void LaunchShowcaseStep(int stepIndex)
         {
-            launchPad?.TriggerMathRing();
-            CloseAfterLaunch();
-        }
-
-        public void LaunchSpiral()
-        {
-            launchPad?.TriggerMathSpiral();
-            CloseAfterLaunch();
-        }
-
-        public void LaunchSphere()
-        {
-            launchPad?.TriggerMathSphere();
-            CloseAfterLaunch();
-        }
-
-        public void LaunchFlower()
-        {
-            launchPad?.TriggerMathFlower();
-            CloseAfterLaunch();
-        }
-
-        public void LaunchStar()
-        {
-            launchPad?.TriggerMathStar();
-            CloseAfterLaunch();
-        }
-
-        public void LaunchMobius()
-        {
-            launchPad?.TriggerMathMobius();
+            launchPad?.TriggerShowcaseStep(stepIndex);
             CloseAfterLaunch();
         }
 
