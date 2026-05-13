@@ -22,6 +22,10 @@ public class CatIdlePaceV2 : MonoBehaviour
     [SerializeField] private float groundOffset = 0f;
     [SerializeField] private float maxStepUp = 1.5f;
     [SerializeField] private float maxStepDown = 3f;
+    [SerializeField] private bool alignToGroundNormal = true;
+    [SerializeField] private Transform visualTiltRoot;
+    [SerializeField] private float groundAlignSpeed = 240f;
+    [SerializeField] private float maxGroundTiltAngle = 32f;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = false;
@@ -29,6 +33,8 @@ public class CatIdlePaceV2 : MonoBehaviour
     private Transform currentTarget;
     private float waitTimer;
     private readonly RaycastHit[] groundHitBuffer = new RaycastHit[8];
+    private Vector3 lastGroundNormal = Vector3.up;
+    private bool hasGroundNormal;
 
     private void Start()
     {
@@ -82,6 +88,8 @@ public class CatIdlePaceV2 : MonoBehaviour
                 transform.rotation,
                 targetRotation,
                 rotateSpeed * Time.deltaTime);
+
+            AlignToGround();
         }
 
         SetWalkAnimation();
@@ -124,6 +132,7 @@ public class CatIdlePaceV2 : MonoBehaviour
     {
         if (!projectMotionToGround)
         {
+            hasGroundNormal = false;
             return desiredPosition;
         }
 
@@ -140,6 +149,7 @@ public class CatIdlePaceV2 : MonoBehaviour
         float bestDistance = float.PositiveInfinity;
         bool foundGround = false;
         Vector3 groundPoint = desiredPosition;
+        Vector3 groundNormal = Vector3.up;
 
         for (int i = 0; i < hitCount; i++)
         {
@@ -154,23 +164,72 @@ public class CatIdlePaceV2 : MonoBehaviour
             {
                 bestDistance = hit.distance;
                 groundPoint = hit.point;
+                groundNormal = hit.normal.sqrMagnitude > 0.0001f ? hit.normal.normalized : Vector3.up;
                 foundGround = true;
             }
         }
 
         if (!foundGround)
         {
+            hasGroundNormal = false;
             return desiredPosition;
         }
 
         float deltaY = groundPoint.y - transform.position.y;
         if (deltaY > Mathf.Max(0f, maxStepUp) || deltaY < -Mathf.Max(0f, maxStepDown))
         {
+            hasGroundNormal = false;
             return desiredPosition;
         }
 
         desiredPosition.y = groundPoint.y + groundOffset;
+        lastGroundNormal = ClampGroundNormalTilt(groundNormal);
+        hasGroundNormal = true;
         return desiredPosition;
+    }
+
+    private Vector3 ClampGroundNormalTilt(Vector3 normal)
+    {
+        if (normal.sqrMagnitude < 0.0001f)
+        {
+            return Vector3.up;
+        }
+
+        normal.Normalize();
+        float angle = Vector3.Angle(Vector3.up, normal);
+        float maxAngle = Mathf.Max(0f, maxGroundTiltAngle);
+        if (angle <= maxAngle || angle <= 0.001f)
+        {
+            return normal;
+        }
+
+        return Vector3.Slerp(Vector3.up, normal, maxAngle / angle).normalized;
+    }
+
+    private void AlignToGround()
+    {
+        if (!alignToGroundNormal || !hasGroundNormal)
+        {
+            return;
+        }
+
+        Transform tiltRoot = visualTiltRoot != null ? visualTiltRoot : transform;
+        Vector3 forward = Vector3.ProjectOnPlane(transform.forward, lastGroundNormal);
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = Vector3.ProjectOnPlane(tiltRoot.forward, lastGroundNormal);
+        }
+
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            return;
+        }
+
+        Quaternion targetRotation = Quaternion.LookRotation(forward.normalized, lastGroundNormal);
+        tiltRoot.rotation = Quaternion.RotateTowards(
+            tiltRoot.rotation,
+            targetRotation,
+            Mathf.Max(0f, groundAlignSpeed) * Time.deltaTime);
     }
 
     private static float HorizontalDistance(Vector3 a, Vector3 b)

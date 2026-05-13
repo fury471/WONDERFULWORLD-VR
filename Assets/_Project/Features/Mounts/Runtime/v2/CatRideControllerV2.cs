@@ -77,6 +77,10 @@ public class CatRideControllerV2 : MonoBehaviour
     [SerializeField] private float rideGroundOffset = 0f;
     [SerializeField] private float rideMaxStepUp = 1.5f;
     [SerializeField] private float rideMaxStepDown = 3f;
+    [SerializeField] private bool alignRideToGroundNormal = true;
+    [SerializeField] private Transform rideVisualTiltRoot;
+    [SerializeField] private float rideGroundAlignSpeed = 240f;
+    [SerializeField] private float rideMaxGroundTiltAngle = 32f;
 
 
     [Header("Debug")]
@@ -105,6 +109,8 @@ public class CatRideControllerV2 : MonoBehaviour
     private readonly Collider[] dismountOverlapBuffer = new Collider[24];
     private readonly RaycastHit[] dismountGroundHitBuffer = new RaycastHit[8];
     private readonly RaycastHit[] rideGroundHitBuffer = new RaycastHit[8];
+    private Vector3 lastRideGroundNormal = Vector3.up;
+    private bool hasRideGroundNormal;
 
     public bool IsRideActive => currentState != RideState.Idle;
 
@@ -1165,6 +1171,8 @@ public class CatRideControllerV2 : MonoBehaviour
                 targetRotation,
                 rotateSpeed * Time.deltaTime
             );
+
+            AlignRideToGround();
         }
 
         if (HorizontalDistance(transform.position, target.position) <= reachDistance)
@@ -1200,6 +1208,7 @@ public class CatRideControllerV2 : MonoBehaviour
     {
         if (!projectRideMotionToGround)
         {
+            hasRideGroundNormal = false;
             return desiredPosition;
         }
 
@@ -1216,6 +1225,7 @@ public class CatRideControllerV2 : MonoBehaviour
         float bestDistance = float.PositiveInfinity;
         bool foundGround = false;
         Vector3 groundPoint = desiredPosition;
+        Vector3 groundNormal = Vector3.up;
 
         for (int i = 0; i < hitCount; i++)
         {
@@ -1230,23 +1240,73 @@ public class CatRideControllerV2 : MonoBehaviour
             {
                 bestDistance = hit.distance;
                 groundPoint = hit.point;
+                groundNormal = hit.normal.sqrMagnitude > 0.0001f ? hit.normal.normalized : Vector3.up;
                 foundGround = true;
             }
         }
 
         if (!foundGround)
         {
+            hasRideGroundNormal = false;
             return desiredPosition;
         }
 
         float deltaY = groundPoint.y - transform.position.y;
         if (deltaY > Mathf.Max(0f, rideMaxStepUp) || deltaY < -Mathf.Max(0f, rideMaxStepDown))
         {
+            hasRideGroundNormal = false;
             return desiredPosition;
         }
 
         desiredPosition.y = groundPoint.y + rideGroundOffset;
+        lastRideGroundNormal = ClampGroundNormalTilt(groundNormal);
+        hasRideGroundNormal = true;
         return desiredPosition;
+    }
+
+    private Vector3 ClampGroundNormalTilt(Vector3 normal)
+    {
+        if (normal.sqrMagnitude < 0.0001f)
+        {
+            return Vector3.up;
+        }
+
+        normal.Normalize();
+        float angle = Vector3.Angle(Vector3.up, normal);
+        float maxAngle = Mathf.Max(0f, rideMaxGroundTiltAngle);
+        if (angle <= maxAngle || angle <= 0.001f)
+        {
+            return normal;
+        }
+
+        return Vector3.Slerp(Vector3.up, normal, maxAngle / angle).normalized;
+    }
+
+    private void AlignRideToGround()
+    {
+        if (!alignRideToGroundNormal || !hasRideGroundNormal)
+        {
+            return;
+        }
+
+        Transform tiltRoot = rideVisualTiltRoot != null ? rideVisualTiltRoot : transform;
+        Vector3 forward = Vector3.ProjectOnPlane(transform.forward, lastRideGroundNormal);
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = Vector3.ProjectOnPlane(tiltRoot.forward, lastRideGroundNormal);
+        }
+
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            return;
+        }
+
+        Quaternion targetRotation = Quaternion.LookRotation(forward.normalized, lastRideGroundNormal);
+
+        tiltRoot.rotation = Quaternion.RotateTowards(
+            tiltRoot.rotation,
+            targetRotation,
+            Mathf.Max(0f, rideGroundAlignSpeed) * Time.deltaTime);
     }
 
     private bool IsIgnoredRideGroundCollider(Collider candidate)

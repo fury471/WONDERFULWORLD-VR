@@ -26,6 +26,7 @@ public class GrowthDriver : MonoBehaviour
     [SerializeField] private bool enableSimulatorTrigger = true;
     [SerializeField] private bool enableKeyboardFallback = true;
     [SerializeField] private bool allowShrinkInDebug = false;
+    [SerializeField] private bool logDebugMessages;
 
     private bool singlePressedLastFrame;
     private bool clusterPressedLastFrame;
@@ -46,7 +47,10 @@ public class GrowthDriver : MonoBehaviour
 
         if (interactionOrigin == null)
         {
-            Debug.Log("GrowthStageDriver: interactionOrigin is NULL");
+            if (logDebugMessages)
+            {
+                Debug.Log("GrowthDriver: interactionOrigin is missing.");
+            }
             return;
         }
 
@@ -106,18 +110,20 @@ public class GrowthDriver : MonoBehaviour
                 ? Vector3.Distance(interactionOrigin.position, singleTarget.position)
                 : -1f;
 
-            Debug.Log($"Single input pressed. Origin={interactionOrigin.name}, Target={(singleTarget != null ? singleTarget.name : "NULL")}, Distance={distance}, Range={singleRange}");
+            if (logDebugMessages)
+            {
+                Debug.Log($"GrowthDriver single input. Origin={interactionOrigin.name}, Target={(singleTarget != null ? singleTarget.name : "NULL")}, Distance={distance}, Range={singleRange}");
+            }
 
             if (singleGrowthController != null && singleTarget != null &&
                 distance <= singleRange)
             {
-                Debug.Log("Single growth TRIGGERED");
                 singleGrowthController.TriggerSingleGrowth();
                 OnInteractionSuccess?.Invoke();
             }
-            else
+            else if (logDebugMessages)
             {
-                Debug.Log("Single growth NOT triggered");
+                Debug.Log("GrowthDriver single growth not triggered.");
             }
         }
 
@@ -127,18 +133,20 @@ public class GrowthDriver : MonoBehaviour
                 ? Vector3.Distance(interactionOrigin.position, clusterTarget.position)
                 : -1f;
 
-            Debug.Log($"Cluster input pressed. Origin={interactionOrigin.name}, Target={(clusterTarget != null ? clusterTarget.name : "NULL")}, Distance={distance}, Range={clusterRange}");
+            if (logDebugMessages)
+            {
+                Debug.Log($"GrowthDriver cluster input. Origin={interactionOrigin.name}, Target={(clusterTarget != null ? clusterTarget.name : "NULL")}, Distance={distance}, Range={clusterRange}");
+            }
 
             if (clusterGrowthController != null && clusterTarget != null &&
                 distance <= clusterRange)
             {
-                Debug.Log("Cluster growth TRIGGERED");
                 clusterGrowthController.TriggerClusterGrowth();
                 OnInteractionSuccess?.Invoke();
             }
-            else
+            else if (logDebugMessages)
             {
-                Debug.Log("Cluster growth NOT triggered");
+                Debug.Log("GrowthDriver cluster growth not triggered.");
             }
         }
 
@@ -148,17 +156,19 @@ public class GrowthDriver : MonoBehaviour
                 ? Vector3.Distance(interactionOrigin.position, singleTarget.position)
                 : -1f;
 
-            Debug.Log($"Reverse input pressed. Distance={distance}, Range={singleRange}");
+            if (logDebugMessages)
+            {
+                Debug.Log($"GrowthDriver reverse input. Distance={distance}, Range={singleRange}");
+            }
 
             if (singleGrowthController != null && singleTarget != null &&
                 distance <= singleRange)
             {
-                Debug.Log("Reverse growth TRIGGERED");
                 singleGrowthController.TriggerSingleGrowthReverse();
             }
-            else
+            else if (logDebugMessages)
             {
-                Debug.Log("Reverse growth NOT triggered");
+                Debug.Log("GrowthDriver reverse growth not triggered.");
             }
         }
 

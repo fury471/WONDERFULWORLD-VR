@@ -13,11 +13,16 @@ public class LotusSongManager : MonoBehaviour
     
     [Header("Debug Controls")]
     [SerializeField] private bool enableKeyboardDebug = true;
+    [SerializeField] private bool logDebugMessages;
 
     private int currentStep = 0;
     // Default to false: allows Free Play mode
     private bool isSongActive = false; 
+    private int anticipatedStep = -1;
+    private int anticipatedSourceNote = -1;
     private Dictionary<int, LotusGlowController> padMap = new Dictionary<int, LotusGlowController>();
+    private readonly Dictionary<int, Queue<int>> pendingActivationStepsByNote = new Dictionary<int, Queue<int>>();
+    private readonly HashSet<int> resolvedPendingSteps = new HashSet<int>();
 
     public bool IsSongActive => isSongActive;
     public LotusSongData CurrentSong => currentSong;
@@ -38,6 +43,7 @@ public class LotusSongManager : MonoBehaviour
             if (trigger != null)
             {
                 // The event will fire in both Free Play and Song Mode
+                trigger.NoteActivationStarted += (t) => OnPadActivationStarted(ctrl.noteId);
                 trigger.NoteTriggered += (t) => OnPadHit(ctrl.noteId);
             }
         }
@@ -51,7 +57,7 @@ public class LotusSongManager : MonoBehaviour
             if (!isSongActive)
             {
                 if (currentSong != null) StartSong(currentSong);
-                else Debug.LogWarning("[LotusSongManager] No Song Data assigned!");
+                else if (logDebugMessages) Debug.LogWarning("[LotusSongManager] No song data assigned.");
             }
             else
             {
@@ -67,9 +73,19 @@ public class LotusSongManager : MonoBehaviour
     {
         if (isSongActive) 
         {
-            Debug.Log("[LotusSongManager] Song already in progress. Ignoring restart.");
+            if (logDebugMessages)
+            {
+                Debug.Log("[LotusSongManager] Song already in progress. Ignoring restart.");
+            }
             return; 
         }
+
+        if (song == null)
+        {
+            return;
+        }
+
+        currentSong = song;
 
         if (musicStaff != null)
         {
@@ -77,18 +93,26 @@ public class LotusSongManager : MonoBehaviour
             musicStaff.OpenStaff(currentSong.sequence, 0);
             
             // You might also want to play a "Start" sound effect here
-            Debug.Log("Music Mode Activated!");
+            if (logDebugMessages)
+            {
+                Debug.Log("[LotusSongManager] Music mode activated.");
+            }
         }
 
-        if (song == null) return;
-        currentSong = song;
         currentStep = 0;
+        anticipatedStep = -1;
+        anticipatedSourceNote = -1;
+        pendingActivationStepsByNote.Clear();
+        resolvedPendingSteps.Clear();
         isSongActive = true;
         
         HideAllGlows();
         ShowCurrentStepHint();
         
-        Debug.Log($"[LotusSongManager] Song Mode Started: {song.songName}");
+        if (logDebugMessages)
+        {
+            Debug.Log($"[LotusSongManager] Song mode started: {song.songName}");
+        }
     }
 
     /// <summary>
@@ -98,9 +122,16 @@ public class LotusSongManager : MonoBehaviour
     {
         isSongActive = false;
         currentStep = 0;
+        anticipatedStep = -1;
+        anticipatedSourceNote = -1;
+        pendingActivationStepsByNote.Clear();
+        resolvedPendingSteps.Clear();
         HideAllGlows();
         if (musicStaff != null) musicStaff.CloseStaff(); 
-        Debug.Log("[LotusSongManager] Song Mode Stopped. Free Play enabled.");
+        if (logDebugMessages)
+        {
+            Debug.Log("[LotusSongManager] Song mode stopped. Free play enabled.");
+        }
     }
 
     private void OnPadHit(int hitIndex)
@@ -108,15 +139,33 @@ public class LotusSongManager : MonoBehaviour
         // If not in Song Mode, we do nothing and let the user play freely
         if (!isSongActive || currentSong == null || currentStep >= currentSong.sequence.Count) return;
 
+        if (TryConsumePendingActivation(hitIndex, out int resolvedStep))
+        {
+            resolvedPendingSteps.Add(resolvedStep);
+            AdvanceResolvedSongSteps();
+            return;
+        }
+
         int targetIndex = currentSong.sequence[currentStep];
 
         // Song Mode Logic: Only proceed if the hit index matches the sequence
         if (hitIndex == targetIndex)
         {
-            Debug.Log($"[CORRECT] Hit Note ID: {hitIndex}");
-            padMap[hitIndex].SetGlowActive(false);
+            if (logDebugMessages)
+            {
+                Debug.Log($"[LotusSongManager] Correct note: {hitIndex}");
+            }
+            Vector3 bubbleTransferStart = padMap[hitIndex].CurrentBubbleWorldPosition;
+            bool currentHintAlreadyTransferred = anticipatedSourceNote == hitIndex && anticipatedStep == currentStep + 1;
+            if (!currentHintAlreadyTransferred)
+            {
+                padMap[hitIndex].SetGlowActive(false, true);
+            }
 
             currentStep++;
+            bool nextHintAlreadyAnticipated = anticipatedStep == currentStep;
+            anticipatedStep = -1;
+            anticipatedSourceNote = -1;
             if (musicStaff != null)
             {
                 musicStaff.RefreshStaff(currentSong.sequence, currentStep);
@@ -124,18 +173,24 @@ public class LotusSongManager : MonoBehaviour
 
             if (currentStep >= currentSong.sequence.Count)
             {
-                Debug.Log("[SONG FINISHED] Sequence complete!");
+                if (logDebugMessages)
+                {
+                    Debug.Log("[LotusSongManager] Song sequence complete.");
+                }
                 StopSong(); // Automatically return to Free Play
             }
-            else
+            else if (!nextHintAlreadyAnticipated)
             {
-                ShowCurrentStepHint();
+                ShowCurrentStepHint(bubbleTransferStart);
             }
         }
         else
         {
             // Optional: Error feedback for wrong notes during Song Mode
-            Debug.Log($"[MISTAKE] Expected: {targetIndex}, but hit: {hitIndex}");
+            if (logDebugMessages)
+            {
+                Debug.Log($"[LotusSongManager] Wrong note. Expected {targetIndex}, hit {hitIndex}.");
+            }
             if (errorAudioSource != null && errorClip != null)
             {
                 errorAudioSource.PlayOneShot(errorClip);
@@ -143,17 +198,120 @@ public class LotusSongManager : MonoBehaviour
         }
     }
 
-    private void ShowCurrentStepHint()
+    private void ShowCurrentStepHint(Vector3? transferStartWorldPosition = null)
     {
         int nextId = currentSong.sequence[currentStep];
         if (padMap.ContainsKey(nextId))
         {
-            padMap[nextId].SetGlowActive(true);
+            if (transferStartWorldPosition.HasValue)
+            {
+                padMap[nextId].SetGlowActiveFrom(transferStartWorldPosition.Value);
+            }
+            else
+            {
+                padMap[nextId].SetGlowActive(true);
+            }
+        }
+    }
+
+    private void OnPadActivationStarted(int hitIndex)
+    {
+        if (!isSongActive || currentSong == null || currentStep >= currentSong.sequence.Count) return;
+
+        if (!TryResolveActivationStep(hitIndex, out int activationStep)) return;
+        if (!padMap.ContainsKey(hitIndex)) return;
+
+        RegisterPendingActivation(hitIndex, activationStep);
+
+        int nextStep = activationStep + 1;
+        anticipatedStep = nextStep;
+        anticipatedSourceNote = hitIndex;
+        if (nextStep >= currentSong.sequence.Count)
+        {
+            padMap[hitIndex].SetGlowActive(false, false);
+            return;
+        }
+
+        int nextId = currentSong.sequence[nextStep];
+        if (!padMap.ContainsKey(nextId)) return;
+
+        if (nextId == hitIndex)
+        {
+            padMap[hitIndex].PlaySameNoteHop();
+            return;
+        }
+
+        Vector3 transferStart = padMap[hitIndex].CurrentBubbleWorldPosition;
+        padMap[hitIndex].SetGlowActive(false, false);
+        padMap[nextId].SetGlowActiveFrom(transferStart);
+    }
+
+    private bool TryResolveActivationStep(int hitIndex, out int activationStep)
+    {
+        activationStep = anticipatedStep >= currentStep ? anticipatedStep : currentStep;
+        if (activationStep >= currentSong.sequence.Count)
+        {
+            return false;
+        }
+
+        return currentSong.sequence[activationStep] == hitIndex;
+    }
+
+    private void RegisterPendingActivation(int noteId, int step)
+    {
+        if (!pendingActivationStepsByNote.TryGetValue(noteId, out Queue<int> steps))
+        {
+            steps = new Queue<int>();
+            pendingActivationStepsByNote[noteId] = steps;
+        }
+
+        steps.Enqueue(step);
+    }
+
+    private bool TryConsumePendingActivation(int noteId, out int step)
+    {
+        step = -1;
+        if (!pendingActivationStepsByNote.TryGetValue(noteId, out Queue<int> steps) || steps.Count == 0)
+        {
+            return false;
+        }
+
+        step = steps.Dequeue();
+        return true;
+    }
+
+    private void AdvanceResolvedSongSteps()
+    {
+        while (currentStep < currentSong.sequence.Count && resolvedPendingSteps.Remove(currentStep))
+        {
+            currentStep++;
+        }
+
+        if (musicStaff != null)
+        {
+            musicStaff.RefreshStaff(currentSong.sequence, currentStep);
+        }
+
+        if (currentStep >= currentSong.sequence.Count)
+        {
+            if (logDebugMessages)
+            {
+                Debug.Log("[LotusSongManager] Song sequence complete.");
+            }
+            StopSong();
+            return;
+        }
+
+        if (anticipatedStep < currentStep)
+        {
+            anticipatedStep = -1;
+            anticipatedSourceNote = -1;
+            ShowCurrentStepHint();
         }
     }
 
     private void HideAllGlows()
     {
-        foreach (var pad in padMap.Values) pad.SetGlowActive(false);
+        foreach (var pad in padMap.Values) pad.SetGlowActive(false, false);
     }
 }

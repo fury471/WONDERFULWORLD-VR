@@ -7,7 +7,7 @@ public class LotusScaleSettingsSO : ScriptableObject
 {
     [Header("Audio")]
     public AudioClip sharedNoteClip;
-    [Min(0f)] public float cooldownSeconds = 1f;
+    [Min(0f)] public float cooldownSeconds = 0.25f;
     [Min(0f)] public float volume = 0.8f;
     [Min(0f)] public float minDistance = 1f;
     [Min(0f)] public float maxDistance = 8f;

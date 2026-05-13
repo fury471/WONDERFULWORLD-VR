@@ -14,11 +14,14 @@ public class LotusEitherHandDriver : MonoBehaviour
     [Header("Raycast Settings")]
     [SerializeField] private float rayDistance = 20f;
     [SerializeField] private LayerMask rayMask = Physics.DefaultRaycastLayers;
-    [SerializeField] private bool showDebugRays = true; 
+    [SerializeField] private bool showDebugRays;
 
     [Header("Input Logic")]
     [SerializeField] private bool useTriggerButton = true;
-    [SerializeField] private bool enableMouseDebug = true; 
+    [SerializeField] private bool enableMouseDebug = true;
+
+    [Header("Debug")]
+    [SerializeField] private bool logDebugMessages;
 
     private XRInputDevice leftDevice;
     private XRInputDevice rightDevice;
@@ -38,17 +41,28 @@ public class LotusEitherHandDriver : MonoBehaviour
         bool rightTrigger = IsPressed(rightDevice);
         bool mouseLeft = enableMouseDebug && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
         bool mouseRight = enableMouseDebug && Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
-        Debug.LogWarning($"[LotusDriver] leftTrigger={leftTrigger},+ rightTrigger={rightTrigger},mouseLeft={mouseLeft},mouseRight={mouseRight}");
         if ((leftTrigger && !leftPressedLastFrame) || mouseLeft)
         {
-            Debug.LogWarning($"[LotusDriver] mouseLeft! leftRayOrigin="+leftRayOrigin);
-            TryTrigger(leftRayOrigin, mouseLeft ? "Mouse" : "LeftHand");
+            if (mouseLeft)
+            {
+                TryTriggerMouse();
+            }
+            else
+            {
+                TryTrigger(leftRayOrigin, "LeftHand");
+            }
         }
 
         if ((rightTrigger && !rightPressedLastFrame) || mouseRight)
         {
-            Debug.LogWarning($"[LotusDriver] mouseRight! rightRayOrigin="+rightRayOrigin);
-            TryTrigger(rightRayOrigin, mouseRight? "Mouse" : "RightHand");
+            if (mouseRight)
+            {
+                TryTriggerMouse();
+            }
+            else
+            {
+                TryTrigger(rightRayOrigin, "RightHand");
+            }
         }
 
         leftPressedLastFrame = leftTrigger;
@@ -59,37 +73,72 @@ public class LotusEitherHandDriver : MonoBehaviour
     {
         if (rayOrigin == null)
         {
-            Debug.LogWarning($"[LotusDriver] {label} has NO Ray Origin assigned!");
+            if (logDebugMessages)
+            {
+                Debug.LogWarning($"[LotusDriver] {label} has no ray origin assigned.");
+            }
             return;
         }
 
-        // Log the firing attempt
-        Debug.Log($"[LotusDriver] {label} firing ray from {rayOrigin.name}");
-        Debug.DrawRay(rayOrigin.position, rayOrigin.forward * rayDistance, Color.red);
+        TryTriggerRay(new Ray(rayOrigin.position, rayOrigin.forward), label);
+    }
 
-        if (Physics.Raycast(rayOrigin.position, rayOrigin.forward, out RaycastHit hit, rayDistance, rayMask, QueryTriggerInteraction.Collide))
+    private void TryTriggerMouse()
+    {
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null)
         {
-            // DEBUG POINT 1: What did we actually hit?
-            Debug.Log($"[LotusDriver] {label} HIT: {hit.collider.name} (Layer: {LayerMask.LayerToName(hit.collider.gameObject.layer)})");
+            if (logDebugMessages)
+            {
+                Debug.LogWarning("[LotusDriver] Mouse debug has no Main Camera.");
+            }
 
-            LotusNoteTrigger trigger = hit.collider.GetComponentInParent<LotusNoteTrigger>();
-            
-            if (trigger != null)
-            {
-                // DEBUG POINT 2: Script found and triggered
-                Debug.Log($"[LotusDriver] SUCCESS! Calling TriggerNote on {trigger.name}");
-                trigger.TriggerNote(hit.point); 
-            }
-            else
-            {
-                // DEBUG POINT 3: Hit something, but it's not a Lotus
-                Debug.LogWarning($"[LotusDriver] FAIL: Hit {hit.collider.name}, but NO LotusNoteTrigger found on it or its parents.");
-            }
+            return;
         }
-        else
+
+        Ray ray = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
+        TryTriggerRay(ray, "Mouse");
+    }
+
+    private void TryTriggerRay(Ray ray, string label)
+    {
+        if (showDebugRays)
         {
-            // DEBUG POINT 4: Ray went into space
-            Debug.Log($"[LotusDriver] {label} MISSED everything within {rayDistance} range.");
+            Debug.DrawRay(ray.origin, ray.direction * rayDistance, Color.red, 1f);
+        }
+
+        RaycastHit[] hits = Physics.RaycastAll(ray, rayDistance, rayMask, QueryTriggerInteraction.Collide);
+        if (hits == null || hits.Length == 0)
+        {
+            if (logDebugMessages)
+            {
+                Debug.Log($"[LotusDriver] {label} missed within {rayDistance}m.");
+            }
+
+            return;
+        }
+
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        foreach (RaycastHit hit in hits)
+        {
+            LotusNoteTrigger trigger = hit.collider.GetComponentInParent<LotusNoteTrigger>();
+            if (trigger == null)
+            {
+                trigger = hit.collider.GetComponentInChildren<LotusNoteTrigger>();
+            }
+
+            if (trigger == null)
+            {
+                continue;
+            }
+
+            trigger.TriggerNote(hit.point, ray.origin);
+            return;
+        }
+
+        if (logDebugMessages)
+        {
+            Debug.LogWarning($"[LotusDriver] {label} hit colliders, but no LotusNoteTrigger was found.");
         }
     }
 

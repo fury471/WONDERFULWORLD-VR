@@ -1,5 +1,5 @@
-using UnityEngine;
 using System.Collections;
+using UnityEngine;
 
 public class WaterDropSlide : MonoBehaviour
 {
@@ -8,53 +8,43 @@ public class WaterDropSlide : MonoBehaviour
     [SerializeField] private float gravityStrength = 7.0f;
 
     [Header("Splash Settings")]
-    [Tooltip("The prefab containing the splash particle effect")]
     [SerializeField] private GameObject splashPrefab;
-    [Tooltip("The world Y-coordinate where the splash should trigger")]
     [SerializeField] private float waterLevelY = 0.1f;
-    
-    // The calculated local radius of the leaf
-    private float leafRadius; 
-    private bool isSliding = false;
+
+    private float leafRadius;
+    private bool isSliding;
     private MeshRenderer leafMesh;
 
-    /// <summary>
-    /// Call this immediately after Instantiate to setup the droplet.
-    /// This avoids expensive calculations in every frame.
-    /// </summary>
     public void Initialize(MeshRenderer targetLeafMesh)
     {
         leafMesh = targetLeafMesh;
-        
+
         if (leafMesh != null)
         {
-            // 1. Get the world-space extents (half-size) of the leaf mesh
-            // We use the maximum of X and Z to handle circular/irregular leaves
             float worldMaxExtent = Mathf.Max(leafMesh.bounds.extents.x, leafMesh.bounds.extents.z);
-            
-            // 2. Convert world distance to local distance
-            // This ensures the radius stays correct even if the parent leaf is scaled
-            float parentGlobalScale = transform.parent != null ? transform.parent.lossyScale.x : 1.0f;
-            leafRadius = worldMaxExtent / parentGlobalScale;
+            float parentGlobalScale = transform.parent != null ? transform.parent.lossyScale.x : 1f;
+            leafRadius = worldMaxExtent / Mathf.Max(0.0001f, parentGlobalScale);
         }
         else
         {
-            // Fallback radius if no mesh is provided
             leafRadius = 0.5f;
         }
     }
 
-    /// <summary>
-    /// Starts the sliding behavior in a specific direction.
-    /// </summary>
     public void StartSliding(Vector3 worldDirection)
     {
-        if (isSliding) return;
-        
-        // Convert world direction to local space relative to the leaf
+        if (isSliding || transform.parent == null)
+        {
+            return;
+        }
+
         Vector3 localDir = transform.parent.InverseTransformDirection(worldDirection);
-        localDir.y = 0; // Keep movement strictly on the horizontal plane
-        
+        localDir.y = 0f;
+        if (localDir.sqrMagnitude < 0.0001f)
+        {
+            localDir = Vector3.forward;
+        }
+
         StartCoroutine(SlideRoutine(localDir.normalized));
     }
 
@@ -62,70 +52,44 @@ public class WaterDropSlide : MonoBehaviour
     {
         isSliding = true;
 
-        // PHASE 1: Slide on the Leaf Surface
-        // ---------------------------------------------------
-        while (true)
+        while (new Vector2(transform.localPosition.x, transform.localPosition.z).magnitude < leafRadius)
         {
-            // Calculate current distance from center (0,0,0) on the horizontal plane
-            float currentDist = new Vector2(transform.localPosition.x, transform.localPosition.z).magnitude;
-
-            // If we've reached the edge, break to start falling
-            if (currentDist >= leafRadius) break;
-
-            // Move the droplet
             transform.localPosition += localDir * slideSpeed * Time.deltaTime;
-            
             yield return null;
         }
 
-        // PHASE 2: Fall off the edge (Visual Polish)
-        // ---------------------------------------------------
-        float fallDuration = 0.8f;
+        const float fallDuration = 0.8f;
         float elapsed = 0f;
         Vector3 fallVelocity = localDir * slideSpeed;
 
         while (elapsed < fallDuration)
         {
             elapsed += Time.deltaTime;
-
-            // Apply simple simulated gravity to the local velocity
             fallVelocity.y -= gravityStrength * Time.deltaTime;
-            
-            // Update position and shrink
             transform.localPosition += fallVelocity * Time.deltaTime;
             transform.localScale *= 0.96f;
 
-            // --- Splash Trigger Logic ---
-            // Detect when the droplet hits the defined water level height
-            Debug.LogWarning($"[LotusDriver]  transform.position.y={transform.position.y},waterLevelY={waterLevelY}");
             if (transform.position.y <= waterLevelY)
             {
                 SpawnSplashEffect();
-                break; // Stop the falling routine once impact occurs
+                break;
             }
 
             yield return null;
         }
 
-        
-
-        // Cleanup
         Destroy(gameObject);
     }
 
     private void SpawnSplashEffect()
     {
-        Debug.LogWarning($"SpawnSplashEffect！！！！！");
-        if (splashPrefab != null)
+        if (splashPrefab == null)
         {
-            // Spawn splash at the hit location but aligned to the water surface Y
-            Vector3 splashPosition = new Vector3(transform.position.x, waterLevelY, transform.position.z);
-            
-            // Particles usually spray upward, so we rotate -90 degrees on X axis
-            GameObject splashInstance = Instantiate(splashPrefab, splashPosition, Quaternion.Euler(-90, 0, 0));
-            
-            // Ensure the splash effect object is cleaned up after playing
-            Destroy(splashInstance, 1.5f);
+            return;
         }
+
+        Vector3 splashPosition = new Vector3(transform.position.x, waterLevelY, transform.position.z);
+        GameObject splashInstance = Instantiate(splashPrefab, splashPosition, Quaternion.Euler(-90f, 0f, 0f));
+        Destroy(splashInstance, 1.5f);
     }
 }
