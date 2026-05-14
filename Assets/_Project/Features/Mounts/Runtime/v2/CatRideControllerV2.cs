@@ -100,6 +100,7 @@ public class CatRideControllerV2 : MonoBehaviour
 
     private XROrigin xrOrigin;
     private XRDeviceSimulator xrDeviceSimulator;
+    [SerializeField] private ScaleManager scaleManager;
     private bool simulatorDeviceActionAssetWasEnabled;
     private bool simulatorControllerActionAssetWasEnabled;
     private bool simulatorHandActionAssetWasEnabled;
@@ -129,7 +130,8 @@ public class CatRideControllerV2 : MonoBehaviour
     {
         if (currentState == RideState.Idle)
         {
-            if (WasPressed(mountAction, mountKey) && IsPlayerInsideMountZone())
+            if (WasPressed(mountAction, mountKey) && IsPlayerInsideMountZone() && CanMountInCurrentScale())
+
             {
                 StartMount();
             }
@@ -192,7 +194,7 @@ public class CatRideControllerV2 : MonoBehaviour
             }
 
             playerCharacterController = playerRigRoot.GetComponent<CharacterController>();
-
+            
             Transform cameraOffset = playerRigRoot.transform.Find("Camera Offset");
             if (cameraOffset != null)
             {
@@ -242,6 +244,22 @@ public class CatRideControllerV2 : MonoBehaviour
 
         return Vector3.Distance(playerPosition, mountPosition) <= remountDistance;
     }
+
+    private bool CanMountInCurrentScale()
+    {
+        if (scaleManager == null)
+        {
+            CacheRigReferences();
+        }
+
+        if (scaleManager == null)
+        {
+            return false;
+        }
+
+        return scaleManager.IsSmallScale;
+    }
+
 
     private bool IsActionEnabled(InputActionReference actionReference)
     {
@@ -737,18 +755,8 @@ public class CatRideControllerV2 : MonoBehaviour
         }
 
         rig.rotation = rotation;
-
-        if (xrOrigin == null)
-        {
-            CacheRigReferences();
-        }
-
-        if (xrOrigin != null && xrOrigin.MoveCameraToWorldLocation(cameraWorldPosition))
-        {
-            return;
-        }
-
         rig.position = ResolveRigPositionForCameraTarget(rig, cameraWorldPosition, rotation);
+
     }
 
     private Vector3 ResolveRigPositionForCameraTarget(Transform rig, Vector3 cameraWorldPosition, Quaternion rotation)
