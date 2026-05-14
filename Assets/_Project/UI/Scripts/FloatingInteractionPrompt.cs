@@ -4,7 +4,7 @@ public class FloatingInteractionPrompt : MonoBehaviour
 {
     [Header("Debug")]
     [Tooltip("Check this to print distance and gaze data to the Console")]
-    public bool enableDebugLog = true;
+    public bool enableDebugLog;
 
     [Header("UI References")]
     public CanvasGroup promptCanvasGroup;

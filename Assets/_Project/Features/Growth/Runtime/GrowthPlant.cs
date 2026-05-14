@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -10,6 +11,14 @@ public class GrowthPlant : MonoBehaviour
     {
         public string partName;
         public Transform target;
+    }
+
+    private class RuntimeMeshBend
+    {
+        public MeshFilter filter;
+        public Mesh sourceMesh;
+        public Mesh runtimeMesh;
+        public Vector3[] sourceVertices;
     }
 
     [Header("Config")]
@@ -43,14 +52,47 @@ public class GrowthPlant : MonoBehaviour
     [Header("Traversal Blocking")]
     [SerializeField] private float blockActivationTime = 0.5f;
     [SerializeField] private Collider[] collidersToEnableOnGrowth;
+    [SerializeField] private bool autoCreateBlockingCollider = true;
+    [SerializeField] private Vector3 autoBlockingColliderCenter = new Vector3(0f, 0.85f, 0f);
+    [SerializeField, Min(0.01f)] private float autoBlockingColliderRadius = 0.42f;
+    [SerializeField, Min(0.01f)] private float autoBlockingColliderHeight = 1.7f;
+    [SerializeField] private bool deferBlockingUntilPlayerClear = true;
+    [SerializeField, Min(0f)] private float blockingPlayerClearancePadding = 0.12f;
     private bool blockApplied;
 
+    [Header("Stylized Toon Outline")]
+    [SerializeField] private bool enableToonOutline = true;
+    [SerializeField] private Color toonOutlineColor = Color.black;
+    [SerializeField, Range(0.01f, 0.18f)] private float toonOutlineThickness = 0.075f;
+    [SerializeField] private bool outlineStem = true;
+    [SerializeField] private bool outlineBloom = true;
+
+    [Header("Organic Shape Variation")]
+    [SerializeField] private bool enableOrganicShapeVariation = true;
+    [SerializeField, Range(0f, 22f)] private float maxStemLeanDegrees = 13f;
+    [SerializeField, Range(0f, 0.4f)] private float maxStemBend = 0.18f;
+    [SerializeField] private Vector2 bloomWidthRange = new Vector2(0.78f, 1.38f);
+    [SerializeField] private Vector2 bloomDepthRange = new Vector2(0.78f, 1.28f);
+    [SerializeField] private Vector2 bloomHeightRange = new Vector2(0.72f, 1.18f);
+    [SerializeField, Range(0f, 0.35f)] private float maxBloomOffset = 0.16f;
+    [SerializeField, Range(0f, 18f)] private float maxBloomTiltDegrees = 9f;
+    [SerializeField, Range(0f, 1f)] private float shapeVariationBlendStart = 0.18f;
 
     private float targetGrowthTime;
     private bool isTransitioning;
     private float runtimeScaleMultiplier = 1f;
     private float runtimeDurationMultiplier = 1f;
     private float runtimeWobbleMultiplier = 1f;
+    private Quaternion runtimeStemLean = Quaternion.identity;
+    private Quaternion runtimeBloomTilt = Quaternion.identity;
+    private Vector3 runtimeBloomScale = Vector3.one;
+    private Vector3 runtimeBloomOffset = Vector3.zero;
+    private Vector3 runtimeStemBendDirection = Vector3.right;
+    private float runtimeStemBendAmount;
+    private Coroutine matureScaleRoutine;
+    private Material runtimeToonOutlineMaterial;
+    private readonly System.Collections.Generic.List<RuntimeMeshBend> runtimeStemBends = new();
+    private readonly System.Collections.Generic.List<GameObject> runtimeToonOutlineObjects = new();
     private readonly System.Collections.Generic.Dictionary<Transform, Renderer[]> cachedRenderers = new();
 
     public GrowthProfile_SO Profile => growthProfile;
@@ -62,6 +104,30 @@ public class GrowthPlant : MonoBehaviour
         AutoAssignProfile();
         AutoAssignBindings();
         AutoAssignBloomAnchor();
+        EnsureBlockingColliders();
+        EnsureStemMeshBends();
+        RebuildToonOutline();
+    }
+
+    private void OnDestroy()
+    {
+        if (runtimeToonOutlineMaterial != null)
+        {
+            Destroy(runtimeToonOutlineMaterial);
+        }
+
+        for (int i = 0; i < runtimeStemBends.Count; i++)
+        {
+            if (runtimeStemBends[i]?.filter != null && runtimeStemBends[i].sourceMesh != null)
+            {
+                runtimeStemBends[i].filter.sharedMesh = runtimeStemBends[i].sourceMesh;
+            }
+
+            if (runtimeStemBends[i]?.runtimeMesh != null)
+            {
+                Destroy(runtimeStemBends[i].runtimeMesh);
+            }
+        }
     }
 
     private void Start()
@@ -80,6 +146,7 @@ public class GrowthPlant : MonoBehaviour
     {
         if (!isTransitioning)
         {
+            ApplyTraversalBlocking();
             return;
         }
 
@@ -96,6 +163,7 @@ public class GrowthPlant : MonoBehaviour
             currentGrowthTime = targetGrowthTime;
             isTransitioning = false;
             ApplyGrowth(currentGrowthTime);
+            ApplyTraversalBlocking();
             ResetCompletedStemRotation();
         }
     }
@@ -150,6 +218,7 @@ public class GrowthPlant : MonoBehaviour
         targetGrowthTime = currentGrowthTime;
         isTransitioning = false;
         ApplyGrowth(currentGrowthTime);
+        ApplyTraversalBlocking();
     }
 
     public bool IsTransitioning()
@@ -171,15 +240,67 @@ public class GrowthPlant : MonoBehaviour
 
     public void ConfigureRuntimeVariation(float scaleMultiplier, float durationMultiplier, float wobbleMultiplier)
     {
+        ConfigureRuntimeVariation(scaleMultiplier, durationMultiplier, wobbleMultiplier, Random.value);
+    }
+
+    public void ConfigureRuntimeVariation(float scaleMultiplier, float durationMultiplier, float wobbleMultiplier, float shapeSeed)
+    {
         runtimeScaleMultiplier = Mathf.Max(0.05f, scaleMultiplier);
         runtimeDurationMultiplier = Mathf.Max(0.05f, durationMultiplier);
         runtimeWobbleMultiplier = Mathf.Max(0f, wobbleMultiplier);
+        ConfigureOrganicShapeVariation(shapeSeed);
         ApplyGrowth(currentGrowthTime);
+        ApplyTraversalBlocking();
     }
 
     public void ResetRuntimeVariation()
     {
-        ConfigureRuntimeVariation(1f, 1f, 1f);
+        if (matureScaleRoutine != null)
+        {
+            StopCoroutine(matureScaleRoutine);
+            matureScaleRoutine = null;
+        }
+
+        runtimeScaleMultiplier = 1f;
+        runtimeDurationMultiplier = 1f;
+        runtimeWobbleMultiplier = 1f;
+        runtimeStemLean = Quaternion.identity;
+        runtimeBloomTilt = Quaternion.identity;
+        runtimeBloomScale = Vector3.one;
+        runtimeBloomOffset = Vector3.zero;
+        runtimeStemBendAmount = 0f;
+        ApplyStemMeshBend();
+        ApplyGrowth(currentGrowthTime);
+        ApplyTraversalBlocking();
+    }
+
+    public void RebuildRuntimeGeneratedVisuals()
+    {
+        ClearToonOutline();
+        cachedRenderers.Clear();
+        RebuildToonOutline();
+    }
+
+    public void CultivateMatureScale(float scaleStep, float maxScaleMultiplier, float transitionSeconds)
+    {
+        float targetScale = Mathf.Min(Mathf.Max(0.05f, maxScaleMultiplier), runtimeScaleMultiplier + Mathf.Max(0f, scaleStep));
+        if (targetScale <= runtimeScaleMultiplier + 0.001f)
+        {
+            return;
+        }
+
+        targetGrowthTime = 1f;
+        if (currentGrowthTime < 0.999f)
+        {
+            isTransitioning = true;
+        }
+
+        if (matureScaleRoutine != null)
+        {
+            StopCoroutine(matureScaleRoutine);
+        }
+
+        matureScaleRoutine = StartCoroutine(AnimateRuntimeScale(runtimeScaleMultiplier, targetScale, transitionSeconds));
     }
 
     private void AutoAssignProfile()
@@ -244,6 +365,116 @@ public class GrowthPlant : MonoBehaviour
         }
 
         bloomAnchor = FindChildRecursive(transform, bloomAnchorName);
+    }
+
+    private void ConfigureOrganicShapeVariation(float seed)
+    {
+        if (!enableOrganicShapeVariation)
+        {
+            runtimeStemLean = Quaternion.identity;
+            runtimeBloomTilt = Quaternion.identity;
+            runtimeBloomScale = Vector3.one;
+            runtimeBloomOffset = Vector3.zero;
+            return;
+        }
+
+        float s = Mathf.Repeat(seed, 1f);
+        float angle = Mathf.Lerp(-maxStemLeanDegrees, maxStemLeanDegrees, Stable01(s + 0.11f));
+        float leanAzimuth = Stable01(s + 0.29f) * Mathf.PI * 2f;
+        Vector3 leanAxis = new Vector3(Mathf.Cos(leanAzimuth), 0f, Mathf.Sin(leanAzimuth)).normalized;
+        runtimeStemLean = Quaternion.AngleAxis(angle, leanAxis);
+        runtimeStemBendDirection = new Vector3(Mathf.Cos(leanAzimuth + Mathf.PI * 0.5f), 0f, Mathf.Sin(leanAzimuth + Mathf.PI * 0.5f)).normalized;
+        runtimeStemBendAmount = Mathf.Lerp(-maxStemBend, maxStemBend, Stable01(s + 0.31f));
+
+        runtimeBloomScale = new Vector3(
+            Mathf.Lerp(bloomWidthRange.x, bloomWidthRange.y, Stable01(s + 0.43f)),
+            Mathf.Lerp(bloomHeightRange.x, bloomHeightRange.y, Stable01(s + 0.61f)),
+            Mathf.Lerp(bloomDepthRange.x, bloomDepthRange.y, Stable01(s + 0.79f)));
+
+        float offsetAngle = Stable01(s + 0.37f) * Mathf.PI * 2f;
+        float offsetDistance = Mathf.Lerp(0f, maxBloomOffset, Stable01(s + 0.53f));
+        runtimeBloomOffset = new Vector3(Mathf.Cos(offsetAngle) * offsetDistance, 0f, Mathf.Sin(offsetAngle) * offsetDistance);
+
+        float tiltX = Mathf.Lerp(-maxBloomTiltDegrees, maxBloomTiltDegrees, Stable01(s + 0.67f));
+        float tiltZ = Mathf.Lerp(-maxBloomTiltDegrees, maxBloomTiltDegrees, Stable01(s + 0.83f));
+        runtimeBloomTilt = Quaternion.Euler(tiltX, 0f, tiltZ);
+        ApplyStemMeshBend();
+    }
+
+    private static float Stable01(float value)
+    {
+        return Mathf.Repeat(Mathf.Sin(value * 127.1f + 19.19f) * 43758.5453f, 1f);
+    }
+
+    private void ApplyStemMeshBend()
+    {
+        EnsureStemMeshBends();
+        for (int i = 0; i < runtimeStemBends.Count; i++)
+        {
+            RuntimeMeshBend bend = runtimeStemBends[i];
+            if (bend == null || bend.runtimeMesh == null || bend.sourceVertices == null)
+            {
+                continue;
+            }
+
+            Vector3[] vertices = new Vector3[bend.sourceVertices.Length];
+            Bounds bounds = bend.sourceMesh != null ? bend.sourceMesh.bounds : default;
+            float minY = bounds.min.y;
+            float height = Mathf.Max(0.0001f, bounds.size.y);
+            for (int v = 0; v < vertices.Length; v++)
+            {
+                Vector3 vertex = bend.sourceVertices[v];
+                float heightT = Mathf.Clamp01((vertex.y - minY) / height);
+                float curve = heightT * heightT;
+                vertex += runtimeStemBendDirection * runtimeStemBendAmount * curve;
+                vertices[v] = vertex;
+            }
+
+            bend.runtimeMesh.vertices = vertices;
+            bend.runtimeMesh.RecalculateBounds();
+            bend.runtimeMesh.RecalculateNormals();
+        }
+    }
+
+    private void EnsureStemMeshBends()
+    {
+        if (runtimeStemBends.Count > 0)
+        {
+            return;
+        }
+
+        Transform stem = FindTarget(stemPartName);
+        if (stem == null)
+        {
+            return;
+        }
+
+        MeshFilter[] filters = stem.GetComponentsInChildren<MeshFilter>(includeInactive: true);
+        for (int i = 0; i < filters.Length; i++)
+        {
+            MeshFilter filter = filters[i];
+            if (filter == null || filter.sharedMesh == null)
+            {
+                continue;
+            }
+
+            Mesh sourceMesh = filter.sharedMesh;
+            if (!sourceMesh.isReadable)
+            {
+                continue;
+            }
+
+            Mesh runtimeMesh = Instantiate(sourceMesh);
+            runtimeMesh.name = sourceMesh.name + "_RuntimeStemBend";
+            filter.sharedMesh = runtimeMesh;
+            runtimeStemBends.Add(new RuntimeMeshBend
+            {
+                filter = filter,
+                sourceMesh = sourceMesh,
+                runtimeMesh = runtimeMesh,
+                sourceVertices = sourceMesh.vertices
+            });
+        }
     }
 
     private static Transform FindChildRecursive(Transform root, string targetName)
@@ -318,6 +549,7 @@ public class GrowthPlant : MonoBehaviour
             ApplyInterpolatedState(target, part.partName, part.states, partGrowthTime, growthTime);
             UpdatePartVisibility(target, part.partName, growthTime);
         }
+
     }
 
     private float ResolvePartGrowthTime(string partName, float growthTime)
@@ -365,7 +597,20 @@ public class GrowthPlant : MonoBehaviour
 
         if (!cachedRenderers.TryGetValue(target, out Renderer[] renderers) || renderers == null)
         {
-            renderers = target.GetComponentsInChildren<Renderer>(includeInactive: true);
+            Renderer[] allRenderers = target.GetComponentsInChildren<Renderer>(includeInactive: true);
+            System.Collections.Generic.List<Renderer> visibleRenderers = new();
+            for (int i = 0; i < allRenderers.Length; i++)
+            {
+                if (allRenderers[i] == null ||
+                    allRenderers[i].gameObject.name.EndsWith("_ToonOutline", System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                visibleRenderers.Add(allRenderers[i]);
+            }
+
+            renderers = visibleRenderers.ToArray();
             cachedRenderers[target] = renderers;
         }
 
@@ -374,6 +619,16 @@ public class GrowthPlant : MonoBehaviour
 
     private Vector3 ResolvePartScale(string partName, Vector3 baseScale, float partGrowthTime)
     {
+        float shapeT = ResolveShapeVariationWeight(partGrowthTime);
+        if (!string.IsNullOrWhiteSpace(bloomPartName) && partName == bloomPartName && enableOrganicShapeVariation)
+        {
+            Vector3 organicScale = new Vector3(
+                Mathf.Lerp(1f, runtimeBloomScale.x, shapeT),
+                Mathf.Lerp(1f, runtimeBloomScale.y, shapeT),
+                Mathf.Lerp(1f, runtimeBloomScale.z, shapeT));
+            baseScale = Vector3.Scale(baseScale, organicScale);
+        }
+
         if (!hideBloomUntilReveal ||
             string.IsNullOrWhiteSpace(bloomPartName) ||
             partName != bloomPartName)
@@ -391,6 +646,11 @@ public class GrowthPlant : MonoBehaviour
             Mathf.Clamp01(revealT));
 
         return baseScale * revealScale;
+    }
+
+    private float ResolveShapeVariationWeight(float growthTime)
+    {
+        return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(shapeVariationBlendStart, 1f, growthTime));
     }
 
     private Transform FindTarget(string partName)
@@ -467,6 +727,11 @@ public class GrowthPlant : MonoBehaviour
 
     private Vector3 ResolvePartPosition(string partName, Vector3 statePosition)
     {
+        if (enableOrganicShapeVariation && !string.IsNullOrWhiteSpace(bloomPartName) && partName == bloomPartName)
+        {
+            statePosition += runtimeBloomOffset * ResolveShapeVariationWeight(currentGrowthTime);
+        }
+
         if (useBloomAnchorPosition &&
             bloomAnchor != null &&
             !string.IsNullOrWhiteSpace(bloomPartName) &&
@@ -501,17 +766,31 @@ public class GrowthPlant : MonoBehaviour
 
     private Quaternion ResolvePartRotation(string partName, float growthTime)
     {
+        Quaternion organicRotation = Quaternion.identity;
+        if (enableOrganicShapeVariation)
+        {
+            float shapeT = ResolveShapeVariationWeight(growthTime);
+            if (!string.IsNullOrWhiteSpace(stemPartName) && partName == stemPartName)
+            {
+                organicRotation = Quaternion.Slerp(Quaternion.identity, runtimeStemLean, shapeT);
+            }
+            else if (!string.IsNullOrWhiteSpace(bloomPartName) && partName == bloomPartName)
+            {
+                organicRotation = Quaternion.Slerp(Quaternion.identity, runtimeBloomTilt, shapeT);
+            }
+        }
+
         if (!enableStemWobble ||
             !isTransitioning ||
             string.IsNullOrWhiteSpace(stemPartName) ||
             partName != stemPartName)
         {
-            return Quaternion.identity;
+            return organicRotation;
         }
 
         if (growthTime <= stemWobbleStart || growthTime >= stemWobbleEnd)
         {
-            return Quaternion.identity;
+            return organicRotation;
         }
 
         float normalizedWindow = Mathf.InverseLerp(stemWobbleStart, stemWobbleEnd, growthTime);
@@ -524,46 +803,339 @@ public class GrowthPlant : MonoBehaviour
         float wobbleAngle = stemWobbleAngle * runtimeWobbleMultiplier;
         float xAngle = (noiseX * stemWobbleJitter + tremorX) * wobbleAngle * envelope;
         float zAngle = (noiseZ * stemWobbleJitter + tremorZ) * wobbleAngle * 0.7f * envelope;
-        return Quaternion.Euler(xAngle, 0f, zAngle);
+        return organicRotation * Quaternion.Euler(xAngle, 0f, zAngle);
     }
 
     private void ResetCompletedStemRotation()
     {
-        if (bindings == null || string.IsNullOrWhiteSpace(stemPartName))
+        ApplyGrowth(currentGrowthTime);
+    }
+
+    private IEnumerator AnimateRuntimeScale(float fromScale, float toScale, float transitionSeconds)
+    {
+        float duration = Mathf.Max(0.05f, transitionSeconds);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float eased = t * t * (3f - 2f * t);
+            runtimeScaleMultiplier = Mathf.Lerp(fromScale, toScale, eased);
+            ApplyGrowth(currentGrowthTime);
+            ApplyTraversalBlocking();
+            yield return null;
+        }
+
+        runtimeScaleMultiplier = toScale;
+        ApplyGrowth(currentGrowthTime);
+        ApplyTraversalBlocking();
+        matureScaleRoutine = null;
+    }
+
+    private void EnsureBlockingColliders()
+    {
+        if (collidersToEnableOnGrowth != null && collidersToEnableOnGrowth.Length > 0)
         {
             return;
         }
 
-        foreach (var binding in bindings)
+        Collider[] existing = GetComponentsInChildren<Collider>(includeInactive: true);
+        if (existing != null && existing.Length > 0)
         {
-            if (binding != null && binding.partName == stemPartName && binding.target != null)
+            collidersToEnableOnGrowth = existing;
+            return;
+        }
+
+        if (!autoCreateBlockingCollider)
+        {
+            return;
+        }
+
+        CapsuleCollider capsule = gameObject.AddComponent<CapsuleCollider>();
+        capsule.isTrigger = false;
+        capsule.direction = 1;
+        capsule.center = autoBlockingColliderCenter;
+        capsule.radius = autoBlockingColliderRadius;
+        capsule.height = autoBlockingColliderHeight;
+        capsule.enabled = false;
+        collidersToEnableOnGrowth = new Collider[] { capsule };
+    }
+
+    private void RebuildToonOutline()
+    {
+        ClearToonOutline();
+        if (!enableToonOutline)
+        {
+            return;
+        }
+
+        if (outlineStem)
+        {
+            BuildPartToonOutline(FindTarget(stemPartName));
+        }
+
+        if (outlineBloom)
+        {
+            BuildPartToonOutline(FindTarget(bloomPartName));
+        }
+    }
+
+    private void BuildPartToonOutline(Transform partRoot)
+    {
+        if (partRoot == null)
+        {
+            return;
+        }
+
+        MeshRenderer[] renderers = partRoot.GetComponentsInChildren<MeshRenderer>(includeInactive: true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            MeshRenderer sourceRenderer = renderers[i];
+            if (sourceRenderer == null || IsToonOutlineObject(sourceRenderer.gameObject))
             {
-                binding.target.localRotation = Quaternion.identity;
+                continue;
+            }
+
+            MeshFilter sourceFilter = sourceRenderer.GetComponent<MeshFilter>();
+            if (sourceFilter == null || sourceFilter.sharedMesh == null)
+            {
+                continue;
+            }
+
+            GameObject outline = new GameObject(sourceRenderer.gameObject.name + "_ToonOutline");
+            outline.transform.SetParent(sourceRenderer.transform, false);
+            outline.transform.localPosition = Vector3.zero;
+            outline.transform.localRotation = Quaternion.identity;
+            outline.transform.localScale = Vector3.one * (1f + toonOutlineThickness);
+
+            MeshFilter outlineFilter = outline.AddComponent<MeshFilter>();
+            outlineFilter.sharedMesh = sourceFilter.sharedMesh;
+
+            MeshRenderer outlineRenderer = outline.AddComponent<MeshRenderer>();
+            outlineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            outlineRenderer.receiveShadows = false;
+            outlineRenderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+            outlineRenderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+
+            Material outlineMaterial = GetRuntimeToonOutlineMaterial();
+            Material[] materials = new Material[Mathf.Max(1, sourceRenderer.sharedMaterials.Length)];
+            for (int materialIndex = 0; materialIndex < materials.Length; materialIndex++)
+            {
+                materials[materialIndex] = outlineMaterial;
+            }
+
+            outlineRenderer.sharedMaterials = materials;
+            runtimeToonOutlineObjects.Add(outline);
+        }
+    }
+
+    private void ClearToonOutline()
+    {
+        for (int i = runtimeToonOutlineObjects.Count - 1; i >= 0; i--)
+        {
+            DestroySafe(runtimeToonOutlineObjects[i]);
+        }
+
+        runtimeToonOutlineObjects.Clear();
+
+        Transform[] children = GetComponentsInChildren<Transform>(includeInactive: true);
+        for (int i = children.Length - 1; i >= 0; i--)
+        {
+            Transform child = children[i];
+            if (child == null || child == transform)
+            {
+                continue;
+            }
+
+            if (IsToonOutlineObject(child.gameObject))
+            {
+                DestroySafe(child.gameObject);
             }
         }
     }
 
-    private void ApplyTraversalBlocking()
-{
-    if (collidersToEnableOnGrowth == null)
+    private static bool IsToonOutlineObject(GameObject candidate)
     {
-        return;
+        return candidate != null && candidate.name.EndsWith("_ToonOutline", System.StringComparison.Ordinal);
     }
 
-    bool shouldBlock = currentGrowthTime >= blockActivationTime;
-    if (shouldBlock == blockApplied)
+    private static void DestroySafe(Object target)
     {
-        return;
-    }
-
-    blockApplied = shouldBlock;
-    foreach (var col in collidersToEnableOnGrowth)
-    {
-        if (col != null)
+        if (target == null)
         {
-            col.enabled = shouldBlock;
+            return;
+        }
+
+        if (Application.isPlaying)
+        {
+            Destroy(target);
+        }
+        else
+        {
+            DestroyImmediate(target);
         }
     }
-}
+
+    private Material GetRuntimeToonOutlineMaterial()
+    {
+        if (runtimeToonOutlineMaterial != null)
+        {
+            return runtimeToonOutlineMaterial;
+        }
+
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader == null)
+        {
+            shader = Shader.Find("Unlit/Color");
+        }
+
+        runtimeToonOutlineMaterial = new Material(shader);
+        runtimeToonOutlineMaterial.name = "Runtime Mushroom Toon Outline";
+        runtimeToonOutlineMaterial.renderQueue = 1990;
+        if (runtimeToonOutlineMaterial.HasProperty("_BaseColor"))
+        {
+            runtimeToonOutlineMaterial.SetColor("_BaseColor", toonOutlineColor);
+        }
+        if (runtimeToonOutlineMaterial.HasProperty("_Color"))
+        {
+            runtimeToonOutlineMaterial.SetColor("_Color", toonOutlineColor);
+        }
+        if (runtimeToonOutlineMaterial.HasProperty("_Cull"))
+        {
+            runtimeToonOutlineMaterial.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Front);
+        }
+        if (runtimeToonOutlineMaterial.HasProperty("_ZWrite"))
+        {
+            runtimeToonOutlineMaterial.SetFloat("_ZWrite", 1f);
+        }
+        if (runtimeToonOutlineMaterial.HasProperty("_ZTest"))
+        {
+            runtimeToonOutlineMaterial.SetFloat("_ZTest", (float)UnityEngine.Rendering.CompareFunction.LessEqual);
+        }
+
+        return runtimeToonOutlineMaterial;
+    }
+
+    private void ApplyTraversalBlocking()
+    {
+        if (collidersToEnableOnGrowth == null)
+        {
+            return;
+        }
+
+        bool shouldBlock = currentGrowthTime >= blockActivationTime && !isTransitioning;
+        if (shouldBlock && deferBlockingUntilPlayerClear && IsPlayerOverlappingBlockingVolume())
+        {
+            shouldBlock = false;
+        }
+
+        if (shouldBlock != blockApplied)
+        {
+            blockApplied = shouldBlock;
+            foreach (var col in collidersToEnableOnGrowth)
+            {
+                if (col != null)
+                {
+                    col.enabled = shouldBlock;
+                }
+            }
+        }
+
+        foreach (var col in collidersToEnableOnGrowth)
+        {
+            if (col is CapsuleCollider capsule)
+            {
+                ApplyCapsuleBlockingSize(capsule);
+            }
+        }
+    }
+
+    private bool IsPlayerOverlappingBlockingVolume()
+    {
+        for (int i = 0; i < collidersToEnableOnGrowth.Length; i++)
+        {
+            Collider blockingCollider = collidersToEnableOnGrowth[i];
+            if (blockingCollider == null)
+            {
+                continue;
+            }
+
+            Collider[] overlaps = blockingCollider is CapsuleCollider capsule
+                ? QueryCapsuleBlockingOverlaps(capsule)
+                : QueryBoundsBlockingOverlaps(blockingCollider);
+
+            for (int j = 0; j < overlaps.Length; j++)
+            {
+                Collider candidate = overlaps[j];
+                if (candidate == null ||
+                    candidate == blockingCollider ||
+                    candidate.GetComponentInParent<GrowthPlant>() == this)
+                {
+                    continue;
+                }
+
+                if (candidate.GetComponentInParent<CharacterController>() != null ||
+                    candidate.gameObject.tag == "Player")
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private void ApplyCapsuleBlockingSize(CapsuleCollider capsule)
+    {
+        if (capsule == null)
+        {
+            return;
+        }
+
+        float scale = Mathf.Max(0.05f, runtimeScaleMultiplier);
+        capsule.center = autoBlockingColliderCenter * scale;
+        capsule.radius = autoBlockingColliderRadius * scale;
+        capsule.height = autoBlockingColliderHeight * scale;
+    }
+
+    private Collider[] QueryCapsuleBlockingOverlaps(CapsuleCollider capsule)
+    {
+        ApplyCapsuleBlockingSize(capsule);
+
+        Transform capsuleTransform = capsule.transform;
+        Vector3 center = capsuleTransform.TransformPoint(capsule.center);
+        float maxAxisScale = Mathf.Max(
+            Mathf.Abs(capsuleTransform.lossyScale.x),
+            Mathf.Abs(capsuleTransform.lossyScale.z));
+        float verticalScale = Mathf.Abs(capsuleTransform.lossyScale.y);
+        float radius = capsule.radius * maxAxisScale + blockingPlayerClearancePadding;
+        float height = Mathf.Max(capsule.height * verticalScale, radius * 2f);
+        Vector3 halfSegment = capsuleTransform.up * Mathf.Max(0f, (height * 0.5f) - radius);
+
+        return Physics.OverlapCapsule(
+            center - halfSegment,
+            center + halfSegment,
+            radius,
+            ~0,
+            QueryTriggerInteraction.Ignore);
+    }
+
+    private Collider[] QueryBoundsBlockingOverlaps(Collider blockingCollider)
+    {
+        Bounds bounds = blockingCollider.bounds;
+        if (bounds.size.sqrMagnitude < 0.0001f)
+        {
+            bounds = new Bounds(blockingCollider.transform.position, Vector3.one * blockingPlayerClearancePadding * 2f);
+        }
+
+        bounds.Expand(blockingPlayerClearancePadding * 2f);
+        return Physics.OverlapBox(
+            bounds.center,
+            bounds.extents,
+            Quaternion.identity,
+            ~0,
+            QueryTriggerInteraction.Ignore);
+    }
 
 }
