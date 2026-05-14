@@ -16,6 +16,7 @@ public class ScaleManager : MonoBehaviour
     [SerializeField] private ScaleTransitionController transitionController;
     [SerializeField] private ScaleSettings settings;
     [SerializeField] private CharacterController characterController;
+    [SerializeField] private CatRideControllerV2 rideController;
 
     [Header("Optional Runtime Targets")]
     [SerializeField] private Component[] moveSpeedTargets;
@@ -37,10 +38,15 @@ public class ScaleManager : MonoBehaviour
     private float[] baseInteractionDistances;
     private float baseControllerHeight;
     private float baseControllerRadius;
+    private float baseControllerStepOffset;
     private Vector3 baseControllerCenter;
     private bool baseControllerCaptured;
     private Vector3 baseCameraPivotLocalPosition;
     private bool baseCameraPivotCaptured;
+    public ScaleState CurrentState => currentState;
+    public bool IsSmallScale => currentState == ScaleState.Small;
+
+
 
     private void Awake()
     {
@@ -60,6 +66,11 @@ public class ScaleManager : MonoBehaviour
 
     private void Update()
     {
+        if (rideController != null && rideController.IsRideActive)
+        {
+            return;
+        }
+
         if (WasPressed(normalScaleAction, Key.Digit1))
             SetScale(ScaleState.Normal);
 
@@ -69,6 +80,7 @@ public class ScaleManager : MonoBehaviour
         if (WasPressed(largeScaleAction, Key.Digit3))
             SetScale(ScaleState.Large);
     }
+
 
     private bool WasPressed(InputActionReference actionReference, Key debugKey)
     {
@@ -242,9 +254,11 @@ public class ScaleManager : MonoBehaviour
         {
             baseControllerHeight = characterController.height;
             baseControllerRadius = characterController.radius;
+            baseControllerStepOffset = characterController.stepOffset;
             baseControllerCenter = characterController.center;
             baseControllerCaptured = true;
         }
+
 
         if (cameraPivot != null)
         {
@@ -305,13 +319,21 @@ public class ScaleManager : MonoBehaviour
         if (!baseControllerCaptured || characterController == null)
             return;
 
-        characterController.height = baseControllerHeight * heightMultiplier;
-        characterController.radius = baseControllerRadius * radiusMultiplier;
+        float scaledHeight = baseControllerHeight * heightMultiplier;
+        float scaledRadius = baseControllerRadius * radiusMultiplier;
+
+        characterController.height = scaledHeight;
+        characterController.radius = scaledRadius;
+
+        float scaledStepOffset = baseControllerStepOffset * heightMultiplier;
+        float maxAllowedStepOffset = Mathf.Max(0f, scaledHeight + scaledRadius * 2f - 0.001f);
+        characterController.stepOffset = Mathf.Min(scaledStepOffset, maxAllowedStepOffset);
 
         Vector3 center = baseControllerCenter;
-        center.y = (baseControllerCenter.y * heightMultiplier);
+        center.y = baseControllerCenter.y * heightMultiplier;
         characterController.center = center;
     }
+
 
     private void ApplyEyeHeight(float eyeHeightMultiplier)
     {
