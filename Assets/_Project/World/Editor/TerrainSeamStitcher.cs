@@ -4,7 +4,24 @@ using UnityEngine;
 
 public static class TerrainSeamStitcher
 {
-    private const float PositionTolerance = 0.05f;
+    private const float PositionTolerance = 0.15f;
+
+    [MenuItem("Wonderland/World/Align And Stitch Active Scene Terrains")]
+    public static void AlignAndStitchActiveSceneTerrains()
+    {
+        Terrain[] terrains = Terrain.activeTerrains;
+        if (terrains == null || terrains.Length == 0)
+        {
+            Debug.LogWarning("TerrainSeamStitcher: no active terrains found in the current scene.");
+            return;
+        }
+
+        AlignTerrainTransforms(terrains);
+        SetTerrainNeighbors(terrains);
+        StitchTerrainHeightEdges(terrains);
+
+        Debug.Log($"TerrainSeamStitcher: aligned and stitched {terrains.Length} active terrains.");
+    }
 
     [MenuItem("Wonderland/World/Stitch Active Scene Terrains")]
     public static void StitchActiveSceneTerrains()
@@ -16,6 +33,79 @@ public static class TerrainSeamStitcher
             return;
         }
 
+        SetTerrainNeighbors(terrains);
+        StitchTerrainHeightEdges(terrains);
+    }
+
+    private static void AlignTerrainTransforms(Terrain[] terrains)
+    {
+        Terrain anchor = FindAnchorTerrain(terrains);
+        if (anchor == null || anchor.terrainData == null)
+        {
+            return;
+        }
+
+        Vector3 cellSize = anchor.terrainData.size;
+        float anchorX = anchor.transform.position.x;
+        float anchorY = anchor.transform.position.y;
+        float anchorZ = anchor.transform.position.z;
+
+        for (int i = 0; i < terrains.Length; i++)
+        {
+            Terrain terrain = terrains[i];
+            if (terrain == null || terrain.terrainData == null)
+            {
+                continue;
+            }
+
+            Vector3 position = terrain.transform.position;
+            float xIndex = Mathf.Round((position.x - anchorX) / Mathf.Max(0.0001f, cellSize.x));
+            float zIndex = Mathf.Round((position.z - anchorZ) / Mathf.Max(0.0001f, cellSize.z));
+            Vector3 aligned = new Vector3(
+                anchorX + xIndex * cellSize.x,
+                anchorY,
+                anchorZ + zIndex * cellSize.z);
+
+            if ((terrain.transform.position - aligned).sqrMagnitude > 0.000001f)
+            {
+                Undo.RecordObject(terrain.transform, "Align Terrain Grid");
+                terrain.transform.position = aligned;
+                EditorUtility.SetDirty(terrain.transform);
+            }
+
+            Undo.RecordObject(terrain, "Configure Terrain Grid");
+            terrain.groupingID = 1;
+            terrain.allowAutoConnect = true;
+            EditorUtility.SetDirty(terrain);
+        }
+    }
+
+    private static Terrain FindAnchorTerrain(IReadOnlyList<Terrain> terrains)
+    {
+        Terrain anchor = null;
+        for (int i = 0; i < terrains.Count; i++)
+        {
+            Terrain candidate = terrains[i];
+            if (candidate == null || candidate.terrainData == null)
+            {
+                continue;
+            }
+
+            bool isBetterAnchor = anchor == null ||
+                candidate.transform.position.x < anchor.transform.position.x ||
+                (Mathf.Approximately(candidate.transform.position.x, anchor.transform.position.x) &&
+                    candidate.transform.position.z < anchor.transform.position.z);
+            if (isBetterAnchor)
+            {
+                anchor = candidate;
+            }
+        }
+
+        return anchor;
+    }
+
+    private static void SetTerrainNeighbors(Terrain[] terrains)
+    {
         for (int i = 0; i < terrains.Length; i++)
         {
             Terrain terrain = terrains[i];
@@ -29,8 +119,12 @@ public static class TerrainSeamStitcher
             Terrain right = FindNeighbor(terrains, terrain, 1, 0);
             Terrain bottom = FindNeighbor(terrains, terrain, 0, -1);
             terrain.SetNeighbors(left, top, right, bottom);
+            EditorUtility.SetDirty(terrain);
         }
+    }
 
+    private static void StitchTerrainHeightEdges(Terrain[] terrains)
+    {
         HashSet<TerrainData> edited = new();
         for (int i = 0; i < terrains.Length; i++)
         {

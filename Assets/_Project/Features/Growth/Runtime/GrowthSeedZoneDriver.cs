@@ -489,7 +489,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
 
             foreach (RaycastHit hit in hits)
             {
-                if (growthZone != null && hit.collider == growthZone)
+                if (IsIgnoredPlantingSurface(hit.collider))
                 {
                     continue;
                 }
@@ -811,12 +811,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
         foreach (RaycastHit hit in hits)
         {
-            if (growthZone != null && hit.collider == growthZone)
-            {
-                continue;
-            }
-
-            if (hit.collider.GetComponentInParent<GrowthPlant>() != null)
+            if (IsIgnoredPlantingSurface(hit.collider))
             {
                 continue;
             }
@@ -876,7 +871,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
 
             foreach (RaycastHit hit in hits)
             {
-                if (growthZone != null && hit.collider == growthZone)
+                if (IsIgnoredPlantingSurface(hit.collider))
                 {
                     continue;
                 }
@@ -886,6 +881,31 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         }
 
         return Vector3.positiveInfinity;
+    }
+
+    private bool IsIgnoredPlantingSurface(Collider candidate)
+    {
+        if (candidate == null)
+        {
+            return true;
+        }
+
+        if (growthZone != null && candidate == growthZone)
+        {
+            return true;
+        }
+
+        if (candidate.GetComponentInParent<GrowthPlant>() != null)
+        {
+            return true;
+        }
+
+        if (candidate.GetComponentInParent<CharacterController>() != null)
+        {
+            return true;
+        }
+
+        return candidate.gameObject.tag == "Player";
     }
 
     private IEnumerator FlyEarthMagicProjectile(Vector3 start, Vector3 end)
