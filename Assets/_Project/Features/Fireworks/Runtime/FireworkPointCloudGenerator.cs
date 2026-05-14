@@ -188,7 +188,7 @@ namespace WonderfulWorld.Features.Fireworks
                 case MathFireworkPattern.Heart:
                     AddHeartPattern(points, count);
                     break;
-                case MathFireworkPattern.Ring:
+                case MathFireworkPattern.DoubleHelix:
                     AddRingPattern(points, count);
                     break;
                 case MathFireworkPattern.Spiral:
