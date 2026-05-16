@@ -7,11 +7,12 @@ using UnityEngine.SceneManagement;
 public static class CherryGardenRegionBuilder
 {
     private const string SandboxScenePath = "Assets/_Project/Sandbox/Wenao/World_WonderlandPark_M3_YuFu.unity";
-    private const string RegionRootName = "Region_CherryGarden_Wenao";
-    private const string RegionPrefabPath = "Assets/_Project/World/Regions/CherryGarden/CherryGarden_Wenao.prefab";
+    private const string SandboxRegionRootName = "Region_CherryGarden_Wenao";
+    private const string RegionRootName = "Region_CherryGarden";
+    private const string RegionPrefabPath = "Assets/_Project/World/Regions/CherryGarden/CherryGarden.prefab";
     private const string WorldRegionsRootName = "World_Regions";
 
-    [MenuItem("Wonderland/Cherry Garden/Rebuild Wenao Region Prefab")]
+    [MenuItem("Wonderland/Cherry Garden/Rebuild Cherry Garden Region Prefab")]
     public static void RebuildRegionPrefab()
     {
         if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
@@ -24,14 +25,16 @@ public static class CherryGardenRegionBuilder
         try
         {
             sandboxScene = EditorSceneManager.OpenScene(SandboxScenePath, OpenSceneMode.Single);
-            GameObject regionRoot = FindRootObject(sandboxScene, RegionRootName);
+            GameObject regionRoot = FindRootObject(sandboxScene, SandboxRegionRootName);
             if (regionRoot == null)
             {
-                Debug.LogError($"Could not find {RegionRootName} in {SandboxScenePath}.");
+                Debug.LogError($"Could not find {SandboxRegionRootName} in {SandboxScenePath}.");
                 return;
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(RegionPrefabPath));
+            regionRoot.name = RegionRootName;
+            EnsureProductionComponents(regionRoot);
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(regionRoot, RegionPrefabPath, out bool success);
             if (!success || prefab == null)
             {
@@ -54,7 +57,7 @@ public static class CherryGardenRegionBuilder
         }
     }
 
-    [MenuItem("Wonderland/Cherry Garden/Place Wenao Region Prefab In Active Scene")]
+    [MenuItem("Wonderland/Cherry Garden/Place Cherry Garden Region Prefab In Active Scene")]
     public static void PlaceRegionPrefabInActiveScene()
     {
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(RegionPrefabPath);
@@ -72,11 +75,12 @@ public static class CherryGardenRegionBuilder
             return;
         }
 
-        Undo.RegisterCreatedObjectUndo(instance, "Place Wenao Cherry Garden Region");
+        Undo.RegisterCreatedObjectUndo(instance, "Place Cherry Garden Region");
         instance.name = RegionRootName;
+        EnsureProductionComponents(instance);
         if (parent != null)
         {
-            Undo.SetTransformParent(instance.transform, parent, "Parent Wenao Cherry Garden Region");
+            Undo.SetTransformParent(instance.transform, parent, "Parent Cherry Garden Region");
         }
 
         Selection.activeGameObject = instance;
@@ -96,6 +100,14 @@ public static class CherryGardenRegionBuilder
         }
 
         return null;
+    }
+
+    private static void EnsureProductionComponents(GameObject regionRoot)
+    {
+        if (regionRoot.GetComponent<CherryGardenToonOutlineController>() == null)
+        {
+            regionRoot.AddComponent<CherryGardenToonOutlineController>();
+        }
     }
 
     private static GameObject FindInChildren(Transform parent, string targetName)
