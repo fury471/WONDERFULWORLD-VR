@@ -17,7 +17,7 @@ public sealed class CherryGardenToonOutlineController : MonoBehaviour
     [Header("Look")]
     [SerializeField] private Color outlineColor = Color.black;
     [SerializeField, Range(0.001f, 0.06f)] private float architectureOutlineWidth = 0.018f;
-    [SerializeField, Range(0.001f, 0.08f)] private float heroTreeOutlineWidth = 0.032f;
+    [SerializeField, Range(0.001f, 0.08f)] private float heroTreeOutlineWidth = 0.016f;
     [SerializeField, Range(0.001f, 0.06f)] private float vegetationOutlineWidth = 0.012f;
     [SerializeField, Range(0.001f, 0.06f)] private float propOutlineWidth = 0.015f;
     [SerializeField, Range(0f, 1f)] private float growthVisibilityThreshold = 0.03f;
