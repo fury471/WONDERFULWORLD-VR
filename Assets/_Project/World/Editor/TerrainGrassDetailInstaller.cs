@@ -7,7 +7,38 @@ public static class TerrainGrassDetailInstaller
 {
     private const string WonderlandParkScenePath = "Assets/_Project/World/Persistent/World_WonderlandPark.unity";
 
-    private static readonly string[] GrassPrefabPaths =
+    private const float PerformanceDetailDistance = 38f;
+    private const float PerformanceDetailDensity = 0.62f;
+
+    private static readonly GrassDetailInstallSpec[] GrassDetails =
+    {
+        new GrassDetailInstallSpec(
+            "Assets/_Project/World/Shared/Vegetation/Grass/Prefabs/WW_Grass_Detail_ReferenceMeadow_Lush.prefab",
+            0.72f,
+            1.12f,
+            0.62f,
+            1.08f,
+            0.95f,
+            0.16f),
+        new GrassDetailInstallSpec(
+            "Assets/_Project/World/Shared/Vegetation/Grass/Prefabs/WW_Grass_Detail_ReferenceMeadow_Mixed.prefab",
+            0.62f,
+            1.02f,
+            0.52f,
+            0.96f,
+            1.25f,
+            0.13f),
+        new GrassDetailInstallSpec(
+            "Assets/_Project/World/Shared/Vegetation/Grass/Prefabs/WW_Grass_Detail_ReferenceMeadow_WarmAccent.prefab",
+            0.5f,
+            0.86f,
+            0.44f,
+            0.84f,
+            1.65f,
+            0.08f),
+    };
+
+    private static readonly string[] LegacyGrassPrefabPaths =
     {
         "Assets/_Project/World/Shared/Vegetation/Grass/Prefabs/WW_Grass_Detail_01A.prefab",
         "Assets/_Project/World/Shared/Vegetation/Grass/Prefabs/WW_Grass_Detail_01B.prefab",
@@ -25,13 +56,14 @@ public static class TerrainGrassDetailInstaller
             return;
         }
 
-        GameObject[] grassPrefabs = LoadGrassPrefabs();
-        if (grassPrefabs.Length == 0)
+        GrassDetailInstallSpec[] grassDetails = LoadGrassDetails();
+        if (grassDetails.Length == 0)
         {
             Debug.LogError("TerrainGrassDetailInstaller: no grass prefabs could be loaded.");
             return;
         }
 
+        Dictionary<GameObject, int> legacyGrassRemap = LoadLegacyGrassRemap();
         HashSet<TerrainData> edited = new();
         for (int i = 0; i < terrains.Length; i++)
         {
@@ -42,12 +74,17 @@ public static class TerrainGrassDetailInstaller
             }
 
             Undo.RegisterCompleteObjectUndo(terrain.terrainData, "Install Toon Grass Details");
-            InstallOnTerrainData(terrain.terrainData, grassPrefabs);
+            Undo.RecordObject(terrain, "Install Toon Grass Details");
+            ConfigureTerrainForDenseStylizedGrass(terrain);
+            InstallOnTerrainData(terrain.terrainData, grassDetails, legacyGrassRemap);
             EditorUtility.SetDirty(terrain.terrainData);
+            EditorUtility.SetDirty(terrain);
         }
 
         AssetDatabase.SaveAssets();
-        Debug.Log($"TerrainGrassDetailInstaller: installed {grassPrefabs.Length} grass detail prototypes on {edited.Count} TerrainData assets.");
+        Debug.Log(
+            $"TerrainGrassDetailInstaller: installed {grassDetails.Length} performance grass detail prototypes on {edited.Count} TerrainData assets. " +
+            $"Terrain detail distance={PerformanceDetailDistance}, density={PerformanceDetailDensity}.");
     }
 
     [MenuItem("Wonderland/World/Clean Missing Terrain Prototypes")]
@@ -98,67 +135,175 @@ public static class TerrainGrassDetailInstaller
         EditorSceneManager.SaveOpenScenes();
     }
 
-    private static GameObject[] LoadGrassPrefabs()
+    private static GrassDetailInstallSpec[] LoadGrassDetails()
     {
-        List<GameObject> prefabs = new();
-        for (int i = 0; i < GrassPrefabPaths.Length; i++)
+        List<GrassDetailInstallSpec> details = new();
+        for (int i = 0; i < GrassDetails.Length; i++)
         {
-            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(GrassPrefabPaths[i]);
+            GrassDetailInstallSpec detail = GrassDetails[i];
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(detail.PrefabPath);
             if (prefab == null)
             {
-                Debug.LogWarning($"TerrainGrassDetailInstaller: missing grass prefab at {GrassPrefabPaths[i]}.");
+                Debug.LogWarning($"TerrainGrassDetailInstaller: missing grass prefab at {detail.PrefabPath}.");
                 continue;
             }
 
-            prefabs.Add(prefab);
+            details.Add(detail.WithPrefab(prefab));
         }
 
-        return prefabs.ToArray();
+        return details.ToArray();
     }
 
-    private static void InstallOnTerrainData(TerrainData terrainData, IReadOnlyList<GameObject> grassPrefabs)
+    private static Dictionary<GameObject, int> LoadLegacyGrassRemap()
     {
-        List<DetailPrototype> prototypes = new(terrainData.detailPrototypes ?? System.Array.Empty<DetailPrototype>());
-        for (int i = 0; i < grassPrefabs.Count; i++)
+        Dictionary<GameObject, int> remap = new();
+        for (int i = 0; i < LegacyGrassPrefabPaths.Length; i++)
         {
-            GameObject prefab = grassPrefabs[i];
-            if (HasPrototype(prototypes, prefab))
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(LegacyGrassPrefabPaths[i]);
+            if (prefab == null)
             {
                 continue;
             }
 
-            prototypes.Add(CreateGrassPrototype(prefab));
+            remap[prefab] = i switch
+            {
+                0 => 0, // Old 01A becomes ReferenceMeadow_Lush.
+                1 => 0, // Old 01B becomes ReferenceMeadow_Lush.
+                2 => 1, // Old 02A becomes ReferenceMeadow_Mixed.
+                3 => 2, // Old 02D becomes ReferenceMeadow_WarmAccent.
+                _ => 0,
+            };
+        }
+
+        return remap;
+    }
+
+    private static void ConfigureTerrainForDenseStylizedGrass(Terrain terrain)
+    {
+        terrain.detailObjectDistance = PerformanceDetailDistance;
+        terrain.detailObjectDensity = PerformanceDetailDensity;
+    }
+
+    private static void InstallOnTerrainData(
+        TerrainData terrainData,
+        IReadOnlyList<GrassDetailInstallSpec> grassDetails,
+        IReadOnlyDictionary<GameObject, int> legacyGrassRemap)
+    {
+        DetailPrototype[] oldPrototypes = terrainData.detailPrototypes ?? System.Array.Empty<DetailPrototype>();
+        bool canMigrateLayers = terrainData.detailWidth > 0 && terrainData.detailHeight > 0;
+
+        List<DetailPrototype> prototypes = new();
+        List<int[,]> layers = new();
+        List<int[,]> pendingGrassLayers = new(grassDetails.Count);
+        for (int i = 0; i < grassDetails.Count; i++)
+        {
+            pendingGrassLayers.Add(null);
+        }
+
+        for (int i = 0; i < oldPrototypes.Length; i++)
+        {
+            DetailPrototype oldPrototype = oldPrototypes[i];
+            int targetGrassIndex = FindGrassDetailIndex(grassDetails, oldPrototype?.prototype);
+            if (targetGrassIndex < 0 && oldPrototype != null && legacyGrassRemap.TryGetValue(oldPrototype.prototype, out int legacyTarget))
+            {
+                targetGrassIndex = legacyTarget;
+            }
+
+            if (targetGrassIndex >= 0)
+            {
+                if (canMigrateLayers)
+                {
+                    int[,] pendingLayer = pendingGrassLayers[targetGrassIndex];
+                    MergeLayerInto(ref pendingLayer, terrainData.GetDetailLayer(0, 0, terrainData.detailWidth, terrainData.detailHeight, i));
+                    pendingGrassLayers[targetGrassIndex] = pendingLayer;
+                }
+
+                continue;
+            }
+
+            prototypes.Add(oldPrototype);
+            if (canMigrateLayers)
+            {
+                layers.Add(terrainData.GetDetailLayer(0, 0, terrainData.detailWidth, terrainData.detailHeight, i));
+            }
+        }
+
+        for (int i = 0; i < grassDetails.Count; i++)
+        {
+            prototypes.Add(CreateGrassPrototype(grassDetails[i]));
+            if (canMigrateLayers)
+            {
+                layers.Add(pendingGrassLayers[i] ?? new int[terrainData.detailHeight, terrainData.detailWidth]);
+            }
         }
 
         terrainData.detailPrototypes = prototypes.ToArray();
+        if (!canMigrateLayers)
+        {
+            return;
+        }
+
+        for (int i = 0; i < layers.Count; i++)
+        {
+            terrainData.SetDetailLayer(0, 0, i, layers[i]);
+        }
     }
 
-    private static bool HasPrototype(IReadOnlyList<DetailPrototype> prototypes, GameObject prefab)
+    private static int FindGrassDetailIndex(IReadOnlyList<GrassDetailInstallSpec> grassDetails, GameObject prefab)
     {
-        for (int i = 0; i < prototypes.Count; i++)
+        if (prefab == null)
         {
-            if (prototypes[i] != null && prototypes[i].prototype == prefab)
+            return -1;
+        }
+
+        for (int i = 0; i < grassDetails.Count; i++)
+        {
+            if (grassDetails[i].Prefab == prefab)
             {
-                return true;
+                return i;
             }
         }
 
-        return false;
+        return -1;
     }
 
-    private static DetailPrototype CreateGrassPrototype(GameObject prefab)
+    private static void MergeLayerInto(ref int[,] target, int[,] source)
+    {
+        if (source == null)
+        {
+            return;
+        }
+
+        if (target == null)
+        {
+            target = source;
+            return;
+        }
+
+        int height = Mathf.Min(target.GetLength(0), source.GetLength(0));
+        int width = Mathf.Min(target.GetLength(1), source.GetLength(1));
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                target[y, x] = Mathf.Max(target[y, x], source[y, x]);
+            }
+        }
+    }
+
+    private static DetailPrototype CreateGrassPrototype(GrassDetailInstallSpec detail)
     {
         DetailPrototype prototype = new()
         {
-            prototype = prefab,
+            prototype = detail.Prefab,
             usePrototypeMesh = true,
             renderMode = DetailRenderMode.VertexLit,
-            minWidth = 0.75f,
-            maxWidth = 1.35f,
-            minHeight = 0.75f,
-            maxHeight = 1.35f,
-            noiseSpread = 0.7f,
-            bendFactor = 0.25f,
+            minWidth = detail.MinWidth,
+            maxWidth = detail.MaxWidth,
+            minHeight = detail.MinHeight,
+            maxHeight = detail.MaxHeight,
+            noiseSpread = detail.NoiseSpread,
+            bendFactor = detail.BendFactor,
             healthyColor = Color.white,
             dryColor = Color.white,
         };
@@ -168,6 +313,55 @@ public static class TerrainGrassDetailInstaller
 #endif
 
         return prototype;
+    }
+
+    private readonly struct GrassDetailInstallSpec
+    {
+        public GrassDetailInstallSpec(
+            string prefabPath,
+            float minWidth,
+            float maxWidth,
+            float minHeight,
+            float maxHeight,
+            float noiseSpread,
+            float bendFactor)
+            : this(prefabPath, null, minWidth, maxWidth, minHeight, maxHeight, noiseSpread, bendFactor)
+        {
+        }
+
+        private GrassDetailInstallSpec(
+            string prefabPath,
+            GameObject prefab,
+            float minWidth,
+            float maxWidth,
+            float minHeight,
+            float maxHeight,
+            float noiseSpread,
+            float bendFactor)
+        {
+            PrefabPath = prefabPath;
+            Prefab = prefab;
+            MinWidth = minWidth;
+            MaxWidth = maxWidth;
+            MinHeight = minHeight;
+            MaxHeight = maxHeight;
+            NoiseSpread = noiseSpread;
+            BendFactor = bendFactor;
+        }
+
+        public string PrefabPath { get; }
+        public GameObject Prefab { get; }
+        public float MinWidth { get; }
+        public float MaxWidth { get; }
+        public float MinHeight { get; }
+        public float MaxHeight { get; }
+        public float NoiseSpread { get; }
+        public float BendFactor { get; }
+
+        public GrassDetailInstallSpec WithPrefab(GameObject prefab)
+        {
+            return new GrassDetailInstallSpec(PrefabPath, prefab, MinWidth, MaxWidth, MinHeight, MaxHeight, NoiseSpread, BendFactor);
+        }
     }
 
     private static bool CleanMissingDetailPrototypes(TerrainData terrainData, out int removedCount)

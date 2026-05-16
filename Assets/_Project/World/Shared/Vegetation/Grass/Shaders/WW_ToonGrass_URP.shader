@@ -7,6 +7,9 @@ Shader "Wonderland/Vegetation/Toon Grass URP"
         _TipColor("Tip Color", Color) = (0.68, 0.76, 0.36, 1)
         _HighlightColor("Highlight Color", Color) = (0.86, 0.72, 0.42, 1)
         _HighlightStrength("Highlight Strength", Range(0, 1)) = 0.15
+        _LightInfluence("Light Influence", Range(0, 1)) = 0.45
+        _AmbientFloor("Scene-Scaled Fill", Range(0, 1)) = 0.18
+        _ShadowStrength("Stylized Shadow Strength", Range(0, 1)) = 0.45
         _Cutoff("Alpha Cutoff", Range(0, 1)) = 0.45
         _WindStrength("Wind Strength", Range(0, 0.25)) = 0.035
         _WindFrequency("Wind Frequency", Range(0, 8)) = 1.7
@@ -39,6 +42,7 @@ Shader "Wonderland/Vegetation/Toon Grass URP"
             #pragma multi_compile_instancing
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
@@ -49,6 +53,9 @@ Shader "Wonderland/Vegetation/Toon Grass URP"
                 half4 _TipColor;
                 half4 _HighlightColor;
                 half _HighlightStrength;
+                half _LightInfluence;
+                half _AmbientFloor;
+                half _ShadowStrength;
                 half _Cutoff;
                 half _WindStrength;
                 half _WindFrequency;
@@ -58,6 +65,7 @@ Shader "Wonderland/Vegetation/Toon Grass URP"
             struct Attributes
             {
                 float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
                 float2 uv : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
@@ -67,6 +75,7 @@ Shader "Wonderland/Vegetation/Toon Grass URP"
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 half fogFactor : TEXCOORD1;
+                half3 normalWS : TEXCOORD2;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -86,6 +95,7 @@ Shader "Wonderland/Vegetation/Toon Grass URP"
                 output.positionCS = vertexInput.positionCS;
                 output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
                 output.fogFactor = ComputeFogFactor(vertexInput.positionCS.z);
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
                 return output;
             }
 
@@ -99,6 +109,19 @@ Shader "Wonderland/Vegetation/Toon Grass URP"
                 half heightMask = saturate(input.uv.y);
                 half4 color = lerp(_BaseColor, _TipColor, heightMask) * tex;
                 color.rgb = lerp(color.rgb, _HighlightColor.rgb, _HighlightStrength * heightMask);
+
+                Light mainLight = GetMainLight();
+                half3 normalWS = normalize(input.normalWS);
+                half wrappedNdotL = saturate(dot(normalWS, mainLight.direction) * 0.5h + 0.5h);
+                half stylizedShade = lerp(1.0h, wrappedNdotL, _ShadowStrength);
+                half3 ambient = max(SampleSH(normalWS), 0.0h.xxx);
+                half3 sceneLight = ambient * 0.65h + mainLight.color * stylizedShade;
+                half sceneEnergy = saturate(
+                    dot(ambient, half3(0.2126h, 0.7152h, 0.0722h)) +
+                    dot(mainLight.color, half3(0.2126h, 0.7152h, 0.0722h)) * 0.25h);
+                sceneLight = max(sceneLight, (_AmbientFloor * sceneEnergy).xxx);
+                color.rgb *= lerp(sceneEnergy.xxx, sceneLight, _LightInfluence);
+
                 color.rgb = MixFog(color.rgb, input.fogFactor);
                 color.a = 1;
                 return color;
