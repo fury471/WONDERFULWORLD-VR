@@ -11,9 +11,10 @@ public class FlowerVortexEffect : MonoBehaviour
     [SerializeField] private GameObject petalPrefab;
 
     [Header("Petal Pool")]
-    [SerializeField, Min(1)] private int petalCount = 2400;
-    [SerializeField, Min(1)] private int maxPetalCount = 3000;
+    [SerializeField, Min(1)] private int petalCount = 1200;
+    [SerializeField, Min(1)] private int maxPetalCount = 1800;
     [SerializeField] private bool loopEffect = true;
+    [SerializeField, Min(0f)] private float maxSimulationDistance = 85f;
 
     [Header("Timeline")]
     [SerializeField, Min(0f)] private float delayBeforeStart = 3f;
@@ -58,6 +59,7 @@ public class FlowerVortexEffect : MonoBehaviour
     private float sphereRotationAngle;
     private Mesh[] uvMeshes;
     private bool initialized;
+    private Camera cachedCamera;
 
     private Vector3 Origin => treeCenter != null ? treeCenter.position : transform.position;
 
@@ -133,6 +135,11 @@ public class FlowerVortexEffect : MonoBehaviour
     private void Update()
     {
         if (!initialized)
+        {
+            return;
+        }
+
+        if (!ShouldSimulate())
         {
             return;
         }
@@ -376,6 +383,27 @@ public class FlowerVortexEffect : MonoBehaviour
                 filter.sharedMesh = uvMeshes[Random.Range(0, uvMeshes.Length)];
             }
         }
+    }
+
+    private bool ShouldSimulate()
+    {
+        if (maxSimulationDistance <= 0f)
+        {
+            return true;
+        }
+
+        if (cachedCamera == null)
+        {
+            cachedCamera = Camera.main;
+        }
+
+        if (cachedCamera == null)
+        {
+            return true;
+        }
+
+        float sqrDistance = (cachedCamera.transform.position - Origin).sqrMagnitude;
+        return sqrDistance <= maxSimulationDistance * maxSimulationDistance;
     }
 
     private static Vector3 GetFibonacciSpherePoint(int index, int count)
