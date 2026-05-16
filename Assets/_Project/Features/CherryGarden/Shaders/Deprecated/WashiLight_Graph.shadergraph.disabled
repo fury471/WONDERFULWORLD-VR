@@ -1,0 +1,8 @@
+Deprecated placeholder.
+
+The original Wenao WashiLight Shader Graph was replaced by
+Assets/_Project/Features/CherryGarden/Shaders/WashiLight_URP.shader.
+
+This file intentionally contains no Shader Graph JSON or custom function
+references. It only preserves the old asset path so Unity can finish saving
+open editor state that may still remember the removed graph path.
