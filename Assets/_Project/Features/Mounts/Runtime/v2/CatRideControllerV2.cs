@@ -7,6 +7,14 @@ using UnityEngine.XR.Interaction.Toolkit.Inputs.Simulation;
 
 public class CatRideControllerV2 : MonoBehaviour
 {
+    public enum MountScaleRequirement
+    {
+        Any,
+        SmallOnly,
+        NormalOnly,
+        LargeOnly
+    }
+
     public enum RideState
     {
         Idle,
@@ -30,6 +38,8 @@ public class CatRideControllerV2 : MonoBehaviour
 
     [Header("Mount Access")]
     [SerializeField] private float remountDistance = 1.25f;
+    [SerializeField] private MountScaleRequirement mountScaleRequirement = MountScaleRequirement.SmallOnly;
+
 
     [Header("Manual Ride")]
     [SerializeField] private float manualMoveSpeed = 4f;
@@ -249,16 +259,28 @@ public class CatRideControllerV2 : MonoBehaviour
     {
         if (scaleManager == null)
         {
-            CacheRigReferences();
-        }
-
-        if (scaleManager == null)
-        {
             return false;
         }
 
-        return scaleManager.IsSmallScale;
+        switch (mountScaleRequirement)
+        {
+            case MountScaleRequirement.Any:
+                return true;
+
+            case MountScaleRequirement.SmallOnly:
+                return scaleManager.CurrentState == ScaleState.Small;
+
+            case MountScaleRequirement.NormalOnly:
+                return scaleManager.CurrentState == ScaleState.Normal;
+
+            case MountScaleRequirement.LargeOnly:
+                return scaleManager.CurrentState == ScaleState.Large;
+
+            default:
+                return false;
+        }
     }
+
 
 
     private bool IsActionEnabled(InputActionReference actionReference)
