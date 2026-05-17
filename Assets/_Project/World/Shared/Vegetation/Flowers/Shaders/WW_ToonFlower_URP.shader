@@ -1,0 +1,132 @@
+Shader "Wonderland/Vegetation/Toon Flower URP"
+{
+    Properties
+    {
+        _BaseMap("Flower Texture", 2D) = "white" {}
+        _TintColor("Tint Color", Color) = (1, 1, 1, 1)
+        _GroundBlendColor("Ground Blend Color", Color) = (0.48, 0.62, 0.38, 1)
+        _GroundBlendStrength("Ground Blend Strength", Range(0, 1)) = 0.08
+        _LightInfluence("Light Influence", Range(0, 1)) = 0.42
+        _AmbientFloor("Scene-Scaled Fill", Range(0, 1)) = 0.2
+        _ShadowStrength("Stylized Shadow Strength", Range(0, 1)) = 0.36
+        _Cutoff("Alpha Cutoff", Range(0, 1)) = 0.42
+        _WindStrength("Wind Strength", Range(0, 0.18)) = 0.025
+        _WindFrequency("Wind Frequency", Range(0, 8)) = 1.45
+        _WindScale("Wind Scale", Range(0.1, 8)) = 2.2
+    }
+
+    SubShader
+    {
+        Tags
+        {
+            "RenderPipeline" = "UniversalPipeline"
+            "RenderType" = "TransparentCutout"
+            "Queue" = "AlphaTest"
+        }
+
+        Pass
+        {
+            Name "Forward"
+            Tags { "LightMode" = "UniversalForward" }
+
+            Cull Off
+            ZWrite On
+            ZTest LEqual
+
+            HLSLPROGRAM
+            #pragma target 3.0
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_fog
+            #pragma multi_compile_instancing
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+
+            TEXTURE2D(_BaseMap);
+            SAMPLER(sampler_BaseMap);
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _BaseMap_ST;
+                half4 _TintColor;
+                half4 _GroundBlendColor;
+                half _GroundBlendStrength;
+                half _LightInfluence;
+                half _AmbientFloor;
+                half _ShadowStrength;
+                half _Cutoff;
+                half _WindStrength;
+                half _WindFrequency;
+                half _WindScale;
+            CBUFFER_END
+
+            struct Attributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+                float2 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                half fogFactor : TEXCOORD1;
+                half3 normalWS : TEXCOORD2;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            Varyings vert(Attributes input)
+            {
+                Varyings output;
+                UNITY_SETUP_INSTANCE_ID(input);
+                UNITY_TRANSFER_INSTANCE_ID(input, output);
+
+                float3 positionOS = input.positionOS.xyz;
+                float heightMask = saturate(input.uv.y);
+                float3 positionWS = TransformObjectToWorld(positionOS);
+                float wind = sin((_Time.y * _WindFrequency) + (positionWS.x + positionWS.z) * _WindScale);
+                positionOS.xz += wind * _WindStrength * heightMask;
+
+                VertexPositionInputs vertexInput = GetVertexPositionInputs(positionOS);
+                output.positionCS = vertexInput.positionCS;
+                output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
+                output.fogFactor = ComputeFogFactor(vertexInput.positionCS.z);
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                return output;
+            }
+
+            half4 frag(Varyings input) : SV_Target
+            {
+                UNITY_SETUP_INSTANCE_ID(input);
+
+                half4 tex = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
+                clip(tex.a - _Cutoff);
+
+                half heightMask = saturate(input.uv.y);
+                half4 color = tex * _TintColor;
+                color.rgb = lerp(color.rgb, _GroundBlendColor.rgb, _GroundBlendStrength * (1.0h - heightMask));
+
+                Light mainLight = GetMainLight();
+                half3 normalWS = normalize(input.normalWS);
+                half wrappedNdotL = saturate(dot(normalWS, mainLight.direction) * 0.5h + 0.5h);
+                half stylizedShade = lerp(1.0h, wrappedNdotL, _ShadowStrength);
+                half3 ambient = max(SampleSH(normalWS), 0.0h.xxx);
+                half3 sceneLight = ambient * 0.65h + mainLight.color * stylizedShade;
+                half sceneEnergy = saturate(
+                    dot(ambient, half3(0.2126h, 0.7152h, 0.0722h)) +
+                    dot(mainLight.color, half3(0.2126h, 0.7152h, 0.0722h)) * 0.25h);
+                sceneLight = max(sceneLight, (_AmbientFloor * sceneEnergy).xxx);
+                color.rgb *= lerp(sceneEnergy.xxx, sceneLight, _LightInfluence);
+
+                color.rgb = MixFog(color.rgb, input.fogFactor);
+                color.a = 1;
+                return color;
+            }
+            ENDHLSL
+        }
+    }
+
+    FallBack Off
+}

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -14,28 +15,60 @@ public static class TerrainGrassDetailInstaller
     {
         new GrassDetailInstallSpec(
             "Assets/_Project/World/Shared/Vegetation/Grass/Prefabs/WW_Grass_Detail_ReferenceMeadow_Lush.prefab",
-            0.72f,
-            1.12f,
-            0.62f,
-            1.08f,
+            0.58f,
+            1.28f,
+            0.3f,
+            0.6f,
             0.95f,
             0.16f),
         new GrassDetailInstallSpec(
             "Assets/_Project/World/Shared/Vegetation/Grass/Prefabs/WW_Grass_Detail_ReferenceMeadow_Mixed.prefab",
-            0.62f,
-            1.02f,
-            0.52f,
-            0.96f,
+            0.5f,
+            1.18f,
+            0.3f,
+            0.6f,
             1.25f,
             0.13f),
         new GrassDetailInstallSpec(
             "Assets/_Project/World/Shared/Vegetation/Grass/Prefabs/WW_Grass_Detail_ReferenceMeadow_WarmAccent.prefab",
-            0.5f,
-            0.86f,
-            0.44f,
-            0.84f,
+            0.42f,
+            1.04f,
+            0.3f,
+            0.6f,
             1.65f,
             0.08f),
+        new GrassDetailInstallSpec(
+            "Assets/_Project/World/Shared/Vegetation/Flowers/Prefabs/WW_Flower_Detail_GoldenCluster.prefab",
+            0.44f,
+            0.44f,
+            0.5f,
+            0.5f,
+            1.45f,
+            0.05f),
+        new GrassDetailInstallSpec(
+            "Assets/_Project/World/Shared/Vegetation/Flowers/Prefabs/WW_Flower_Detail_WhiteDaisy.prefab",
+            0.5f,
+            0.5f,
+            0.58f,
+            0.58f,
+            1.55f,
+            0.045f),
+        new GrassDetailInstallSpec(
+            "Assets/_Project/World/Shared/Vegetation/Flowers/Prefabs/WW_Flower_Detail_RedPoppy.prefab",
+            0.56f,
+            0.56f,
+            0.76f,
+            0.76f,
+            1.7f,
+            0.04f),
+        new GrassDetailInstallSpec(
+            "Assets/_Project/World/Shared/Vegetation/Flowers/Prefabs/WW_GroundPetals_Detail.prefab",
+            1.1f,
+            1.85f,
+            1f,
+            1f,
+            2.4f,
+            0f),
     };
 
     private static readonly string[] LegacyGrassPrefabPaths =
@@ -49,6 +82,12 @@ public static class TerrainGrassDetailInstaller
     [MenuItem("Wonderland/World/Install Toon Grass Detail Prototypes")]
     public static void InstallToonGrassDetailPrototypes()
     {
+        InstallToonVegetationDetailPrototypes();
+    }
+
+    [MenuItem("Wonderland/World/Install Toon Vegetation Detail Prototypes")]
+    public static void InstallToonVegetationDetailPrototypes()
+    {
         Terrain[] terrains = Terrain.activeTerrains;
         if (terrains == null || terrains.Length == 0)
         {
@@ -59,7 +98,7 @@ public static class TerrainGrassDetailInstaller
         GrassDetailInstallSpec[] grassDetails = LoadGrassDetails();
         if (grassDetails.Length == 0)
         {
-            Debug.LogError("TerrainGrassDetailInstaller: no grass prefabs could be loaded.");
+            Debug.LogError("TerrainGrassDetailInstaller: no vegetation detail prefabs could be loaded.");
             return;
         }
 
@@ -73,18 +112,41 @@ public static class TerrainGrassDetailInstaller
                 continue;
             }
 
-            Undo.RegisterCompleteObjectUndo(terrain.terrainData, "Install Toon Grass Details");
-            Undo.RecordObject(terrain, "Install Toon Grass Details");
+            Undo.RegisterCompleteObjectUndo(terrain.terrainData, "Install Toon Vegetation Details");
+            Undo.RecordObject(terrain, "Install Toon Vegetation Details");
             ConfigureTerrainForDenseStylizedGrass(terrain);
             InstallOnTerrainData(terrain.terrainData, grassDetails, legacyGrassRemap);
+            SyncTerrainDataNameWithAssetFilename(terrain.terrainData);
+            bool cleanedInvalidTrees = CleanInvalidTreePrototypes(terrain.terrainData, out int invalidTreeCount);
             EditorUtility.SetDirty(terrain.terrainData);
             EditorUtility.SetDirty(terrain);
+
+            if (cleanedInvalidTrees)
+            {
+                Debug.Log(
+                    $"TerrainGrassDetailInstaller: removed {invalidTreeCount} invalid Terrain tree prototypes from {terrain.terrainData.name}. " +
+                    "These prefabs had no valid MeshRenderer and could not be instanced by Terrain.");
+            }
         }
 
         AssetDatabase.SaveAssets();
         Debug.Log(
-            $"TerrainGrassDetailInstaller: installed {grassDetails.Length} performance grass detail prototypes on {edited.Count} TerrainData assets. " +
+            $"TerrainGrassDetailInstaller: installed {grassDetails.Length} performance vegetation detail prototypes on {edited.Count} TerrainData assets. " +
             $"Terrain detail distance={PerformanceDetailDistance}, density={PerformanceDetailDensity}.");
+    }
+
+    [MenuItem("Wonderland/World/Install Toon Grass Detail Prototypes In Wonderland Park")]
+    public static void InstallToonGrassDetailPrototypesInWonderlandPark()
+    {
+        InstallToonVegetationDetailPrototypesInWonderlandPark();
+    }
+
+    [MenuItem("Wonderland/World/Install Toon Vegetation Detail Prototypes In Wonderland Park")]
+    public static void InstallToonVegetationDetailPrototypesInWonderlandPark()
+    {
+        EditorSceneManager.OpenScene(WonderlandParkScenePath);
+        InstallToonVegetationDetailPrototypes();
+        EditorSceneManager.SaveOpenScenes();
     }
 
     [MenuItem("Wonderland/World/Clean Missing Terrain Prototypes")]
@@ -112,7 +174,7 @@ public static class TerrainGrassDetailInstaller
             Undo.RegisterCompleteObjectUndo(terrain.terrainData, "Clean Missing Terrain Prototypes");
             bool changed = false;
             changed |= CleanMissingDetailPrototypes(terrain.terrainData, out int detailCount);
-            changed |= CleanMissingTreePrototypes(terrain.terrainData, out int treeCount);
+            changed |= CleanInvalidTreePrototypes(terrain.terrainData, out int treeCount);
 
             if (changed)
             {
@@ -125,7 +187,7 @@ public static class TerrainGrassDetailInstaller
 
         AssetDatabase.SaveAssets();
         Debug.Log(
-            $"TerrainGrassDetailInstaller: cleaned {removedDetails} missing detail prototypes and {removedTrees} missing tree prototypes across {editedCount} TerrainData assets.");
+            $"TerrainGrassDetailInstaller: cleaned {removedDetails} missing detail prototypes and {removedTrees} missing or invalid tree prototypes across {editedCount} TerrainData assets.");
     }
 
     public static void CleanMissingTerrainPrototypesInWonderlandPark()
@@ -291,6 +353,21 @@ public static class TerrainGrassDetailInstaller
         }
     }
 
+    private static void SyncTerrainDataNameWithAssetFilename(TerrainData terrainData)
+    {
+        string assetPath = AssetDatabase.GetAssetPath(terrainData);
+        if (string.IsNullOrEmpty(assetPath))
+        {
+            return;
+        }
+
+        string filename = Path.GetFileNameWithoutExtension(assetPath);
+        if (!string.IsNullOrEmpty(filename) && terrainData.name != filename)
+        {
+            terrainData.name = filename;
+        }
+    }
+
     private static DetailPrototype CreateGrassPrototype(GrassDetailInstallSpec detail)
     {
         DetailPrototype prototype = new()
@@ -303,10 +380,13 @@ public static class TerrainGrassDetailInstaller
             minHeight = detail.MinHeight,
             maxHeight = detail.MaxHeight,
             noiseSpread = detail.NoiseSpread,
-            bendFactor = detail.BendFactor,
             healthyColor = Color.white,
             dryColor = Color.white,
         };
+
+#if !UNITY_6000_0_OR_NEWER
+        prototype.bendFactor = detail.BendFactor;
+#endif
 
 #if UNITY_2022_2_OR_NEWER
         prototype.useInstancing = true;
@@ -455,7 +535,7 @@ public static class TerrainGrassDetailInstaller
         return false;
     }
 
-    private static bool CleanMissingTreePrototypes(TerrainData terrainData, out int removedCount)
+    private static bool CleanInvalidTreePrototypes(TerrainData terrainData, out int removedCount)
     {
         removedCount = 0;
         TreePrototype[] oldPrototypes = terrainData.treePrototypes;
@@ -469,7 +549,7 @@ public static class TerrainGrassDetailInstaller
         for (int i = 0; i < oldPrototypes.Length; i++)
         {
             TreePrototype prototype = oldPrototypes[i];
-            if (prototype == null || prototype.prefab == null)
+            if (!IsValidTreePrototype(prototype))
             {
                 removedCount++;
                 continue;
@@ -501,5 +581,41 @@ public static class TerrainGrassDetailInstaller
         terrainData.treePrototypes = keptPrototypes.ToArray();
         terrainData.treeInstances = keptTrees.ToArray();
         return true;
+    }
+
+    private static bool IsValidTreePrototype(TreePrototype prototype)
+    {
+        if (prototype == null || prototype.prefab == null)
+        {
+            return false;
+        }
+
+        MeshRenderer renderer = prototype.prefab.GetComponentInChildren<MeshRenderer>(includeInactive: true);
+        if (renderer == null)
+        {
+            return false;
+        }
+
+        MeshFilter meshFilter = renderer.GetComponent<MeshFilter>();
+        if (meshFilter == null || meshFilter.sharedMesh == null)
+        {
+            return false;
+        }
+
+        Material[] materials = renderer.sharedMaterials;
+        if (materials == null || materials.Length == 0)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < materials.Length; i++)
+        {
+            if (materials[i] != null && materials[i].shader != null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
