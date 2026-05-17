@@ -1,19 +1,18 @@
-Shader "Wonderland/Vegetation/Toon Grass URP"
+Shader "Wonderland/Vegetation/Toon Flower URP"
 {
     Properties
     {
-        _BaseMap("Blade Texture", 2D) = "white" {}
-        _BaseColor("Root Color", Color) = (0.32, 0.46, 0.18, 1)
-        _TipColor("Tip Color", Color) = (0.68, 0.76, 0.36, 1)
-        _HighlightColor("Highlight Color", Color) = (0.86, 0.72, 0.42, 1)
-        _HighlightStrength("Highlight Strength", Range(0, 1)) = 0.15
-        _LightInfluence("Light Influence", Range(0, 1)) = 0.45
-        _AmbientFloor("Scene-Scaled Fill", Range(0, 1)) = 0.18
-        _ShadowStrength("Stylized Shadow Strength", Range(0, 1)) = 0.45
-        _Cutoff("Alpha Cutoff", Range(0, 1)) = 0.45
-        _WindStrength("Wind Strength", Range(0, 0.25)) = 0.035
-        _WindFrequency("Wind Frequency", Range(0, 8)) = 1.7
-        _WindScale("Wind Scale", Range(0.1, 8)) = 2.5
+        _BaseMap("Flower Texture", 2D) = "white" {}
+        _TintColor("Tint Color", Color) = (1, 1, 1, 1)
+        _GroundBlendColor("Ground Blend Color", Color) = (0.48, 0.62, 0.38, 1)
+        _GroundBlendStrength("Ground Blend Strength", Range(0, 1)) = 0.08
+        _LightInfluence("Light Influence", Range(0, 1)) = 0.42
+        _AmbientFloor("Scene-Scaled Fill", Range(0, 1)) = 0.2
+        _ShadowStrength("Stylized Shadow Strength", Range(0, 1)) = 0.36
+        _Cutoff("Alpha Cutoff", Range(0, 1)) = 0.42
+        _WindStrength("Wind Strength", Range(0, 0.18)) = 0.025
+        _WindFrequency("Wind Frequency", Range(0, 8)) = 1.45
+        _WindScale("Wind Scale", Range(0.1, 8)) = 2.2
     }
 
     SubShader
@@ -49,10 +48,9 @@ Shader "Wonderland/Vegetation/Toon Grass URP"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseMap_ST;
-                half4 _BaseColor;
-                half4 _TipColor;
-                half4 _HighlightColor;
-                half _HighlightStrength;
+                half4 _TintColor;
+                half4 _GroundBlendColor;
+                half _GroundBlendStrength;
                 half _LightInfluence;
                 half _AmbientFloor;
                 half _ShadowStrength;
@@ -86,10 +84,10 @@ Shader "Wonderland/Vegetation/Toon Grass URP"
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
 
                 float3 positionOS = input.positionOS.xyz;
-                float bladeMask = saturate(input.uv.y);
+                float heightMask = saturate(input.uv.y);
                 float3 positionWS = TransformObjectToWorld(positionOS);
                 float wind = sin((_Time.y * _WindFrequency) + (positionWS.x + positionWS.z) * _WindScale);
-                positionOS.xz += wind * _WindStrength * bladeMask;
+                positionOS.xz += wind * _WindStrength * heightMask;
 
                 VertexPositionInputs vertexInput = GetVertexPositionInputs(positionOS);
                 output.positionCS = vertexInput.positionCS;
@@ -107,8 +105,8 @@ Shader "Wonderland/Vegetation/Toon Grass URP"
                 clip(tex.a - _Cutoff);
 
                 half heightMask = saturate(input.uv.y);
-                half4 color = lerp(_BaseColor, _TipColor, heightMask) * tex;
-                color.rgb = lerp(color.rgb, _HighlightColor.rgb, _HighlightStrength * heightMask);
+                half4 color = tex * _TintColor;
+                color.rgb = lerp(color.rgb, _GroundBlendColor.rgb, _GroundBlendStrength * (1.0h - heightMask));
 
                 Light mainLight = GetMainLight();
                 half3 normalWS = normalize(input.normalWS);
