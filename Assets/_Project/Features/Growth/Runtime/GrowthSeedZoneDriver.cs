@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 public class GrowthSeedZoneDriver : MonoBehaviour
@@ -49,6 +50,10 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     [SerializeField] private bool enableKeyboardFallback = false;
     [SerializeField] private Key keyboardSeedKey = Key.G;
     [SerializeField] private float chargedHoldSeconds = 0.65f;
+
+    [Header("Quest Hover Feedback")]
+    [SerializeField] private bool enableMushroomHoverFeedback = true;
+    [SerializeField] private Color mushroomHoverOutlineColor = new Color(0.74f, 0.5f, 0.2f, 0.66f);
 
     [Header("Earth Magic")]
     [SerializeField] private bool enableEarthMagicProjectile = true;
@@ -105,7 +110,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     [SerializeField] private Vector2 randomWobbleRange = new Vector2(0.8f, 1.25f);
 
     [Header("Existing Mushroom Growth")]
-    [SerializeField] private bool allowCultivateExistingMushrooms = false;
+    [SerializeField] private bool allowCultivateExistingMushrooms = true;
     [SerializeField] private float existingMushroomScaleStep = 0.35f;
     [SerializeField] private int chargedExistingMushroomGrowthSteps = 3;
     [SerializeField] private float existingMushroomMaxScale = 2.4f;
@@ -122,6 +127,9 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     private Texture2D runtimeEarthParticleTexture;
     private GameObject chargeOrbRoot;
     private ParticleSystem chargeOrbParticles;
+    private GrowthPlant hoveredMushroom;
+    private QuestInteractableFeedback hoveredMushroomFeedback;
+    private HapticImpulsePlayer rightHaptics;
 
     private void Awake()
     {
@@ -154,6 +162,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     private void Update()
     {
         AutoAssignReferences();
+        UpdateMushroomHoverFeedback();
         UpdateInputChargeState();
     }
 
@@ -176,6 +185,11 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             {
                 interactionOrigin = rightOrigin;
             }
+        }
+
+        if (rightHaptics == null)
+        {
+            rightHaptics = QuestInteractionUtils.FindHapticPlayer(true, interactionOrigin);
         }
 
         if (mushroomPool == null || mushroomPool.Length == 0)
@@ -221,6 +235,12 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             }
 
             slot.plant.SetGrowthTimeImmediate(0f);
+            QuestInteractableFeedback feedback = slot.plant.GetComponent<QuestInteractableFeedback>();
+            if (feedback != null)
+            {
+                feedback.SetInteractable(false);
+            }
+
             slot.active = false;
             slot.retiring = false;
             slot.activatedAt = -1f;
@@ -273,6 +293,100 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         }
 
         return null;
+    }
+
+    private void UpdateMushroomHoverFeedback()
+    {
+        if (!enableMushroomHoverFeedback || !allowCultivateExistingMushrooms || interactionOrigin == null)
+        {
+            ClearMushroomHover();
+            return;
+        }
+
+        GrowthPlant plant = TryResolveHoveredMushroom(out _);
+        if (plant == hoveredMushroom)
+        {
+            if (hoveredMushroomFeedback != null && hoveredMushroom != null)
+            {
+                hoveredMushroomFeedback.SetHovered(true, rightHaptics);
+            }
+
+            return;
+        }
+
+        ClearMushroomHover();
+        hoveredMushroom = plant;
+        if (hoveredMushroom == null)
+        {
+            return;
+        }
+
+        hoveredMushroomFeedback = EnsureMushroomFeedback(hoveredMushroom);
+        hoveredMushroomFeedback?.SetHovered(true, rightHaptics);
+    }
+
+    private GrowthPlant TryResolveHoveredMushroom(out Vector3 hitPoint)
+    {
+        hitPoint = Vector3.positiveInfinity;
+        if (interactionOrigin == null)
+        {
+            return null;
+        }
+
+        Ray ray = new Ray(interactionOrigin.position, interactionOrigin.forward);
+        RaycastHit[] hits = Physics.RaycastAll(ray, rayDistance, groundMask, QueryTriggerInteraction.Ignore);
+        if (hits == null || hits.Length == 0)
+        {
+            return null;
+        }
+
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider hitCollider = hits[i].collider;
+            if (IsIgnoredRaycastHit(hitCollider))
+            {
+                continue;
+            }
+
+            if (TryResolveCultivationTarget(hitCollider, hits[i].point, out hitPoint, out GrowthPlant targetPlant))
+            {
+                return targetPlant;
+            }
+
+            return null;
+        }
+
+        return null;
+    }
+
+    private QuestInteractableFeedback EnsureMushroomFeedback(GrowthPlant plant)
+    {
+        if (plant == null)
+        {
+            return null;
+        }
+
+        QuestInteractableFeedback feedback = plant.GetComponent<QuestInteractableFeedback>();
+        if (feedback == null)
+        {
+            feedback = plant.gameObject.AddComponent<QuestInteractableFeedback>();
+        }
+
+        feedback.Configure(mushroomHoverOutlineColor, 0.026f);
+        feedback.SetInteractable(true);
+        return feedback;
+    }
+
+    private void ClearMushroomHover()
+    {
+        if (hoveredMushroomFeedback != null)
+        {
+            hoveredMushroomFeedback.SetHovered(false, rightHaptics, false);
+        }
+
+        hoveredMushroom = null;
+        hoveredMushroomFeedback = null;
     }
 
     private void UpdateInputChargeState()
@@ -839,6 +953,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             Random.Range(randomWobbleRange.x, randomWobbleRange.y),
             Random.value);
         slot.plant.GrowToFull();
+        EnsureMushroomFeedback(slot.plant)?.SetInteractable(true);
         slot.active = true;
         slot.retiring = false;
         slot.activatedAt = Time.time;
@@ -907,6 +1022,12 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             }
 
             slot.plant.ResetRuntimeVariation();
+        }
+
+        QuestInteractableFeedback feedback = slot.plant.GetComponent<QuestInteractableFeedback>();
+        if (feedback != null)
+        {
+            feedback.SetInteractable(false);
         }
 
         slot.active = false;

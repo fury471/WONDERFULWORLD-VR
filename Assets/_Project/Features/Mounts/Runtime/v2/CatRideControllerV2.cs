@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using Unity.XR.CoreUtils;
 using UnityEngine.XR.Interaction.Toolkit.Inputs.Simulation;
+using UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics;
 
 public class CatRideControllerV2 : MonoBehaviour
 {
@@ -40,6 +41,15 @@ public class CatRideControllerV2 : MonoBehaviour
     [SerializeField] private float remountDistance = 1.25f;
     [SerializeField] private MountScaleRequirement mountScaleRequirement = MountScaleRequirement.SmallOnly;
 
+    [Header("Quest Interaction")]
+    [SerializeField] private bool enableQuestControllerInteraction = true;
+    [SerializeField] private Transform questRayOrigin;
+    [SerializeField] private LayerMask questRayMask = ~0;
+    [SerializeField] private float questRayDistance = 7f;
+    [SerializeField] private float questMountMaxDistance = 2.6f;
+    [SerializeField] private bool allowQuestPrimaryButtonDismount = true;
+    [SerializeField] private bool allowQuestTriggerDismount = false;
+    [SerializeField] private Color questMountOutlineColor = new Color(1f, 0.66f, 0.28f, 0.64f);
 
     [Header("Manual Ride")]
     [SerializeField] private float manualMoveSpeed = 4f;
@@ -122,6 +132,13 @@ public class CatRideControllerV2 : MonoBehaviour
     private readonly RaycastHit[] rideGroundHitBuffer = new RaycastHit[8];
     private Vector3 lastRideGroundNormal = Vector3.up;
     private bool hasRideGroundNormal;
+    private readonly RaycastHit[] questRayHits = new RaycastHit[16];
+    private Collider[] questTargetColliders;
+    private QuestInteractableFeedback questFeedback;
+    private HapticImpulsePlayer questRightHaptics;
+    private bool questHovering;
+    private bool questTriggerLastFrame;
+    private bool questPrimaryLastFrame;
 
     public bool IsRideActive => currentState != RideState.Idle;
 
@@ -134,10 +151,16 @@ public class CatRideControllerV2 : MonoBehaviour
     private void Awake()
     {
         CacheRigReferences();
+        CacheQuestInteractionReferences();
     }
 
     private void Update()
     {
+        if (UpdateQuestControllerInteraction())
+        {
+            return;
+        }
+
         if (currentState == RideState.Idle)
         {
             if (WasPressed(mountAction, mountKey) && IsPlayerInsideMountZone() && CanMountInCurrentScale())
@@ -170,6 +193,197 @@ public class CatRideControllerV2 : MonoBehaviour
                 StartDismount();
             }
         }
+    }
+
+    private bool UpdateQuestControllerInteraction()
+    {
+        if (!enableQuestControllerInteraction)
+        {
+            return false;
+        }
+
+        CacheQuestInteractionReferences();
+
+        bool triggerPressed;
+        QuestInteractionUtils.TryReadTriggerButton(true, out triggerPressed);
+        bool triggerPressedThisFrame = triggerPressed && !questTriggerLastFrame;
+        questTriggerLastFrame = triggerPressed;
+
+        bool primaryPressed;
+        QuestInteractionUtils.TryReadPrimaryButton(true, out primaryPressed);
+        bool primaryPressedThisFrame = primaryPressed && !questPrimaryLastFrame;
+        questPrimaryLastFrame = primaryPressed;
+
+        if (currentState == RideState.Idle)
+        {
+            bool canMount = CanMountInCurrentScale() && IsPlayerCloseEnoughForQuestMount();
+            bool hover = canMount && RayHitsMount();
+            SetQuestHover(hover);
+            if (triggerPressedThisFrame && hover)
+            {
+                questFeedback?.PulseSelect(questRightHaptics);
+                StartMount();
+                return true;
+            }
+
+            return triggerPressedThisFrame;
+        }
+
+        SetQuestHover(false);
+        if ((allowQuestPrimaryButtonDismount && primaryPressedThisFrame) ||
+            (allowQuestTriggerDismount && triggerPressedThisFrame))
+        {
+            if (currentState == RideState.MountedManual || currentState == RideState.MountedAuto)
+            {
+                StartDismount();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void CacheQuestInteractionReferences()
+    {
+        if (questRayOrigin == null)
+        {
+            questRayOrigin = QuestInteractionUtils.FindControllerRayOrigin(true);
+        }
+
+        if (questRightHaptics == null)
+        {
+            questRightHaptics = QuestInteractionUtils.FindHapticPlayer(true, questRayOrigin);
+        }
+
+        if (questTargetColliders == null || questTargetColliders.Length == 0)
+        {
+            questTargetColliders = GetComponentsInChildren<Collider>(true);
+        }
+
+        if (questFeedback == null)
+        {
+            questFeedback = GetComponent<QuestInteractableFeedback>();
+            if (questFeedback == null)
+            {
+                questFeedback = gameObject.AddComponent<QuestInteractableFeedback>();
+            }
+
+            questFeedback.Configure(questMountOutlineColor, 0.02f);
+        }
+    }
+
+    private bool RayHitsMount()
+    {
+        if (questRayOrigin == null)
+        {
+            return false;
+        }
+
+        Ray ray = new Ray(questRayOrigin.position, questRayOrigin.forward);
+        int hitCount = Physics.RaycastNonAlloc(
+            ray,
+            questRayHits,
+            Mathf.Max(0.1f, questRayDistance),
+            questRayMask,
+            QueryTriggerInteraction.Collide);
+
+        if (hitCount <= 0)
+        {
+            return false;
+        }
+
+        System.Array.Sort(questRayHits, 0, hitCount, RaycastHitDistanceComparer.Instance);
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider hitCollider = questRayHits[i].collider;
+            if (hitCollider == null)
+            {
+                continue;
+            }
+
+            if (IsMountCollider(hitCollider))
+            {
+                return true;
+            }
+
+            if (!hitCollider.isTrigger)
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsMountCollider(Collider hitCollider)
+    {
+        if (hitCollider == null)
+        {
+            return false;
+        }
+
+        if (hitCollider.transform.IsChildOf(transform))
+        {
+            return true;
+        }
+
+        if (questTargetColliders == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < questTargetColliders.Length; i++)
+        {
+            if (questTargetColliders[i] == hitCollider)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsPlayerCloseEnoughForQuestMount()
+    {
+        if (IsPlayerInsideMountZone())
+        {
+            return true;
+        }
+
+        Transform reference = trackedHeadTransform != null ? trackedHeadTransform : (playerRigRoot != null ? playerRigRoot.transform : null);
+        if (reference == null)
+        {
+            CacheRigReferences();
+            reference = trackedHeadTransform != null ? trackedHeadTransform : (playerRigRoot != null ? playerRigRoot.transform : null);
+        }
+
+        if (reference == null)
+        {
+            return false;
+        }
+
+        Vector3 playerPosition = reference.position;
+        Vector3 mountPosition = seatAnchor != null ? seatAnchor.position : transform.position;
+        playerPosition.y = 0f;
+        mountPosition.y = 0f;
+        return Vector3.Distance(playerPosition, mountPosition) <= Mathf.Max(remountDistance, questMountMaxDistance);
+    }
+
+    private void SetQuestHover(bool hover)
+    {
+        if (questHovering == hover)
+        {
+            if (questFeedback != null)
+            {
+                questFeedback.SetHovered(hover, questRightHaptics);
+            }
+
+            return;
+        }
+
+        questHovering = hover;
+        questFeedback?.SetInteractable(hover);
+        questFeedback?.SetHovered(hover, questRightHaptics);
     }
 
     private bool WasPressed(InputActionReference actionReference, Key debugKey)
@@ -1359,5 +1573,17 @@ public class CatRideControllerV2 : MonoBehaviour
         a.y = 0f;
         b.y = 0f;
         return Vector3.Distance(a, b);
+    }
+
+    private sealed class RaycastHitDistanceComparer : System.Collections.IComparer
+    {
+        public static readonly RaycastHitDistanceComparer Instance = new RaycastHitDistanceComparer();
+
+        public int Compare(object x, object y)
+        {
+            RaycastHit a = (RaycastHit)x;
+            RaycastHit b = (RaycastHit)y;
+            return a.distance.CompareTo(b.distance);
+        }
     }
 }
