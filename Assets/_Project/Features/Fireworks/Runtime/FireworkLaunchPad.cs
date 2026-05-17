@@ -27,41 +27,36 @@ namespace WonderfulWorld.Features.Fireworks
         [ContextMenu("Fireworks/Trigger Showcase")]
         public void TriggerShowcase()
         {
-            if (!CanTriggerShowcase())
+            // 1. 如果有原配的 Controller，则执行原有逻辑
+            if (controller != null || GetComponentInChildren<FireworkController>() != null)
             {
-                return;
+                if (ResolveController())
+                {
+                    if (!controller.IsShowcasePlaying || allowRetriggerWhilePlaying)
+                    {
+                        controller.PlaySequence();
+                    }
+                }
             }
 
-            controller.PlaySequence();
+       
         }
 
         public void TriggerShowcaseStep(int stepIndex)
         {
-            if (!CanTriggerManualFirework())
-            {
-                return;
-            }
-
+            if (!CanTriggerManualFirework()) return;
             controller.PlayShowcaseStep(stepIndex);
         }
 
         public void TriggerText(string text)
         {
-            if (!CanTriggerManualFirework())
-            {
-                return;
-            }
-
+            if (!CanTriggerManualFirework()) return;
             controller.LaunchTextFirework(text);
         }
 
         public void TriggerShowcaseText()
         {
-            if (!CanTriggerManualFirework())
-            {
-                return;
-            }
-
+            if (!CanTriggerManualFirework()) return;
             controller.LaunchShowcaseText();
         }
 
@@ -71,15 +66,13 @@ namespace WonderfulWorld.Features.Fireworks
             {
                 controller.StopSequence();
             }
+
+         
         }
 
         private bool CanTriggerShowcase()
         {
-            if (!ResolveController())
-            {
-                return false;
-            }
-
+            if (!ResolveController()) return false;
             return !controller.IsShowcasePlaying || allowRetriggerWhilePlaying;
         }
 
@@ -99,6 +92,8 @@ namespace WonderfulWorld.Features.Fireworks
             {
                 return true;
             }
+
+        
 
             Debug.LogWarning($"{nameof(FireworkLaunchPad)} on {name} has no {nameof(FireworkController)} assigned.", this);
             return false;
