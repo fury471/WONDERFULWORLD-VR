@@ -2,6 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
+using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 public class GrowthSeedZoneDriver : MonoBehaviour
 {
@@ -33,13 +35,18 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     [SerializeField] private float rayDistance = 20f;
     [SerializeField] private float forwardSpawnDistance = 3.5f;
     [SerializeField] private float minSpacingBetweenPlants = 0.75f;
+    [SerializeField] private bool requireTerrainColliderForNewMushrooms = true;
+    [SerializeField] private bool blockWhenPointingAtInteractable = true;
+    [SerializeField] private bool allowForwardFallbackForDebug = false;
 
     [Header("Interaction")]
     [SerializeField] private Transform interactionOrigin;
     [SerializeField] private InputActionProperty leftTrigger;
     [SerializeField] private InputActionProperty rightTrigger;
-    [SerializeField] private bool enableMouseClickFallback = true;
-    [SerializeField] private bool enableKeyboardFallback = true;
+    [SerializeField] private bool rightTriggerOnly = true;
+    [SerializeField] private bool preferRightControllerOrigin = true;
+    [SerializeField] private bool enableMouseClickFallback = false;
+    [SerializeField] private bool enableKeyboardFallback = false;
     [SerializeField] private Key keyboardSeedKey = Key.G;
     [SerializeField] private float chargedHoldSeconds = 0.65f;
 
@@ -93,12 +100,12 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     [SerializeField] private float chargedBurstRadius = 4f;
 
     [Header("Variation")]
-    [SerializeField] private Vector2 randomScaleRange = new Vector2(0.35f, 2.25f);
+    [SerializeField] private Vector2 randomScaleRange = new Vector2(0.16f, 1.05f);
     [SerializeField] private Vector2 randomDurationRange = new Vector2(0.85f, 1.2f);
     [SerializeField] private Vector2 randomWobbleRange = new Vector2(0.8f, 1.25f);
 
     [Header("Existing Mushroom Growth")]
-    [SerializeField] private bool allowCultivateExistingMushrooms = true;
+    [SerializeField] private bool allowCultivateExistingMushrooms = false;
     [SerializeField] private float existingMushroomScaleStep = 0.35f;
     [SerializeField] private int chargedExistingMushroomGrowthSteps = 3;
     [SerializeField] private float existingMushroomMaxScale = 2.4f;
@@ -160,6 +167,15 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         if (interactionOrigin == null && Camera.main != null)
         {
             interactionOrigin = Camera.main.transform;
+        }
+
+        if (preferRightControllerOrigin && !IsRightControllerOrigin(interactionOrigin))
+        {
+            Transform rightOrigin = FindRightControllerOrigin();
+            if (rightOrigin != null)
+            {
+                interactionOrigin = rightOrigin;
+            }
         }
 
         if (mushroomPool == null || mushroomPool.Length == 0)
@@ -262,7 +278,9 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     private void UpdateInputChargeState()
     {
         bool pressed = TryReadSeedRequest(out SeedRequest request);
-        if (pressed)
+        bool validRequest = pressed && IsSeedRequestEligible(request);
+
+        if (validRequest)
         {
             pendingInput.request = request;
             if (!pendingInput.active)
@@ -273,6 +291,13 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             }
 
             UpdateChargeOrb(request, Time.time - pendingInput.startedAt);
+            return;
+        }
+
+        if (pressed)
+        {
+            DestroyChargeOrb();
+            pendingInput = default;
             return;
         }
 
@@ -310,7 +335,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             pressed = true;
         }
 
-        if (leftTrigger.action != null && leftTrigger.action.IsPressed())
+        if (!rightTriggerOnly && leftTrigger.action != null && leftTrigger.action.IsPressed())
         {
             pressed = true;
         }
@@ -328,6 +353,16 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         request.ray = new Ray(interactionOrigin.position, interactionOrigin.forward);
         request.magicOrigin = interactionOrigin.position + interactionOrigin.forward * 0.35f;
         return true;
+    }
+
+    private bool IsSeedRequestEligible(SeedRequest request)
+    {
+        if (request.ray.direction.sqrMagnitude < 0.0001f)
+        {
+            return false;
+        }
+
+        return TryResolveRequestTarget(request.ray, out _, out _);
     }
 
     private void EnsureChargeOrb()
@@ -473,45 +508,71 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         {
             System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 
-            if (allowCultivateExistingMushrooms)
-            {
-                foreach (RaycastHit hit in hits)
-                {
-                    GrowthPlant plant = hit.collider.GetComponentInParent<GrowthPlant>();
-                    if (plant != null && TryFindActiveSlot(plant, out PlantSlot slot) && !slot.retiring)
-                    {
-                        targetPlant = plant;
-                        targetPoint = hit.point;
-                        return true;
-                    }
-                }
-            }
-
             foreach (RaycastHit hit in hits)
             {
-                if (IsIgnoredPlantingSurface(hit.collider))
+                Collider hitCollider = hit.collider;
+                if (IsIgnoredRaycastHit(hitCollider))
                 {
                     continue;
                 }
 
-                if (!IsPointInsideZone(hit.point))
+                if (allowCultivateExistingMushrooms && TryResolveCultivationTarget(hitCollider, hit.point, out targetPoint, out targetPlant))
                 {
-                    continue;
+                    return true;
                 }
 
-                targetPoint = hit.point;
+                if (IsValidPlantingSurface(hitCollider))
+                {
+                    if (!IsPointInsideZone(hit.point))
+                    {
+                        return false;
+                    }
+
+                    targetPoint = hit.point;
+                    return true;
+                }
+
+                if (blockWhenPointingAtInteractable && IsBlockingInteractableHit(hitCollider))
+                {
+                    return false;
+                }
+
+                return false;
+            }
+        }
+
+        if (allowForwardFallbackForDebug)
+        {
+            Vector3 fallbackPoint = ResolveForwardSpawnPoint();
+            if (fallbackPoint != Vector3.positiveInfinity && IsPointInsideZone(fallbackPoint))
+            {
+                targetPoint = fallbackPoint;
                 return true;
             }
         }
 
-        Vector3 fallbackPoint = ResolveForwardSpawnPoint();
-        if (fallbackPoint != Vector3.positiveInfinity && IsPointInsideZone(fallbackPoint))
+        return false;
+    }
+
+    private bool TryResolveCultivationTarget(Collider hitCollider, Vector3 hitPoint, out Vector3 targetPoint, out GrowthPlant targetPlant)
+    {
+        targetPoint = Vector3.positiveInfinity;
+        targetPlant = null;
+
+        if (hitCollider == null)
         {
-            targetPoint = fallbackPoint;
-            return true;
+            return false;
         }
 
-        return false;
+        GrowthPlant plant = hitCollider.GetComponentInParent<GrowthPlant>();
+        if (plant == null || !TryFindActiveSlot(plant, out PlantSlot slot) || slot.retiring)
+        {
+            return false;
+        }
+
+        targetPlant = plant;
+        targetPoint = hitPoint;
+        return true;
     }
 
     private IEnumerator ResolveAfterEarthMagic(Vector3 magicOrigin, Vector3 targetPoint, GrowthPlant targetPlant, bool charged)
@@ -811,7 +872,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
         foreach (RaycastHit hit in hits)
         {
-            if (IsIgnoredPlantingSurface(hit.collider))
+            if (IsIgnoredRaycastHit(hit.collider) || !IsValidPlantingSurface(hit.collider))
             {
                 continue;
             }
@@ -871,7 +932,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
 
             foreach (RaycastHit hit in hits)
             {
-                if (IsIgnoredPlantingSurface(hit.collider))
+                if (IsIgnoredRaycastHit(hit.collider) || !IsValidPlantingSurface(hit.collider))
                 {
                     continue;
                 }
@@ -883,7 +944,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         return Vector3.positiveInfinity;
     }
 
-    private bool IsIgnoredPlantingSurface(Collider candidate)
+    private bool IsIgnoredRaycastHit(Collider candidate)
     {
         if (candidate == null)
         {
@@ -895,17 +956,142 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             return true;
         }
 
-        if (candidate.GetComponentInParent<GrowthPlant>() != null)
-        {
-            return true;
-        }
-
         if (candidate.GetComponentInParent<CharacterController>() != null)
         {
             return true;
         }
 
         return candidate.gameObject.tag == "Player";
+    }
+
+    private bool IsValidPlantingSurface(Collider candidate)
+    {
+        if (candidate == null)
+        {
+            return false;
+        }
+
+        if (!requireTerrainColliderForNewMushrooms)
+        {
+            return !IsBlockingInteractableHit(candidate);
+        }
+
+        return candidate is TerrainCollider || candidate.GetComponent<Terrain>() != null;
+    }
+
+    private bool IsBlockingInteractableHit(Collider candidate)
+    {
+        if (candidate == null)
+        {
+            return false;
+        }
+
+        if (candidate.GetComponentInParent<GrowthPlant>() != null)
+        {
+            return true;
+        }
+
+        if (candidate.GetComponentInParent<XRBaseInteractable>() != null)
+        {
+            return true;
+        }
+
+        Component[] components = candidate.GetComponentsInParent<Component>(true);
+        for (int i = 0; i < components.Length; i++)
+        {
+            Component component = components[i];
+            if (component == null)
+            {
+                continue;
+            }
+
+            string typeName = component.GetType().Name;
+            if (typeName.Contains("InteractionPrompt") ||
+                typeName.Contains("Interactable") ||
+                typeName.Contains("Highlight"))
+            {
+                return true;
+            }
+        }
+
+        Transform current = candidate.transform;
+        while (current != null)
+        {
+            string objectName = current.name;
+            if (objectName.EndsWith("_ToonOutline", System.StringComparison.Ordinal) ||
+                objectName.Contains("Highlight") ||
+                objectName.Contains("InteractionPrompt"))
+            {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
+    }
+
+    private bool IsRightControllerOrigin(Transform candidate)
+    {
+        return candidate != null && candidate.name.Contains("Right Controller");
+    }
+
+    private static Transform FindRightControllerOrigin()
+    {
+        Transform found = FindInScene("Right Controller Stabilized Attach");
+        if (found != null)
+        {
+            return found;
+        }
+
+        found = FindInScene("Right Controller Teleport Stabilized Origin");
+        if (found != null)
+        {
+            return found;
+        }
+
+        return FindInScene("Right Controller");
+    }
+
+    private static Transform FindInScene(string targetName)
+    {
+        Scene activeScene = SceneManager.GetActiveScene();
+        GameObject[] roots = activeScene.GetRootGameObjects();
+
+        for (int i = 0; i < roots.Length; i++)
+        {
+            Transform found = FindChildRecursive(roots[i].transform, targetName);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private static Transform FindChildRecursive(Transform root, string targetName)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        if (root.name == targetName)
+        {
+            return root;
+        }
+
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform found = FindChildRecursive(root.GetChild(i), targetName);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private IEnumerator FlyEarthMagicProjectile(Vector3 start, Vector3 end)

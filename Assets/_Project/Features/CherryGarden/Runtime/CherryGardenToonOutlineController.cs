@@ -17,11 +17,9 @@ public sealed class CherryGardenToonOutlineController : MonoBehaviour
     [Header("Look")]
     [SerializeField] private Color outlineColor = Color.black;
     [SerializeField, Range(0.001f, 0.06f)] private float architectureOutlineWidth = 0.018f;
-    [SerializeField, Range(0.001f, 0.08f)] private float heroTreeOutlineWidth = 0.016f;
     [SerializeField, Range(0.001f, 0.06f)] private float vegetationOutlineWidth = 0.012f;
     [SerializeField, Range(0.001f, 0.06f)] private float propOutlineWidth = 0.015f;
     [SerializeField, Range(0f, 1f)] private float growthVisibilityThreshold = 0.03f;
-    [SerializeField, Min(0f)] private float heroTreeOutlineRevealGrowth = 7.85f;
 
     [Header("Filtering")]
     [SerializeField] private bool skipTransparentMaterials = true;
@@ -159,6 +157,11 @@ public sealed class CherryGardenToonOutlineController : MonoBehaviour
         }
 
         if (sourceRenderer.gameObject.name.EndsWith(OutlineSuffix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (IsHeroCherryTree(sourceRenderer.transform))
         {
             return false;
         }
@@ -323,12 +326,6 @@ public sealed class CherryGardenToonOutlineController : MonoBehaviour
     private float GetOutlineWidth(Transform source)
     {
         string path = GetHierarchyPath(source);
-        if (path.IndexOf("HeroCherryTree", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            path.IndexOf("CherryTree", StringComparison.OrdinalIgnoreCase) >= 0)
-        {
-            return heroTreeOutlineWidth;
-        }
-
         if (path.IndexOf("Vegetation", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             return vegetationOutlineWidth;
@@ -424,6 +421,13 @@ public sealed class CherryGardenToonOutlineController : MonoBehaviour
                materialName.IndexOf("CherryTreeKnot", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
+    private static bool IsHeroCherryTree(Transform source)
+    {
+        string path = GetHierarchyPath(source);
+        return path.IndexOf("HeroCherryTree", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               path.IndexOf("01_HeroCherryTree", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
     private bool IsExcludedByName(Transform source)
     {
         if (excludedNameContains == null || excludedNameContains.Length == 0)
@@ -486,11 +490,6 @@ public sealed class CherryGardenToonOutlineController : MonoBehaviour
 
     private bool IsSourceGrowthVisible(Renderer sourceRenderer)
     {
-        if (IsHeroTreeRenderer(sourceRenderer))
-        {
-            return IsHeroTreeTrunkGrowthComplete(sourceRenderer);
-        }
-
         Material[] materials = sourceRenderer.sharedMaterials;
         bool hasGrowthMaterial = false;
         for (int i = 0; i < materials.Length; i++)
@@ -509,41 +508,6 @@ public sealed class CherryGardenToonOutlineController : MonoBehaviour
         }
 
         return !hasGrowthMaterial;
-    }
-
-    private bool IsHeroTreeTrunkGrowthComplete(Renderer sourceRenderer)
-    {
-        Material[] materials = sourceRenderer.sharedMaterials;
-        bool hasTrunkGrowthMaterial = false;
-        for (int i = 0; i < materials.Length; i++)
-        {
-            Material material = materials[i];
-            if (!IsWoodyTreeMaterial(material != null ? material.name : string.Empty) ||
-                !TryGetGrowthValue(sourceRenderer, i, material, out float growth))
-            {
-                continue;
-            }
-
-            hasTrunkGrowthMaterial = true;
-            if (growth < heroTreeOutlineRevealGrowth)
-            {
-                return false;
-            }
-        }
-
-        return hasTrunkGrowthMaterial;
-    }
-
-    private static bool IsHeroTreeRenderer(Renderer sourceRenderer)
-    {
-        if (sourceRenderer == null)
-        {
-            return false;
-        }
-
-        string path = GetHierarchyPath(sourceRenderer.transform);
-        return path.IndexOf("HeroCherryTree", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               path.IndexOf("GrowthMesh", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private bool TryGetGrowthValue(Renderer sourceRenderer, int materialIndex, Material material, out float growth)
