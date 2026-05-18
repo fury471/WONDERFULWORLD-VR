@@ -315,6 +315,13 @@ public class PetalPollenMagicController : MonoBehaviour
 
         if (isCollecting)
         {
+            // Keep the view-locked charge anchor tracking the player's head while collecting so
+            // the floating sphere stays in front of them even if they turn during the hold.
+            if (useViewLockedQuestChargeAnchor && handAnchor == questChargeAnchor)
+            {
+                PrepareQuestChargeAnchor();
+            }
+
             SpawnCollectionParticles();
         }
 
@@ -669,33 +676,52 @@ public class PetalPollenMagicController : MonoBehaviour
             questChargeAnchor = anchorObject.transform;
         }
 
+        // Resolve a "view" transform with progressively weaker fallbacks so a missing playerHead
+        // reference never leaves the release floating at the source on the player's side.
         Transform view = playerHead;
+        Vector3 viewPosition;
+        Vector3 viewForward;
+
         if (view == null && Camera.main != null)
         {
             view = Camera.main.transform;
+            playerHead = view; // cache so subsequent frames stay cheap
         }
 
-        if (view == null)
+        if (view != null)
         {
-            return;
+            viewPosition = view.position;
+            viewForward = view.forward;
+        }
+        else if (rightRayOrigin != null)
+        {
+            // Last-resort fallback: derive view-front from the controller pose. The player is
+            // typically looking roughly in the same horizontal direction the controller points.
+            viewPosition = rightRayOrigin.position;
+            viewForward = rightRayOrigin.forward;
+        }
+        else
+        {
+            viewPosition = transform.position;
+            viewForward = transform.forward;
         }
 
-        Vector3 forward = Vector3.ProjectOnPlane(view.forward, Vector3.up);
+        Vector3 forward = Vector3.ProjectOnPlane(viewForward, Vector3.up);
         if (forward.sqrMagnitude < 0.001f)
         {
             forward = transform.forward;
         }
 
         forward.Normalize();
-        Vector3 right = Vector3.ProjectOnPlane(view.right, Vector3.up);
+        Vector3 right = Vector3.Cross(Vector3.up, forward);
         if (right.sqrMagnitude < 0.001f)
         {
-            right = Vector3.Cross(Vector3.up, forward);
+            right = Vector3.right;
         }
 
         right.Normalize();
         float anchorDistance = Mathf.Max(0.05f, questChargeViewDistance - Mathf.Max(0f, holdDistance));
-        questChargeAnchor.position = view.position
+        questChargeAnchor.position = viewPosition
             + forward * anchorDistance
             + right * questChargeSideOffset
             + Vector3.up * questChargeViewHeight;
@@ -909,7 +935,9 @@ public class PetalPollenMagicController : MonoBehaviour
     private Vector3 ResolveGalaxyVeilPosition(MagicParticle particle, int index, int count, float t)
     {
         float bloomT = ReleaseBloom01(t);
-        Vector3 center = GetPlayerCenter();
+        // Use the captured showcase center (locked to in-front-of-player at release time).
+        // Falls back to the player chest position if no view frame was available.
+        Vector3 center = hasReleaseShowcasePose ? releaseShowcaseCenter : GetPlayerCenter();
         float radiusImpact = GetChargedReleaseRadiusScale();
         float heightImpact = GetChargedReleaseHeightScale();
         float strand = index % 2 == 0 ? 1f : -1f;
@@ -931,7 +959,9 @@ public class PetalPollenMagicController : MonoBehaviour
     private Vector3 ResolveSpiralBloomPosition(MagicParticle particle, int index, int count, float t)
     {
         float bloomT = ReleaseBloom01(t);
-        Vector3 center = GetHoldCenter();
+        // Anchor the spiral to the captured showcase center so it always blooms in front of the
+        // player, regardless of where the source ball was pressed.
+        Vector3 center = hasReleaseShowcasePose ? releaseShowcaseCenter : GetHoldCenter();
         float radiusImpact = GetChargedReleaseRadiusScale();
         float heightImpact = GetChargedReleaseHeightScale();
         float progress = index / Mathf.Max(1f, count - 1f);

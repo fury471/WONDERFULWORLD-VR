@@ -6,6 +6,9 @@ public sealed class QuestSwingRideController : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private Transform seatAnchor;
+    [Tooltip("Visual swing root that should rotate around the pivot together with the seat (mesh + ropes + seat). " +
+             "If left empty, falls back to the GameObject this component is on.")]
+    [SerializeField] private Transform swingVisualRoot;
     [SerializeField] private Transform playerRigRoot;
     [SerializeField] private Transform playerHead;
     [SerializeField] private GameObject locomotionRoot;
@@ -54,6 +57,9 @@ public sealed class QuestSwingRideController : MonoBehaviour
     private Vector3 pivotPosition;
     private Vector3 swingForward;
     private Vector3 swingRight;
+    private Vector3 restVisualRootPosition;
+    private Quaternion restVisualRootRotation = Quaternion.identity;
+    private bool restVisualRootCached;
 
     private void Awake()
     {
@@ -145,7 +151,10 @@ public sealed class QuestSwingRideController : MonoBehaviour
         }
 
         CacheRigState();
+        // Make sure the visual root is at rest before snapshotting frame data.
+        ResetVisualRootToRest();
         ResolveSwingFrame();
+        CacheVisualRootRest();
         EnsureRideAnchor();
 
         Transform rig = playerRigRoot;
@@ -208,22 +217,84 @@ public sealed class QuestSwingRideController : MonoBehaviour
         angleDegrees = 0f;
         angularVelocity = 0f;
         ApplySwingPose();
+        // Snap visual root back to authored rest pose so successive mounts don't drift.
+        ResetVisualRootToRest();
+    }
+
+    private void ResetVisualRootToRest()
+    {
+        if (!restVisualRootCached)
+        {
+            return;
+        }
+
+        Transform visual = ResolveVisualRoot();
+        if (visual == null)
+        {
+            return;
+        }
+
+        visual.SetPositionAndRotation(restVisualRootPosition, restVisualRootRotation);
     }
 
     private void ApplySwingPose()
     {
+        Quaternion swingRotation = Quaternion.AngleAxis(angleDegrees, swingRight);
+
+        // 1) Rotate the visible swing geometry (mesh + ropes + seat) around the pivot so the
+        //    rider visually swings with the seat. The rideAnchor (and the player parented to it)
+        //    are children of this visual root, so they follow naturally.
+        Transform visual = ResolveVisualRoot();
+        if (visual != null && restVisualRootCached)
+        {
+            Vector3 visualPosition = pivotPosition + swingRotation * (restVisualRootPosition - pivotPosition);
+            Quaternion visualRotation = swingRotation * restVisualRootRotation;
+            visual.SetPositionAndRotation(visualPosition, visualRotation);
+        }
+
         if (rideAnchor == null)
         {
             return;
         }
 
-        Quaternion swingRotation = Quaternion.AngleAxis(angleDegrees, swingRight);
+        // 2) Place the rideAnchor at the (now rotated) seat position. If keepViewUpright is on,
+        //    counter the swing rotation on the anchor so the rider's view stays level even as
+        //    the seat tilts — this prevents motion-sickness.
         Vector3 seatPosition = pivotPosition + swingRotation * (restSeatPosition - pivotPosition);
         Quaternion anchorRotation = keepViewUpright
             ? Quaternion.LookRotation(swingForward, Vector3.up)
             : Quaternion.LookRotation(swingForward, swingRotation * Vector3.up);
 
         rideAnchor.SetPositionAndRotation(seatPosition, anchorRotation);
+    }
+
+    private Transform ResolveVisualRoot()
+    {
+        if (swingVisualRoot != null)
+        {
+            return swingVisualRoot;
+        }
+
+        if (seatAnchor != null && seatAnchor.parent != null && seatAnchor.parent != transform)
+        {
+            return seatAnchor.parent;
+        }
+
+        return transform;
+    }
+
+    private void CacheVisualRootRest()
+    {
+        Transform visual = ResolveVisualRoot();
+        if (visual == null)
+        {
+            restVisualRootCached = false;
+            return;
+        }
+
+        restVisualRootPosition = visual.position;
+        restVisualRootRotation = visual.rotation;
+        restVisualRootCached = true;
     }
 
     private void ResolveSwingFrame()
@@ -491,14 +562,22 @@ public sealed class QuestSwingRideController : MonoBehaviour
 
     private void EnsureRideAnchor()
     {
-        if (rideAnchor != null)
+        Transform parent = ResolveVisualRoot();
+        if (parent == null)
         {
-            return;
+            parent = transform;
         }
 
-        GameObject anchorObject = new GameObject("QuestSwingRideAnchor");
-        anchorObject.transform.SetParent(transform, true);
-        rideAnchor = anchorObject.transform;
+        if (rideAnchor == null)
+        {
+            GameObject anchorObject = new GameObject("QuestSwingRideAnchor");
+            anchorObject.transform.SetParent(parent, true);
+            rideAnchor = anchorObject.transform;
+        }
+        else if (rideAnchor.parent != parent)
+        {
+            rideAnchor.SetParent(parent, true);
+        }
     }
 
     private void EnsureFeedback()

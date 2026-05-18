@@ -350,7 +350,10 @@ namespace WonderfulWorld.Features.Fireworks
 
         private void UpdateAimRay(bool hover, Vector3 endPoint)
         {
-            if (!showQuestAimRay || rightRayOrigin == null)
+            // Single-owner arbitration: if another feature already drew the right-hand ray this
+            // frame, skip drawing ours so the player doesn't see two stacked LineRenderers.
+            bool owned = QuestRayVisualBroker.TryClaim(this, true);
+            if (!showQuestAimRay || rightRayOrigin == null || !owned)
             {
                 if (questAimRay != null)
                 {

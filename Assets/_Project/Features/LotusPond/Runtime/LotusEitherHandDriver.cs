@@ -268,7 +268,10 @@ public class LotusEitherHandDriver : MonoBehaviour
     {
         LineRenderer line = EnsureQuestRay(leftHand);
         Transform origin = leftHand ? leftRayOrigin : rightRayOrigin;
-        if (!showQuestRays || line == null || origin == null)
+        // Yield the ray to whichever feature claimed it first this frame so multiple drivers
+        // don't stack overlapping LineRenderers on the same controller.
+        bool owned = QuestRayVisualBroker.TryClaim(this, !leftHand);
+        if (!showQuestRays || line == null || origin == null || !owned)
         {
             if (line != null)
             {
