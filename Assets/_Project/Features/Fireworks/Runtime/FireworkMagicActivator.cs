@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics;
 
 namespace WonderfulWorld.Features.Fireworks
 {
@@ -18,7 +19,18 @@ namespace WonderfulWorld.Features.Fireworks
         [SerializeField] private InputActionReference interactAction;
         [SerializeField] private LayerMask interactLayers = ~0;
         [SerializeField] private float maxInteractDistance = 36f;
+        [SerializeField, Min(0.05f)] private float recognitionRadius = 1.25f;
         [SerializeField] private QueryTriggerInteraction triggerInteraction = QueryTriggerInteraction.Ignore;
+
+        [Header("Quest Feedback")]
+        [SerializeField] private Transform rightRayOrigin;
+        [SerializeField] private QuestInteractableFeedback interactionFeedback;
+        [SerializeField] private bool showQuestAimRay = false;
+        [SerializeField] private float aimRayWidth = 0.012f;
+        [SerializeField] private Color aimRayIdleColor = new Color(1f, 0.46f, 0.12f, 0.18f);
+        [SerializeField] private Color aimRayHoverColor = new Color(1f, 0.68f, 0.2f, 0.78f);
+        [SerializeField] private bool lockUntilShowcaseEnds = true;
+        [SerializeField] private float fallbackShowcaseLockSeconds = 34f;
 
         [Header("Production Debug")]
         [SerializeField] private bool enableKeyboardMouseDebug = true;
@@ -48,6 +60,11 @@ namespace WonderfulWorld.Features.Fireworks
         private Collider[] deviceColliders;
         private Coroutine activationRoutine;
         private Material runtimeMagicMaterial;
+        private Material runtimeAimRayMaterial;
+        private LineRenderer questAimRay;
+        private HapticImpulsePlayer rightHaptics;
+        private bool isHovering;
+        private bool rightTriggerLastFrame;
 
         private void Awake()
         {
@@ -60,17 +77,31 @@ namespace WonderfulWorld.Features.Fireworks
             {
                 Destroy(runtimeMagicMaterial);
             }
+
+            if (runtimeAimRayMaterial != null)
+            {
+                Destroy(runtimeAimRayMaterial);
+            }
         }
 
         private void Update()
         {
+            CacheQuestReferences();
+            UpdateQuestHover();
+
             if (activationRoutine != null || !WasInteractPressed(out bool useMouseRay))
             {
                 return;
             }
 
-            if (TryBuildInteractionRay(useMouseRay, out Ray ray) && RayHitsThisDevice(ray, out Vector3 launchOrigin))
+            if (!CanInteractNow())
             {
+                return;
+            }
+
+            if (TryBuildInteractionRay(useMouseRay, out Ray ray) && RayHitsThisDevice(ray, out Vector3 launchOrigin, out _))
+            {
+                interactionFeedback?.PulseSelect(rightHaptics);
                 activationRoutine = StartCoroutine(ActivateAfterMagicFlight(launchOrigin));
             }
         }
@@ -99,11 +130,72 @@ namespace WonderfulWorld.Features.Fireworks
             deviceColliders = GetComponentsInChildren<Collider>(true);
         }
 
+        private void CacheQuestReferences()
+        {
+            if (rightRayOrigin == null)
+            {
+                rightRayOrigin = QuestInteractionUtils.FindControllerRayOrigin(true);
+            }
+
+            if (rayOrigin == null && rightRayOrigin != null)
+            {
+                rayOrigin = rightRayOrigin;
+            }
+
+            if (rightHaptics == null)
+            {
+                rightHaptics = QuestInteractionUtils.FindHapticPlayer(true, rightRayOrigin);
+            }
+
+            if (interactionFeedback == null)
+            {
+                interactionFeedback = GetComponent<QuestInteractableFeedback>();
+                if (interactionFeedback == null)
+                {
+                    interactionFeedback = gameObject.AddComponent<QuestInteractableFeedback>();
+                    interactionFeedback.Configure(new Color(1f, 0.58f, 0.16f, 0.72f), 0.02f);
+                }
+            }
+        }
+
+        private void UpdateQuestHover()
+        {
+            bool hover = false;
+            Vector3 endPoint = Vector3.zero;
+            if (rightRayOrigin != null && CanInteractNow())
+            {
+                Ray ray = new Ray(rightRayOrigin.position, rightRayOrigin.forward);
+                hover = RayHitsThisDevice(ray, out _, out endPoint);
+                QuestRayVisualLengthProfile.ReportHover(true, hover, Vector3.Distance(ray.origin, endPoint));
+                if (!hover)
+                {
+                    endPoint = ray.origin + ray.direction.normalized * Mathf.Min(maxInteractDistance, 7f);
+                }
+            }
+
+            if (interactionFeedback != null && hover != isHovering)
+            {
+                interactionFeedback.SetHovered(hover, rightHaptics);
+            }
+
+            isHovering = hover;
+            UpdateAimRay(hover, endPoint);
+        }
+
         private bool WasInteractPressed(out bool useMouseRay)
         {
             useMouseRay = false;
 
             if (interactAction != null && interactAction.action != null && interactAction.action.WasPressedThisFrame())
+            {
+                return true;
+            }
+
+            bool rightTriggerPressed = false;
+            QuestInteractionUtils.TryReadTriggerButton(true, out rightTriggerPressed);
+            bool rightTriggerPressedThisFrame = rightTriggerPressed && !rightTriggerLastFrame;
+            rightTriggerLastFrame = rightTriggerPressed;
+            if (rightTriggerPressedThisFrame)
             {
                 return true;
             }
@@ -130,9 +222,10 @@ namespace WonderfulWorld.Features.Fireworks
                 return true;
             }
 
-            if (rayOrigin != null)
+            Transform controllerOrigin = rightRayOrigin != null ? rightRayOrigin : rayOrigin;
+            if (controllerOrigin != null)
             {
-                ray = new Ray(rayOrigin.position, rayOrigin.forward);
+                ray = new Ray(controllerOrigin.position, controllerOrigin.forward);
                 return true;
             }
 
@@ -155,9 +248,10 @@ namespace WonderfulWorld.Features.Fireworks
             return false;
         }
 
-        private bool RayHitsThisDevice(Ray ray, out Vector3 launchOrigin)
+        private bool RayHitsThisDevice(Ray ray, out Vector3 launchOrigin, out Vector3 targetPoint)
         {
             launchOrigin = ray.origin + ray.direction.normalized * 0.35f;
+            targetPoint = deviceTarget != null ? deviceTarget.position : transform.position;
 
             int hitCount = Physics.RaycastNonAlloc(
                 ray,
@@ -168,16 +262,24 @@ namespace WonderfulWorld.Features.Fireworks
 
             Collider nearestCollider = null;
             float nearestDistance = float.PositiveInfinity;
+            Vector3 nearestPoint = targetPoint;
             for (int i = 0; i < hitCount; i++)
             {
                 if (raycastHits[i].distance < nearestDistance)
                 {
                     nearestDistance = raycastHits[i].distance;
                     nearestCollider = raycastHits[i].collider;
+                    nearestPoint = raycastHits[i].point;
                 }
             }
 
-            return IsOwnCollider(nearestCollider);
+            if (IsOwnCollider(nearestCollider))
+            {
+                targetPoint = nearestPoint;
+                return true;
+            }
+
+            return RayPassesRecognitionRadius(ray, nearestCollider, nearestDistance, out targetPoint);
         }
 
         private bool IsOwnCollider(Collider hitCollider)
@@ -198,6 +300,147 @@ namespace WonderfulWorld.Features.Fireworks
             return hitCollider.transform.IsChildOf(transform);
         }
 
+        private bool RayPassesRecognitionRadius(Ray ray, Collider nearestBlockingCollider, float nearestBlockingDistance, out Vector3 targetPoint)
+        {
+            targetPoint = deviceTarget != null ? deviceTarget.position : transform.position;
+            Vector3 direction = ray.direction.sqrMagnitude > 0.0001f ? ray.direction.normalized : Vector3.forward;
+            Vector3 toTarget = targetPoint - ray.origin;
+            float projectedDistance = Vector3.Dot(toTarget, direction);
+            if (projectedDistance < 0f || projectedDistance > Mathf.Max(0.1f, maxInteractDistance))
+            {
+                return false;
+            }
+
+            if (nearestBlockingCollider != null && nearestBlockingDistance < projectedDistance - Mathf.Max(0.05f, recognitionRadius))
+            {
+                return false;
+            }
+
+            Vector3 closestPointOnRay = ray.origin + direction * projectedDistance;
+            float distanceToRay = Vector3.Distance(targetPoint, closestPointOnRay);
+            return distanceToRay <= Mathf.Max(0.05f, recognitionRadius);
+        }
+
+        private bool CanInteractNow()
+        {
+            if (activationRoutine != null)
+            {
+                return false;
+            }
+
+            if (launchPad == null)
+            {
+                CacheReferences();
+            }
+
+            return launchPad == null || launchPad.CanTriggerShowcaseNow;
+        }
+
+        private void SetInteractableFeedback(bool value)
+        {
+            if (interactionFeedback == null)
+            {
+                return;
+            }
+
+            interactionFeedback.SetHovered(false, rightHaptics, false);
+            interactionFeedback.SetInteractable(value);
+            isHovering = false;
+            UpdateAimRay(false, Vector3.zero);
+        }
+
+        private void UpdateAimRay(bool hover, Vector3 endPoint)
+        {
+            if (!showQuestAimRay || rightRayOrigin == null)
+            {
+                if (questAimRay != null)
+                {
+                    questAimRay.enabled = false;
+                }
+
+                return;
+            }
+
+            // Single-owner arbitration: if another feature already drew the right-hand ray this
+            // frame, skip drawing ours so the player doesn't see two stacked LineRenderers.
+            bool owned = QuestRayVisualBroker.TryClaim(this, true);
+            if (!owned)
+            {
+                if (questAimRay != null)
+                {
+                    questAimRay.enabled = false;
+                }
+
+                return;
+            }
+
+            EnsureAimRay();
+            if (questAimRay == null)
+            {
+                return;
+            }
+
+            questAimRay.enabled = CanInteractNow();
+            if (!questAimRay.enabled)
+            {
+                return;
+            }
+
+            questAimRay.widthMultiplier = Mathf.Max(0.002f, aimRayWidth);
+            Color color = hover ? aimRayHoverColor : aimRayIdleColor;
+            questAimRay.startColor = new Color(color.r, color.g, color.b, color.a * 0.18f);
+            questAimRay.endColor = color;
+            questAimRay.SetPosition(0, rightRayOrigin.position);
+            questAimRay.SetPosition(1, endPoint == Vector3.zero
+                ? rightRayOrigin.position + rightRayOrigin.forward * Mathf.Min(7f, maxInteractDistance)
+                : endPoint);
+        }
+
+        private void EnsureAimRay()
+        {
+            if (questAimRay != null)
+            {
+                return;
+            }
+
+            GameObject rayObject = new GameObject("FireworkQuestAimRay");
+            rayObject.transform.SetParent(transform, false);
+            questAimRay = rayObject.AddComponent<LineRenderer>();
+            questAimRay.useWorldSpace = true;
+            questAimRay.positionCount = 2;
+            questAimRay.numCapVertices = 4;
+            questAimRay.textureMode = LineTextureMode.Stretch;
+            questAimRay.sharedMaterial = GetRuntimeAimRayMaterial();
+        }
+
+        private Material GetRuntimeAimRayMaterial()
+        {
+            if (runtimeAimRayMaterial != null)
+            {
+                return runtimeAimRayMaterial;
+            }
+
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null)
+            {
+                shader = Shader.Find("Sprites/Default");
+            }
+
+            runtimeAimRayMaterial = new Material(shader);
+            runtimeAimRayMaterial.renderQueue = 3050;
+            if (runtimeAimRayMaterial.HasProperty("_Surface"))
+            {
+                runtimeAimRayMaterial.SetFloat("_Surface", 1f);
+            }
+
+            runtimeAimRayMaterial.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            runtimeAimRayMaterial.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
+            runtimeAimRayMaterial.SetFloat("_ZWrite", 0f);
+            runtimeAimRayMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            runtimeAimRayMaterial.EnableKeyword("_ALPHABLEND_ON");
+            return runtimeAimRayMaterial;
+        }
+
         private IEnumerator ActivateAfterMagicFlight(Vector3 launchOrigin)
         {
             if (launchPad == null)
@@ -205,8 +448,10 @@ namespace WonderfulWorld.Features.Fireworks
                 CacheReferences();
             }
 
+            SetInteractableFeedback(false);
             Transform target = deviceTarget != null ? deviceTarget : transform;
             yield return FlyMagicProjectile(launchOrigin, target.position);
+            interactionFeedback?.PulseImpact(rightHaptics);
 
             if (launchDelayAfterArrival > 0f)
             {
@@ -214,7 +459,17 @@ namespace WonderfulWorld.Features.Fireworks
             }
 
             launchPad?.TriggerShowcase();
+            if (lockUntilShowcaseEnds && launchPad != null)
+            {
+                float started = Time.time;
+                while (launchPad.IsShowcasePlaying && Time.time - started < Mathf.Max(0.1f, fallbackShowcaseLockSeconds))
+                {
+                    yield return null;
+                }
+            }
+
             activationRoutine = null;
+            SetInteractableFeedback(true);
 
             if (logDebug)
             {

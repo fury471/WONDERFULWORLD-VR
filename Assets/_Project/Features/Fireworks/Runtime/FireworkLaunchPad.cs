@@ -14,6 +14,21 @@ namespace WonderfulWorld.Features.Fireworks
             controller = GetComponentInChildren<FireworkController>();
         }
 
+        public bool IsShowcasePlaying
+        {
+            get
+            {
+                if (!ResolveController())
+                {
+                    return false;
+                }
+
+                return controller.IsShowcasePlaying;
+            }
+        }
+
+        public bool CanTriggerShowcaseNow => CanTriggerShowcase();
+
         private void Start()
         {
             ResolveController();

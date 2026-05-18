@@ -1,0 +1,554 @@
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
+using UnityEngine.XR.Interaction.Toolkit;
+using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using UnityEngine.XR.Interaction.Toolkit.Interactors;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion.Comfort;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion.Movement;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion.Teleportation;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion.Turning;
+using UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets;
+
+[DefaultExecutionOrder(-100)]
+[DisallowMultipleComponent]
+public sealed class QuestLocomotionComfortProfile : MonoBehaviour
+{
+    private const int DefaultTeleportSurfaceMask = (1 << 0) | (1 << 3);
+    private const int DefaultTeleportRaycastMask = unchecked((int)0x80000009);
+
+    [Header("Controller ownership")]
+    [SerializeField] private ControllerInputActionManager leftController = null;
+    [SerializeField] private ControllerInputActionManager rightController = null;
+
+    [Header("Locomotion providers")]
+    [SerializeField] private TeleportationProvider teleportationProvider = null;
+    [SerializeField] private ContinuousMoveProvider continuousMove = null;
+    [SerializeField] private ContinuousTurnProvider continuousTurn = null;
+    [SerializeField] private SnapTurnProvider snapTurn = null;
+
+    [Header("Teleport rays")]
+    [SerializeField] private XRRayInteractor leftTeleportInteractor = null;
+    [SerializeField] private XRRayInteractor rightTeleportInteractor = null;
+
+    [Header("Input ownership")]
+    [SerializeField] private InputActionReference leftTeleportModeAction = null;
+    [SerializeField] private InputActionReference leftTeleportCancelAction = null;
+    [SerializeField] private InputActionReference leftMoveAction = null;
+    [SerializeField] private InputActionReference leftContinuousTurnAction = null;
+    [SerializeField] private InputActionReference leftSnapTurnAction = null;
+    [SerializeField] private InputActionReference rightTeleportModeAction = null;
+    [SerializeField] private InputActionReference rightTeleportCancelAction = null;
+    [SerializeField] private InputActionReference rightContinuousMoveAction = null;
+    [SerializeField] private InputActionReference rightContinuousTurnAction = null;
+
+    [Header("Teleport surface installation")]
+    [SerializeField] private LayerMask teleportSurfaceMask = DefaultTeleportSurfaceMask;
+    [SerializeField] private LayerMask teleportRaycastMask = DefaultTeleportRaycastMask;
+    [SerializeField] private InteractionLayerMask teleportInteractionLayers = -1;
+    [SerializeField] private bool autoInstallTeleportAreasAtRuntime = true;
+    [SerializeField] private bool ignoreTriggerColliders = true;
+    [SerializeField] private bool ignoreDynamicRigidbodies = true;
+    [SerializeField, Min(0f)] private float minimumSurfaceFootprint = 0.45f;
+    [SerializeField, Range(5f, 60f)] private float maxTeleportSlopeDegrees = 38f;
+
+    [Header("Comfort timings")]
+    [SerializeField, Min(0f)] private float teleportDelayTime = 0.08f;
+    [SerializeField, Range(15f, 60f)] private float snapTurnAmount = 30f;
+    [SerializeField, Min(0.1f)] private float snapTurnDebounceTime = 0.35f;
+    [SerializeField, Min(0f)] private float snapTurnDelayTime = 0.05f;
+
+    [Header("Tunneling vignette")]
+    [SerializeField] private bool configureSceneVignettes = true;
+    [SerializeField, Range(0.2f, 1f)] private float teleportAperture = 0.52f;
+    [SerializeField, Range(0.2f, 1f)] private float turnAperture = 0.58f;
+    [SerializeField, Range(0f, 1f)] private float feathering = 0.30f;
+    [SerializeField, Min(0f)] private float easeInTime = 0.10f;
+    [SerializeField, Min(0f)] private float easeOutTime = 0.20f;
+    [SerializeField, Min(0f)] private float easeOutDelayTime = 0.06f;
+
+    private readonly List<LocomotionVignetteProvider> vignetteProviders = new List<LocomotionVignetteProvider>(3);
+
+    private int lastInstalledTeleportAreaCount;
+
+    public int lastTeleportSurfaceInstallCount => lastInstalledTeleportAreaCount;
+
+    private void Reset()
+    {
+        AutoWireReferences();
+    }
+
+    private void OnValidate()
+    {
+        AutoWireReferences();
+    }
+
+    private void Awake()
+    {
+        ApplyProfile();
+    }
+
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+        ApplyProfile();
+    }
+
+    private void Start()
+    {
+        RefreshTeleportSurfaces();
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    private void LateUpdate()
+    {
+        EnforceInputOwnership();
+    }
+
+    [ContextMenu("Apply Quest Locomotion Comfort Profile")]
+    public void ApplyProfile()
+    {
+        AutoWireReferences();
+        ValidateInputReferences();
+        ConfigureControllerOwnership();
+        ConfigureLocomotionProviders();
+        ConfigureTeleportInteractors();
+
+        if (configureSceneVignettes)
+        {
+            ConfigureTunnelingVignettes();
+        }
+
+        EnforceInputOwnership();
+    }
+
+    [ContextMenu("Refresh Teleport Surfaces")]
+    public void RefreshTeleportSurfaces()
+    {
+        if (!autoInstallTeleportAreasAtRuntime)
+        {
+            return;
+        }
+
+        AutoWireReferences();
+
+        if (teleportationProvider == null)
+        {
+            Debug.LogError("[Locomotion] Cannot install teleport surfaces without a TeleportationProvider.", this);
+            return;
+        }
+
+        var installed = 0;
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+        var colliders = FindObjectsByType<Collider>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+#else
+#pragma warning disable CS0618
+        var colliders = FindObjectsOfType<Collider>(false);
+#pragma warning restore CS0618
+#endif
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            if (TryInstallTeleportArea(colliders[i]))
+            {
+                installed++;
+            }
+        }
+
+        lastInstalledTeleportAreaCount = installed;
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        RefreshTeleportSurfaces();
+    }
+
+    private void AutoWireReferences()
+    {
+        var managers = GetComponentsInChildren<ControllerInputActionManager>(true);
+        for (int i = 0; i < managers.Length; i++)
+        {
+            var manager = managers[i];
+            if (manager == null)
+            {
+                continue;
+            }
+
+            var path = GetHierarchyPath(manager.transform);
+            if (leftController == null && ContainsToken(path, "left"))
+            {
+                leftController = manager;
+            }
+            else if (rightController == null && ContainsToken(path, "right"))
+            {
+                rightController = manager;
+            }
+        }
+
+        if (teleportationProvider == null)
+        {
+            teleportationProvider = GetComponentInChildren<TeleportationProvider>(true);
+        }
+
+        if (continuousMove == null)
+        {
+            continuousMove = GetComponentInChildren<ContinuousMoveProvider>(true);
+        }
+
+        if (continuousTurn == null)
+        {
+            continuousTurn = GetComponentInChildren<ContinuousTurnProvider>(true);
+        }
+
+        if (snapTurn == null)
+        {
+            snapTurn = GetComponentInChildren<SnapTurnProvider>(true);
+        }
+
+        if (leftTeleportInteractor == null || rightTeleportInteractor == null)
+        {
+            var rays = GetComponentsInChildren<XRRayInteractor>(true);
+            for (int i = 0; i < rays.Length; i++)
+            {
+                var ray = rays[i];
+                if (ray == null)
+                {
+                    continue;
+                }
+
+                var path = GetHierarchyPath(ray.transform);
+                if (!ContainsToken(path, "teleport"))
+                {
+                    continue;
+                }
+
+                if (leftTeleportInteractor == null && ContainsToken(path, "left"))
+                {
+                    leftTeleportInteractor = ray;
+                }
+                else if (rightTeleportInteractor == null && ContainsToken(path, "right"))
+                {
+                    rightTeleportInteractor = ray;
+                }
+            }
+        }
+    }
+
+    private void ConfigureControllerOwnership()
+    {
+        if (leftController != null)
+        {
+            leftController.smoothMotionEnabled = false;
+            leftController.smoothTurnEnabled = false;
+        }
+        else
+        {
+            Debug.LogError("[Locomotion] Missing left ControllerInputActionManager.", this);
+        }
+
+        if (rightController != null)
+        {
+            rightController.smoothMotionEnabled = false;
+            rightController.smoothTurnEnabled = false;
+        }
+        else
+        {
+            Debug.LogError("[Locomotion] Missing right ControllerInputActionManager.", this);
+        }
+    }
+
+    private void ValidateInputReferences()
+    {
+        ValidateActionReference(leftTeleportModeAction, "left teleport mode");
+        ValidateActionReference(leftTeleportCancelAction, "left teleport cancel");
+        ValidateActionReference(leftMoveAction, "left continuous move guardrail");
+        ValidateActionReference(leftContinuousTurnAction, "left continuous turn guardrail");
+        ValidateActionReference(leftSnapTurnAction, "left snap turn guardrail");
+        ValidateActionReference(rightTeleportModeAction, "right teleport mode guardrail");
+        ValidateActionReference(rightTeleportCancelAction, "right teleport cancel guardrail");
+        ValidateActionReference(rightContinuousMoveAction, "right continuous move guardrail");
+        ValidateActionReference(rightContinuousTurnAction, "right continuous turn guardrail");
+    }
+
+    private void ConfigureLocomotionProviders()
+    {
+        if (teleportationProvider != null)
+        {
+            teleportationProvider.enabled = true;
+            teleportationProvider.delayTime = teleportDelayTime;
+        }
+        else
+        {
+            Debug.LogError("[Locomotion] Missing TeleportationProvider.", this);
+        }
+
+        if (continuousMove != null)
+        {
+            continuousMove.enabled = false;
+            continuousMove.enableStrafe = false;
+            continuousMove.enableFly = false;
+        }
+        else
+        {
+            Debug.LogError("[Locomotion] Missing ContinuousMoveProvider.", this);
+        }
+
+        if (continuousTurn != null)
+        {
+            continuousTurn.enabled = false;
+            continuousTurn.turnSpeed = 45f;
+            continuousTurn.enableTurnLeftRight = true;
+            continuousTurn.enableTurnAround = false;
+        }
+        else
+        {
+            Debug.LogError("[Locomotion] Missing ContinuousTurnProvider.", this);
+        }
+
+        if (snapTurn != null)
+        {
+            snapTurn.enabled = true;
+            snapTurn.turnAmount = snapTurnAmount;
+            snapTurn.debounceTime = snapTurnDebounceTime;
+            snapTurn.delayTime = snapTurnDelayTime;
+            snapTurn.enableTurnLeftRight = true;
+            snapTurn.enableTurnAround = false;
+        }
+
+        EnforceInputOwnership();
+    }
+
+    private void ConfigureTeleportInteractors()
+    {
+        ConfigureTeleportInteractor(leftTeleportInteractor);
+        ConfigureTeleportInteractor(rightTeleportInteractor);
+    }
+
+    private void ConfigureTeleportInteractor(XRRayInteractor teleportInteractor)
+    {
+        if (teleportInteractor == null)
+        {
+            return;
+        }
+
+        teleportInteractor.raycastMask = teleportRaycastMask;
+        teleportInteractor.raycastTriggerInteraction = QueryTriggerInteraction.Ignore;
+        teleportInteractor.hitDetectionType = XRRayInteractor.HitDetectionType.Raycast;
+    }
+
+    private void EnforceInputOwnership()
+    {
+        SetActionEnabled(leftMoveAction, false);
+        SetActionEnabled(leftContinuousTurnAction, false);
+        SetActionEnabled(leftSnapTurnAction, false);
+        SetActionEnabled(rightTeleportModeAction, false);
+        SetActionEnabled(rightTeleportCancelAction, false);
+        SetActionEnabled(rightContinuousMoveAction, false);
+        SetActionEnabled(rightContinuousTurnAction, false);
+    }
+
+    private bool TryInstallTeleportArea(Collider surfaceCollider)
+    {
+        if (!IsTeleportSurfaceCandidate(surfaceCollider))
+        {
+            return false;
+        }
+
+        var existingTeleportInteractable = surfaceCollider.GetComponent<BaseTeleportationInteractable>();
+        if (existingTeleportInteractable != null)
+        {
+            ConfigureTeleportInteractable(existingTeleportInteractable);
+            return false;
+        }
+
+        if (surfaceCollider.GetComponentInParent<XRBaseInteractable>() != null)
+        {
+            return false;
+        }
+
+        var area = surfaceCollider.gameObject.AddComponent<TeleportationArea>();
+        ConfigureTeleportInteractable(area);
+        return true;
+    }
+
+    private bool IsTeleportSurfaceCandidate(Collider surfaceCollider)
+    {
+        if (surfaceCollider == null || !surfaceCollider.enabled || !surfaceCollider.gameObject.activeInHierarchy)
+        {
+            return false;
+        }
+
+        if (surfaceCollider.transform.IsChildOf(transform))
+        {
+            return false;
+        }
+
+        if (ignoreTriggerColliders && surfaceCollider.isTrigger)
+        {
+            return false;
+        }
+
+        var surfaceLayerMask = 1 << surfaceCollider.gameObject.layer;
+        if ((teleportSurfaceMask.value & surfaceLayerMask) == 0)
+        {
+            return false;
+        }
+
+        if (ignoreDynamicRigidbodies)
+        {
+            var attachedBody = surfaceCollider.attachedRigidbody;
+            if (attachedBody != null && !attachedBody.isKinematic)
+            {
+                return false;
+            }
+        }
+
+        if (minimumSurfaceFootprint > 0f)
+        {
+            var size = surfaceCollider.bounds.size;
+            if (size.x < minimumSurfaceFootprint && size.z < minimumSurfaceFootprint)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void ConfigureTeleportInteractable(BaseTeleportationInteractable teleportInteractable)
+    {
+        if (teleportInteractable == null)
+        {
+            return;
+        }
+
+        teleportInteractable.enabled = true;
+        teleportInteractable.teleportationProvider = teleportationProvider;
+        teleportInteractable.matchOrientation = MatchOrientation.WorldSpaceUp;
+        teleportInteractable.matchDirectionalInput = false;
+        teleportInteractable.teleportTrigger = BaseTeleportationInteractable.TeleportTrigger.OnSelectExited;
+        teleportInteractable.filterSelectionByHitNormal = true;
+        teleportInteractable.upNormalToleranceDegrees = maxTeleportSlopeDegrees;
+        teleportInteractable.interactionLayers = teleportInteractionLayers;
+    }
+
+    private void ConfigureTunnelingVignettes()
+    {
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+        var vignettes = FindObjectsByType<TunnelingVignetteController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+#pragma warning disable CS0618
+        var vignettes = FindObjectsOfType<TunnelingVignetteController>(true);
+#pragma warning restore CS0618
+#endif
+        for (int i = 0; i < vignettes.Length; i++)
+        {
+            var vignette = vignettes[i];
+            if (vignette == null)
+            {
+                continue;
+            }
+
+            vignette.locomotionVignetteProviders.Clear();
+            vignetteProviders.Clear();
+
+            AddVignetteProvider(vignetteProviders, teleportationProvider, teleportAperture, true);
+            AddVignetteProvider(vignetteProviders, snapTurn, turnAperture, true);
+
+            for (int providerIndex = 0; providerIndex < vignetteProviders.Count; providerIndex++)
+            {
+                vignette.locomotionVignetteProviders.Add(vignetteProviders[providerIndex]);
+            }
+        }
+    }
+
+    private void AddVignetteProvider(
+        List<LocomotionVignetteProvider> providers,
+        LocomotionProvider provider,
+        float aperture,
+        bool lockEaseIn)
+    {
+        if (provider == null)
+        {
+            return;
+        }
+
+        var vignetteProvider = new LocomotionVignetteProvider
+        {
+            locomotionProvider = provider,
+            enabled = true,
+            overrideDefaultParameters = true,
+            overrideParameters = new VignetteParameters
+            {
+                apertureSize = aperture,
+                featheringEffect = feathering,
+                easeInTime = easeInTime,
+                easeOutTime = easeOutTime,
+                easeInTimeLock = lockEaseIn,
+                easeOutDelayTime = easeOutDelayTime,
+                vignetteColor = Color.black,
+                vignetteColorBlend = Color.black,
+                apertureVerticalPosition = 0f,
+            },
+        };
+
+        providers.Add(vignetteProvider);
+    }
+
+    private static bool ContainsToken(string value, string token)
+    {
+        return value != null && value.IndexOf(token, System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static string GetHierarchyPath(Transform target)
+    {
+        if (target == null)
+        {
+            return string.Empty;
+        }
+
+        var path = target.name;
+        var parent = target.parent;
+        while (parent != null)
+        {
+            path = parent.name + "/" + path;
+            parent = parent.parent;
+        }
+
+        return path;
+    }
+
+    private static void SetActionEnabled(InputActionReference actionReference, bool enabled)
+    {
+        var action = actionReference != null ? actionReference.action : null;
+        if (action == null)
+        {
+            return;
+        }
+
+        if (enabled)
+        {
+            if (!action.enabled)
+            {
+                action.Enable();
+            }
+        }
+        else if (action.enabled)
+        {
+            action.Disable();
+        }
+    }
+
+    private void ValidateActionReference(InputActionReference actionReference, string actionName)
+    {
+        if (actionReference == null || actionReference.action == null)
+        {
+            Debug.LogError($"[Locomotion] Missing input action reference: {actionName}.", this);
+        }
+    }
+}

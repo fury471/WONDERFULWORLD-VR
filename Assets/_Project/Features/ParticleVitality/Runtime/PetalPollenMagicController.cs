@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics;
 
 [DisallowMultipleComponent]
 public class PetalPollenMagicController : MonoBehaviour
@@ -206,15 +207,6 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private Color secondaryPollenColor = new Color(0.62f, 0.95f, 1f, 1f);
     [SerializeField] private Color galaxyViolet = new Color(0.72f, 0.48f, 1f, 1f);
 
-    [Header("Charge Halo")]
-    [SerializeField] private bool enableChargeHalo = true;
-    [SerializeField] private int chargeHaloParticleCount = 72;
-    [SerializeField] private float chargeHaloRadius = 0.46f;
-    [SerializeField] private float chargeHaloVerticalScale = 0.34f;
-    [SerializeField] private float chargeHaloParticleSize = 0.034f;
-    [Range(0f, 1f)]
-    [SerializeField] private float chargeHaloAlpha = 0.46f;
-
     [Header("Feedback")]
     [SerializeField] private AudioSource magicAudioSource;
     [SerializeField] private AudioClip collectStartClip;
@@ -231,6 +223,50 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private float sourceFocusRadius = 2.4f;
     [SerializeField] private float collectingSourceFocusBoost = 0.35f;
 
+    [Header("Quest Interaction")]
+    [SerializeField] private bool enableQuestControllerInteraction = true;
+    [SerializeField] private Transform rightRayOrigin;
+    [SerializeField] private LayerMask questInteractMask = ~0;
+    [SerializeField] private float questRayDistance = 8f;
+    [SerializeField] private float questNearInteractDistance = 4.2f;
+    [SerializeField] private bool lockQuestInputUntilReleaseComplete = true;
+    [SerializeField] private bool useViewLockedQuestChargeAnchor = true;
+    [Tooltip("Camera-relative distance for the held pollen sphere. This is clamped at runtime so the sphere never sits too close to the player's eyes.")]
+    [SerializeField] private float questChargeViewDistance = 0.85f;
+    [SerializeField] private float questChargeViewHeight = -0.16f;
+    [SerializeField] private float questChargeSideOffset = 0.08f;
+
+    [Header("Charge Sphere View Tracking")]
+    [Tooltip("When true, the charge sphere is driven by the player's camera/HMD frame instead of the controller hand anchor.")]
+    [SerializeField] private bool forceViewFrontChargeAnchorOnBegin = true;
+    [Tooltip("Log one line to the Console the first time the charge anchor view-lock engages, so you can verify in Play mode that the code path is firing.")]
+    [SerializeField] private bool logChargeAnchorOnce = false;
+    [Tooltip("Smoothing time (seconds) for the charge sphere to slide to its new XZ position as the player turns. Higher = lazier follow. Used while the sphere is being held.")]
+    [Range(0.0f, 1.5f)]
+    [SerializeField] private float chargeAnchorPositionSmoothing = 0.18f;
+    [Tooltip("Smoothing time (seconds) for the charge sphere's yaw to track the view direction.")]
+    [Range(0.0f, 1.5f)]
+    [SerializeField] private float chargeAnchorYawSmoothing = 0.22f;
+    [Tooltip("Min planar (XZ) distance between current and target positions before tracking kicks in. Below this threshold the sphere stays put to filter micro head jitter.")]
+    [SerializeField] private float chargeAnchorPositionDeadzone = 0.02f;
+    [Range(0f, 30f)]
+    [SerializeField] private float chargeAnchorYawDeadzoneDegrees = 2f;
+    [SerializeField] private Color questSourceOutlineColor = new Color(1f, 0.72f, 0.34f, 0.66f);
+
+    [Header("Release View Tracking")]
+    [Tooltip("When true, the captured showcase center / pose are continuously realigned to the player's XZ view direction during the release. The visualization will stay in front of the player even if they walk around or turn.")]
+    [SerializeField] private bool liveTrackViewDuringRelease = true;
+    [Tooltip("Smoothing time (seconds) for the showcase center to slide to the new XZ position. Higher = lazier follow.")]
+    [Range(0.0f, 1.5f)]
+    [SerializeField] private float releaseCenterSmoothing = 0.35f;
+    [Tooltip("Smoothing time (seconds) for the showcase rotation to track the new view yaw. Higher = lazier turn.")]
+    [Range(0.0f, 1.5f)]
+    [SerializeField] private float releasePoseSmoothing = 0.45f;
+    [Tooltip("Min XZ distance the player must move (or yaw must turn — see degrees) before tracking applies a correction. Filters out micro head jitter.")]
+    [SerializeField] private float releaseTrackPositionDeadzone = 0.04f;
+    [Range(0f, 30f)]
+    [SerializeField] private float releaseTrackYawDeadzoneDegrees = 3f;
+
     private readonly List<MagicParticle> activeParticles = new List<MagicParticle>();
     private ParticleSystem.Particle[] particleBuffer = new ParticleSystem.Particle[0];
     private ParticleSystem.Particle[] petalBuffer = new ParticleSystem.Particle[0];
@@ -239,6 +275,25 @@ public class PetalPollenMagicController : MonoBehaviour
     private float collectStartTime;
     private float releaseStartTime;
     private float releaseCharge;
+    private Vector3 chargeAnchorPositionVelocity;
+    private float chargeAnchorYawDegrees;
+    private float chargeAnchorYawVelocity;
+    private bool chargeAnchorTracking;
+    private Vector3 questEffectCenter;
+    private Quaternion questEffectPose = Quaternion.identity;
+    private bool hasQuestEffectFrame;
+    private Vector3 releaseShowcaseCenterVelocity;
+    private Vector3 releaseMathRibbonGateVelocity;
+    private Vector3 releaseTornadoCenterVelocity;
+    private Vector3 releaseTornadoGateVelocity;
+    private Vector3 releaseAttractorCenterVelocity;
+    private Vector3 releaseAttractorGateVelocity;
+    private float releaseShowcaseYawDegrees;
+    private float releaseTornadoYawDegrees;
+    private float releaseAttractorYawDegrees;
+    private float releaseShowcaseYawVelocity;
+    private float releaseTornadoYawVelocity;
+    private float releaseAttractorYawVelocity;
     private bool isCollecting;
     private bool releaseActive;
     private PetalPollenReleaseMode activeReleaseMode;
@@ -264,9 +319,21 @@ public class PetalPollenMagicController : MonoBehaviour
     private float releaseLightPeakIntensity;
     private float releaseLightPeakRange;
     private bool releaseLightActive;
+    private readonly RaycastHit[] questRayHits = new RaycastHit[12];
+    private Transform authoredHandAnchor;
+    private Transform questChargeAnchor;
+    private PetalPollenSource hoveredQuestSource;
+    private PetalPollenSource pressedQuestSource;
+    private QuestInteractableFeedback hoveredQuestFeedback;
+    private HapticImpulsePlayer rightHaptics;
+    private bool questTriggerLastFrame;
+    private bool questCollectActive;
+    private bool questReleaseLockActive;
+    private bool useViewFacingQuestShowcasePose;
 
     private void Awake()
     {
+        authoredHandAnchor = handAnchor;
         EnsureParticleOutput();
         RefreshSourcesIfNeeded();
     }
@@ -283,15 +350,32 @@ public class PetalPollenMagicController : MonoBehaviour
 
     private void Update()
     {
+        CacheQuestReferences();
+        UpdateQuestHover();
         UpdateInput();
         UpdateSourceFocusFeedback();
 
         if (isCollecting)
         {
+            // Keep the view-locked charge anchor tracking the player's head while collecting so
+            // the floating sphere stays in front of them even if they turn during the hold.
+            if (useViewLockedQuestChargeAnchor && handAnchor == questChargeAnchor)
+            {
+                PrepareQuestChargeAnchor();
+            }
+
             SpawnCollectionParticles();
         }
 
+        // Continuously realign the showcase pose to the player's view direction so the release
+        // animation stays in front of them as they walk around or turn during the spectacle.
+        if (releaseActive)
+        {
+            TrackReleaseViewLive();
+        }
+
         UpdateMagicParticles();
+        UpdateQuestReleaseLock();
         UpdateReleaseLightFeedback();
         RenderParticles();
     }
@@ -301,6 +385,11 @@ public class PetalPollenMagicController : MonoBehaviour
         if (handAnchor == null)
         {
             Debug.LogWarning("[PetalPollenMagic] Assign a hand anchor before collecting.", this);
+            return;
+        }
+
+        if (!CanBeginCollect())
+        {
             return;
         }
 
@@ -314,8 +403,18 @@ public class PetalPollenMagicController : MonoBehaviour
         isCollecting = true;
         releaseActive = false;
         hasReleaseShowcasePose = false;
+        // Reset the smooth-tracking state so the charge sphere snaps cleanly into place at the
+        // first frame of this new collect and only starts lazy-following afterwards.
+        chargeAnchorTracking = false;
+        hasQuestEffectFrame = false;
         collectStartTime = Time.time;
         spawnAccumulator = 0f;
+
+        if (forceViewFrontChargeAnchorOnBegin && useViewLockedQuestChargeAnchor)
+        {
+            PrepareQuestChargeAnchor();
+        }
+
         PlayMagicClip(collectStartClip, collectStartVolume);
     }
 
@@ -332,13 +431,18 @@ public class PetalPollenMagicController : MonoBehaviour
         float holdSeconds = Time.time - collectStartTime;
         releaseCharge = Mathf.Clamp01(holdSeconds / Mathf.Max(0.01f, chargedHoldSeconds));
         activeReleaseMode = randomizeReleaseMode ? PickReleaseMode(holdSeconds) : fixedReleaseMode;
-        CaptureReleaseShowcasePose();
+        if (useViewLockedQuestChargeAnchor)
+        {
+            PrepareQuestChargeAnchor();
+        }
+
+        Vector3 center = GetHoldCenter();
+        releaseOriginCenter = center;
+        CaptureReleaseShowcasePose(center);
         PrepareAttractorSamples(activeReleaseMode, Mathf.Max(activeParticles.Count, GetReleaseDensitySampleCount(activeReleaseMode)));
         PlayMagicClip(holdSeconds >= chargedHoldSeconds && chargedReleaseClip != null ? chargedReleaseClip : releaseClip, releaseVolume);
         BeginReleaseLightFeedback(holdSeconds >= chargedHoldSeconds);
 
-        Vector3 center = GetHoldCenter();
-        releaseOriginCenter = center;
         int releaseCount = Mathf.Max(1, activeParticles.Count - 1);
         for (int i = 0; i < activeParticles.Count; i++)
         {
@@ -382,10 +486,21 @@ public class PetalPollenMagicController : MonoBehaviour
         }
 
         releaseLightActive = false;
+        questReleaseLockActive = false;
+        questCollectActive = false;
+        pressedQuestSource = null;
+        useViewFacingQuestShowcasePose = false;
+        hasQuestEffectFrame = false;
+        RestoreAuthoredHandAnchor();
     }
 
     private void UpdateInput()
     {
+        if (UpdateQuestInput())
+        {
+            return;
+        }
+
         InputAction action = collectAction != null ? collectAction.action : null;
         bool pressed = action != null && action.WasPressedThisFrame();
         bool released = action != null && action.WasReleasedThisFrame();
@@ -404,6 +519,409 @@ public class PetalPollenMagicController : MonoBehaviour
         if (released)
         {
             Release();
+        }
+    }
+
+    private void CacheQuestReferences()
+    {
+        if (!enableQuestControllerInteraction)
+        {
+            return;
+        }
+
+        if (rightRayOrigin == null)
+        {
+            rightRayOrigin = QuestInteractionUtils.FindControllerRayOrigin(true);
+        }
+
+        if (rightHaptics == null)
+        {
+            rightHaptics = QuestInteractionUtils.FindHapticPlayer(true, rightRayOrigin);
+        }
+    }
+
+    private void UpdateQuestHover()
+    {
+        if (!enableQuestControllerInteraction || !CanShowQuestHover() || rightRayOrigin == null)
+        {
+            ClearQuestHover();
+            return;
+        }
+
+        TryResolveQuestSource(new Ray(rightRayOrigin.position, rightRayOrigin.forward), out PetalPollenSource source);
+        QuestRayVisualLengthProfile.ReportHover(
+            true,
+            source != null,
+            source != null ? Vector3.Distance(rightRayOrigin.position, source.transform.position) : questRayDistance);
+        if (source == hoveredQuestSource)
+        {
+            if (hoveredQuestFeedback != null && source != null)
+            {
+                hoveredQuestFeedback.SetHovered(true, rightHaptics);
+                source.SetInteractionFocus(1f);
+            }
+
+            return;
+        }
+
+        ClearQuestHover();
+        hoveredQuestSource = source;
+        if (hoveredQuestSource == null)
+        {
+            return;
+        }
+
+        hoveredQuestFeedback = EnsureQuestFeedback(hoveredQuestSource);
+        hoveredQuestFeedback?.SetHovered(true, rightHaptics);
+        hoveredQuestSource.SetInteractionFocus(1f);
+    }
+
+    private bool UpdateQuestInput()
+    {
+        if (!enableQuestControllerInteraction)
+        {
+            return false;
+        }
+
+        bool triggerPressed;
+        QuestInteractionUtils.TryReadTriggerButton(true, out triggerPressed);
+        bool pressedThisFrame = triggerPressed && !questTriggerLastFrame;
+        bool releasedThisFrame = !triggerPressed && questTriggerLastFrame;
+        questTriggerLastFrame = triggerPressed;
+
+        if (pressedThisFrame)
+        {
+            if (!CanStartQuestCollect(hoveredQuestSource))
+            {
+                return true;
+            }
+
+            pressedQuestSource = hoveredQuestSource;
+            BeginCollect();
+            questCollectActive = isCollecting;
+            return true;
+        }
+
+        if (releasedThisFrame && questCollectActive)
+        {
+            Release();
+            questCollectActive = false;
+            if (lockQuestInputUntilReleaseComplete)
+            {
+                questReleaseLockActive = true;
+                ClearQuestHover();
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryResolveQuestSource(Ray ray, out PetalPollenSource source)
+    {
+        source = null;
+        int hitCount = Physics.RaycastNonAlloc(
+            ray,
+            questRayHits,
+            Mathf.Max(0.1f, questRayDistance),
+            questInteractMask,
+            QueryTriggerInteraction.Collide);
+
+        if (hitCount <= 0)
+        {
+            return false;
+        }
+
+        System.Array.Sort(questRayHits, 0, hitCount, RaycastHitDistanceComparer.Instance);
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider hitCollider = questRayHits[i].collider;
+            if (hitCollider == null)
+            {
+                continue;
+            }
+
+            PetalPollenSource hitSource = hitCollider.GetComponentInParent<PetalPollenSource>();
+            if (hitSource == null)
+            {
+                return false;
+            }
+
+            if (!IsQuestSourceNearEnough(hitSource))
+            {
+                return false;
+            }
+
+            source = hitSource;
+            return true;
+        }
+
+        return false;
+    }
+
+    private QuestInteractableFeedback EnsureQuestFeedback(PetalPollenSource source)
+    {
+        if (source == null)
+        {
+            return null;
+        }
+
+        QuestInteractableFeedback feedback = source.GetComponent<QuestInteractableFeedback>();
+        if (feedback == null)
+        {
+            feedback = source.gameObject.AddComponent<QuestInteractableFeedback>();
+        }
+
+        feedback.Configure(questSourceOutlineColor, 0.035f);
+        feedback.SetInteractable(CanStartQuestCollect(source));
+        return feedback;
+    }
+
+    private void ClearQuestHover()
+    {
+        if (hoveredQuestFeedback != null)
+        {
+            hoveredQuestFeedback.SetHovered(false, rightHaptics, false);
+        }
+
+        hoveredQuestFeedback = null;
+        hoveredQuestSource = null;
+    }
+
+    private bool CanShowQuestHover()
+    {
+        return !isCollecting && !releaseActive && activeParticles.Count == 0 && !questReleaseLockActive;
+    }
+
+    private bool CanStartQuestCollect(PetalPollenSource source)
+    {
+        return source != null && CanBeginCollect() && IsQuestSourceNearEnough(source);
+    }
+
+    private bool CanBeginCollect()
+    {
+        if (isCollecting)
+        {
+            return false;
+        }
+
+        if (lockQuestInputUntilReleaseComplete && (releaseActive || activeParticles.Count > 0 || questReleaseLockActive))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool IsQuestSourceNearEnough(PetalPollenSource source)
+    {
+        if (source == null)
+        {
+            return false;
+        }
+
+        Transform reference = playerHead != null ? playerHead : rightRayOrigin;
+        if (reference == null)
+        {
+            Camera mainCamera = Camera.main;
+            reference = mainCamera != null ? mainCamera.transform : transform;
+        }
+
+        return Vector3.Distance(reference.position, source.transform.position) <= Mathf.Max(0.1f, questNearInteractDistance);
+    }
+
+    private void PrepareQuestChargeAnchor()
+    {
+        if (!useViewLockedQuestChargeAnchor)
+        {
+            return;
+        }
+
+        EnsureQuestChargeAnchor();
+        if (!TryResolveQuestDisplayFrame(
+                ResolveSafeChargeViewDistance(),
+                ResolveSafeChargeViewHeight(),
+                ResolveSafeChargeSideOffset(),
+                out Vector3 holdCenter,
+                out Quaternion pose))
+        {
+            return;
+        }
+
+        Vector3 forward = pose * Vector3.forward;
+        Vector3 anchorPosition = holdCenter - forward * Mathf.Max(0f, holdDistance);
+        DriveChargeAnchorSmoothly(anchorPosition, pose);
+        questEffectPose = questChargeAnchor.rotation;
+        questEffectCenter = questChargeAnchor.position + questEffectPose * Vector3.forward * Mathf.Max(0f, holdDistance);
+        hasQuestEffectFrame = true;
+        useViewFacingQuestShowcasePose = true;
+        handAnchor = questChargeAnchor;
+        LogChargeAnchorEngagedOnce("camera display frame");
+    }
+
+    private bool didLogChargeAnchor;
+
+    private void LogChargeAnchorEngagedOnce(string pathLabel)
+    {
+        if (!logChargeAnchorOnce || didLogChargeAnchor)
+        {
+            return;
+        }
+
+        didLogChargeAnchor = true;
+        Debug.Log($"[PetalPollenMagic] Charge anchor view-lock engaged ({pathLabel}). handAnchor='{handAnchor?.name}', playerHead='{playerHead?.name}', anchorPos={questChargeAnchor?.position}.", this);
+    }
+
+    /// <summary>
+    /// Smoothly slides the charge anchor toward the requested ideal pose so the held sphere
+    /// follows the player's view direction with a gentle lazy-follow rather than snapping to
+    /// the head every frame. Position smoothing uses a yaw-only XZ deadzone so micro head
+    /// jitter doesn't make the sphere quiver; vertical motion uses the same SmoothDamp so it
+    /// settles naturally.
+    /// On the first frame after a fresh trigger press we snap into position (no lag) and start
+    /// tracking from there.
+    /// </summary>
+    private void DriveChargeAnchorSmoothly(Vector3 targetPosition, Quaternion targetRotation)
+    {
+        if (questChargeAnchor == null)
+        {
+            return;
+        }
+
+        float targetYaw = targetRotation.eulerAngles.y;
+
+        if (!chargeAnchorTracking)
+        {
+            // First frame after press: snap so the sphere appears in the right spot instantly.
+            questChargeAnchor.SetPositionAndRotation(targetPosition, Quaternion.Euler(0f, targetYaw, 0f));
+            chargeAnchorYawDegrees = targetYaw;
+            chargeAnchorPositionVelocity = Vector3.zero;
+            chargeAnchorYawVelocity = 0f;
+            chargeAnchorTracking = true;
+            return;
+        }
+
+        Vector3 current = questChargeAnchor.position;
+
+        // Planar (XZ) deadzone: small head movements should leave the sphere put.
+        float planarDelta = Vector3.Distance(
+            new Vector3(current.x, 0f, current.z),
+            new Vector3(targetPosition.x, 0f, targetPosition.z));
+        bool positionMoves = planarDelta >= Mathf.Max(0f, chargeAnchorPositionDeadzone);
+
+        if (positionMoves)
+        {
+            float positionSmoothing = Mathf.Max(0.001f, chargeAnchorPositionSmoothing);
+            current = Vector3.SmoothDamp(current, targetPosition, ref chargeAnchorPositionVelocity, positionSmoothing, Mathf.Infinity, Time.deltaTime);
+        }
+        else
+        {
+            chargeAnchorPositionVelocity = Vector3.zero;
+            // Still allow vertical settle so the sphere lands at the correct height even when
+            // the player is standing still.
+            current.y = Mathf.SmoothDamp(current.y, targetPosition.y, ref chargeAnchorPositionVelocity.y, Mathf.Max(0.001f, chargeAnchorPositionSmoothing), Mathf.Infinity, Time.deltaTime);
+        }
+
+        // Yaw deadzone: filter micro head twists.
+        float yawDelta = Mathf.DeltaAngle(chargeAnchorYawDegrees, targetYaw);
+        if (Mathf.Abs(yawDelta) >= Mathf.Max(0f, chargeAnchorYawDeadzoneDegrees))
+        {
+            float yawSmoothing = Mathf.Max(0.001f, chargeAnchorYawSmoothing);
+            chargeAnchorYawDegrees = Mathf.SmoothDampAngle(chargeAnchorYawDegrees, targetYaw, ref chargeAnchorYawVelocity, yawSmoothing, Mathf.Infinity, Time.deltaTime);
+        }
+        else
+        {
+            chargeAnchorYawVelocity = 0f;
+        }
+
+        questChargeAnchor.SetPositionAndRotation(current, Quaternion.Euler(0f, chargeAnchorYawDegrees, 0f));
+    }
+
+    private void EnsureQuestChargeAnchor()
+    {
+        if (questChargeAnchor != null)
+        {
+            return;
+        }
+
+        GameObject anchorObject = new GameObject("QuestPetalPollenChargeAnchor");
+        anchorObject.transform.SetParent(transform, false);
+        questChargeAnchor = anchorObject.transform;
+    }
+
+    private float ResolveSafeChargeViewDistance()
+    {
+        return Mathf.Clamp(questChargeViewDistance, 1.0f, 1.45f);
+    }
+
+    private float ResolveSafeChargeViewHeight()
+    {
+        return Mathf.Clamp(questChargeViewHeight, -0.28f, 0.12f);
+    }
+
+    private float ResolveSafeChargeSideOffset()
+    {
+        return Mathf.Clamp(questChargeSideOffset, -0.35f, 0.35f);
+    }
+
+    private bool TryResolveQuestDisplayFrame(float distance, float height, float sideOffset, out Vector3 center, out Quaternion pose)
+    {
+        center = Vector3.zero;
+        pose = Quaternion.identity;
+        if (!TryResolveViewFrame(out Vector3 viewPosition, out Vector3 viewForward, out Vector3 viewRight))
+        {
+            return false;
+        }
+
+        float safeDistance = Mathf.Max(0.95f, distance);
+        float safeSide = Mathf.Clamp(sideOffset, -0.65f, 0.65f);
+        center = viewPosition
+            + viewForward * safeDistance
+            + viewRight * safeSide
+            + Vector3.up * height;
+        pose = Quaternion.LookRotation(viewForward, Vector3.up);
+        return true;
+    }
+
+    private void RestoreAuthoredHandAnchor()
+    {
+        if (authoredHandAnchor != null)
+        {
+            handAnchor = authoredHandAnchor;
+        }
+
+        // Make sure the next collect re-snaps cleanly instead of lerping from a stale position.
+        chargeAnchorTracking = false;
+        hasQuestEffectFrame = false;
+    }
+
+    private void UpdateQuestReleaseLock()
+    {
+        if (!questReleaseLockActive)
+        {
+            return;
+        }
+
+        if (isCollecting || releaseActive || activeParticles.Count > 0)
+        {
+            return;
+        }
+
+        questReleaseLockActive = false;
+        pressedQuestSource = null;
+        RestoreAuthoredHandAnchor();
+    }
+
+    private sealed class RaycastHitDistanceComparer : System.Collections.IComparer
+    {
+        public static readonly RaycastHitDistanceComparer Instance = new RaycastHitDistanceComparer();
+
+        public int Compare(object x, object y)
+        {
+            RaycastHit a = (RaycastHit)x;
+            RaycastHit b = (RaycastHit)y;
+            return a.distance.CompareTo(b.distance);
         }
     }
 
@@ -576,7 +1094,9 @@ public class PetalPollenMagicController : MonoBehaviour
     private Vector3 ResolveGalaxyVeilPosition(MagicParticle particle, int index, int count, float t)
     {
         float bloomT = ReleaseBloom01(t);
-        Vector3 center = GetPlayerCenter();
+        // Use the captured showcase center (locked to in-front-of-player at release time).
+        // Falls back to the player chest position if no view frame was available.
+        Vector3 center = hasReleaseShowcasePose ? releaseShowcaseCenter : GetPlayerCenter();
         float radiusImpact = GetChargedReleaseRadiusScale();
         float heightImpact = GetChargedReleaseHeightScale();
         float strand = index % 2 == 0 ? 1f : -1f;
@@ -598,7 +1118,9 @@ public class PetalPollenMagicController : MonoBehaviour
     private Vector3 ResolveSpiralBloomPosition(MagicParticle particle, int index, int count, float t)
     {
         float bloomT = ReleaseBloom01(t);
-        Vector3 center = GetHoldCenter();
+        // Anchor the spiral to the captured showcase center so it always blooms in front of the
+        // player, regardless of where the source ball was pressed.
+        Vector3 center = hasReleaseShowcasePose ? releaseShowcaseCenter : GetHoldCenter();
         float radiusImpact = GetChargedReleaseRadiusScale();
         float heightImpact = GetChargedReleaseHeightScale();
         float progress = index / Mathf.Max(1f, count - 1f);
@@ -1087,6 +1609,11 @@ public class PetalPollenMagicController : MonoBehaviour
     {
         RefreshSourcesIfNeeded();
 
+        if (pressedQuestSource != null && sources.Contains(pressedQuestSource) && IsQuestSourceNearEnough(pressedQuestSource))
+        {
+            return pressedQuestSource;
+        }
+
         PetalPollenSource best = null;
         float bestDistance = float.MaxValue;
         Vector3 handPosition = handAnchor != null ? handAnchor.position : transform.position;
@@ -1134,6 +1661,11 @@ public class PetalPollenMagicController : MonoBehaviour
             float distance = Vector3.Distance(handPosition, source.transform.position);
             if (distance > radius)
             {
+                if (source == pressedQuestSource && isCollecting)
+                {
+                    source.SetInteractionFocus(Mathf.Clamp01(collectingSourceFocusBoost));
+                }
+
                 continue;
             }
 
@@ -1164,7 +1696,7 @@ public class PetalPollenMagicController : MonoBehaviour
         }
 
         sources.Clear();
-        PetalPollenSource[] discovered = FindObjectsOfType<PetalPollenSource>(true);
+        PetalPollenSource[] discovered = FindObjectsByType<PetalPollenSource>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         sources.AddRange(discovered);
     }
 
@@ -1206,7 +1738,7 @@ public class PetalPollenMagicController : MonoBehaviour
         }
 
         EnsureReleaseLight();
-        releaseLight.transform.position = GetHoldCenter();
+        releaseLight.transform.position = releaseOriginCenter != Vector3.zero ? releaseOriginCenter : GetHoldCenter();
         releaseLight.color = releaseLightColor;
         releaseLightPeakRange = releaseLightRange * (charged ? 1.25f : 1f);
         releaseLightPeakIntensity = releaseLightIntensity * (charged ? 1.35f : 1f);
@@ -1228,7 +1760,8 @@ public class PetalPollenMagicController : MonoBehaviour
         float duration = Mathf.Max(0.05f, releaseLightDuration);
         float t = Mathf.Clamp01(releaseLightAge / duration);
         float fade = 1f - Smoother01(t);
-        releaseLight.transform.position = Vector3.Lerp(releaseLight.transform.position, GetHoldCenter(), Time.deltaTime * 10f);
+        Vector3 lightTarget = releaseOriginCenter != Vector3.zero ? releaseOriginCenter : GetHoldCenter();
+        releaseLight.transform.position = Vector3.Lerp(releaseLight.transform.position, lightTarget, Time.deltaTime * 10f);
         releaseLight.intensity = releaseLightPeakIntensity * fade;
         releaseLight.range = releaseLightPeakRange * Mathf.Lerp(1.1f, 0.55f, t);
 
@@ -1327,12 +1860,11 @@ public class PetalPollenMagicController : MonoBehaviour
             }
         }
 
-        int chargeHaloCount = GetChargeHaloParticleCount();
         int releaseShockwaveCount = GetReleaseShockwaveParticleCount();
         int releaseDensityCount = GetReleaseDensityParticleCount();
         int releaseAfterglowCount = GetReleaseAfterglowParticleCount();
 
-        int totalPollenCount = pollenCount + chargeHaloCount + releaseShockwaveCount + releaseDensityCount + releaseAfterglowCount;
+        int totalPollenCount = pollenCount + releaseShockwaveCount + releaseDensityCount + releaseAfterglowCount;
         int totalPetalCount = petalCount;
 
         EnsureBufferSize(totalPollenCount);
@@ -1370,12 +1902,6 @@ public class PetalPollenMagicController : MonoBehaviour
                 particleBuffer[pollenIndex] = particle;
                 pollenIndex++;
             }
-        }
-
-        for (int i = 0; i < chargeHaloCount; i++)
-        {
-            particleBuffer[pollenIndex] = BuildChargeHaloParticle(i, chargeHaloCount);
-            pollenIndex++;
         }
 
         for (int i = 0; i < releaseShockwaveCount; i++)
@@ -1423,65 +1949,6 @@ public class PetalPollenMagicController : MonoBehaviour
 
             petalOutput.SetParticles(petalBuffer, totalPetalCount);
         }
-    }
-
-    private int GetChargeHaloParticleCount()
-    {
-        if (!enableChargeHalo || !isCollecting)
-        {
-            return 0;
-        }
-
-        float charge = GetCharge01();
-        if (charge <= 0.02f)
-        {
-            return 0;
-        }
-
-        int budgetedCount = ApplyEffectParticleBudget(chargeHaloParticleCount);
-        return Mathf.Clamp(Mathf.CeilToInt(budgetedCount * Smoother01(charge)), 0, budgetedCount);
-    }
-
-    private ParticleSystem.Particle BuildChargeHaloParticle(int index, int count)
-    {
-        float charge = GetCharge01();
-        float normalized = index / Mathf.Max(1f, count);
-        float ring = index % 2 == 0 ? 0f : 1f;
-        float angle = normalized * Mathf.PI * 2f + Time.time * Mathf.Lerp(0.7f, 2.8f, charge) * (ring == 0f ? 1f : -1.25f);
-        float wobble = Mathf.Sin(Time.time * 3.1f + index * 0.73f) * 0.035f;
-
-        Vector3 forward = playerHead != null ? playerHead.forward : (handAnchor != null ? handAnchor.forward : transform.forward);
-        forward.y = 0f;
-        if (forward.sqrMagnitude < 0.001f)
-        {
-            forward = transform.forward;
-        }
-
-        forward.Normalize();
-        Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
-        Vector3 up = Vector3.up;
-
-        float radius = chargeHaloRadius * Mathf.Lerp(0.72f, 1.18f, Smoother01(charge));
-        float verticalScale = chargeHaloVerticalScale * Mathf.Lerp(0.75f, 1.1f, charge);
-        Vector3 center = GetHoldCenter();
-        Vector3 ringOffset = right * (Mathf.Cos(angle) * radius)
-            + up * (Mathf.Sin(angle) * radius * verticalScale)
-            + forward * (Mathf.Sin(angle * 1.7f + ring * 2.1f) * (0.055f + wobble));
-
-        Color color = Color.Lerp(pollenTrailColor, galaxyViolet, 0.35f + charge * 0.35f);
-        color.a = chargeHaloAlpha * Mathf.Lerp(0.45f, 1f, charge) * (0.74f + Mathf.Sin(angle * 2f + Time.time * 4.2f) * 0.26f);
-
-        return new ParticleSystem.Particle
-        {
-            position = center + ringOffset,
-            velocity = Vector3.zero,
-            startLifetime = 1f,
-            remainingLifetime = 1f,
-            startColor = color,
-            startSize = chargeHaloParticleSize * Mathf.Lerp(0.65f, 1.15f, charge),
-            randomSeed = (uint)Mathf.Max(1, index + 9137),
-            rotation3D = Vector3.zero
-        };
     }
 
     private int GetReleaseShockwaveParticleCount()
@@ -1723,7 +2190,7 @@ public class PetalPollenMagicController : MonoBehaviour
         float progress = index / Mathf.Max(1f, count - 1f);
         float angle = progress * Mathf.PI * 2f * 3.4f + Time.time * 0.7f + seed;
         float radius = galaxyRadius * GetChargedReleaseRadiusScale() * Mathf.Lerp(0.2f, 1f, Smoother01(showT));
-        Vector3 center = GetPlayerCenter();
+        Vector3 center = hasReleaseShowcasePose ? releaseShowcaseCenter : GetPlayerCenter();
         return center + new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle * 1.7f) * galaxyHeight, Mathf.Sin(angle) * radius);
     }
 
@@ -1745,7 +2212,7 @@ public class PetalPollenMagicController : MonoBehaviour
         float radius = releaseAfterglowRadius * GetChargedReleaseRadiusScale() * Mathf.Lerp(0.45f, 1f, ring);
         float height = Mathf.Lerp(-0.18f, releaseAfterglowHeight * GetChargedReleaseHeightScale(), Deterministic01(seed * 0.37f));
 
-        Vector3 center = GetPlayerCenter();
+        Vector3 center = hasReleaseShowcasePose ? releaseShowcaseCenter : GetPlayerCenter();
         Vector3 position = center
             + new Vector3(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius)
             + ResolveSoftJitter(seed, Time.time, Mathf.Lerp(0.035f, 0.11f, afterT));
@@ -1967,6 +2434,11 @@ public class PetalPollenMagicController : MonoBehaviour
 
     private Vector3 GetHoldCenter()
     {
+        if (useViewLockedQuestChargeAnchor && hasQuestEffectFrame && handAnchor == questChargeAnchor)
+        {
+            return questEffectCenter;
+        }
+
         Transform anchor = handAnchor != null ? handAnchor : transform;
         return anchor.position + anchor.forward * holdDistance;
     }
@@ -2190,16 +2662,10 @@ public class PetalPollenMagicController : MonoBehaviour
 
         float safeDistance = Mathf.Clamp(mathRibbonViewDistance, 1.05f, 1.8f);
         float safeHeight = Mathf.Clamp(mathRibbonViewHeight, -0.15f, 0.85f);
-        float safeSideOffset = Mathf.Clamp(mathRibbonSideOffset, -0.45f, 0.45f);
-        Vector3 viewPosition;
-        Vector3 viewForward;
-        Vector3 viewRight;
-        if (TryResolveViewFrame(out viewPosition, out viewForward, out viewRight))
+        float safeSideOffset = Mathf.Clamp(mathRibbonSideOffset, -0.55f, 0.55f);
+        if (TryResolveQuestDisplayFrame(safeDistance, safeHeight, safeSideOffset, out Vector3 center, out Quaternion _))
         {
-            return viewPosition
-                + viewForward * safeDistance
-                + viewRight * safeSideOffset
-                + Vector3.up * safeHeight;
+            return center;
         }
 
         Transform anchor = handAnchor != null ? handAnchor : transform;
@@ -2218,16 +2684,10 @@ public class PetalPollenMagicController : MonoBehaviour
 
         float safeGateDistance = Mathf.Clamp(mathRibbonGateDistance, 0.45f, 1.15f);
         float safeHeight = Mathf.Clamp(mathRibbonViewHeight * 0.55f, 0.02f, 0.55f);
-        float safeSideOffset = Mathf.Clamp(mathRibbonSideOffset, -0.45f, 0.45f);
-        Vector3 viewPosition;
-        Vector3 viewForward;
-        Vector3 viewRight;
-        if (TryResolveViewFrame(out viewPosition, out viewForward, out viewRight))
+        float safeSideOffset = Mathf.Clamp(mathRibbonSideOffset, -0.55f, 0.55f);
+        if (TryResolveQuestDisplayFrame(safeGateDistance, safeHeight, safeSideOffset, out Vector3 center, out Quaternion _))
         {
-            return viewPosition
-                + viewForward * safeGateDistance
-                + viewRight * safeSideOffset
-                + Vector3.up * safeHeight;
+            return center;
         }
 
         Transform anchor = handAnchor != null ? handAnchor : transform;
@@ -2246,12 +2706,9 @@ public class PetalPollenMagicController : MonoBehaviour
 
         float safeDistance = Mathf.Clamp(tornadoViewDistance, 0.9f, 2f);
         float safeHeight = Mathf.Clamp(tornadoViewHeight, -0.15f, 0.85f);
-        Vector3 viewPosition;
-        Vector3 viewForward;
-        Vector3 viewRight;
-        if (TryResolveViewFrame(out viewPosition, out viewForward, out viewRight))
+        if (TryResolveQuestDisplayFrame(safeDistance, safeHeight, 0f, out Vector3 center, out Quaternion _))
         {
-            return viewPosition + viewForward * safeDistance + Vector3.up * safeHeight;
+            return center;
         }
 
         Transform anchor = handAnchor != null ? handAnchor : transform;
@@ -2267,12 +2724,9 @@ public class PetalPollenMagicController : MonoBehaviour
 
         float safeGateDistance = Mathf.Clamp(tornadoGateDistance, 0.45f, 1.25f);
         float safeHeight = Mathf.Clamp(tornadoViewHeight * 0.45f, 0.02f, 0.45f);
-        Vector3 viewPosition;
-        Vector3 viewForward;
-        Vector3 viewRight;
-        if (TryResolveViewFrame(out viewPosition, out viewForward, out viewRight))
+        if (TryResolveQuestDisplayFrame(safeGateDistance, safeHeight, 0f, out Vector3 center, out Quaternion _))
         {
-            return viewPosition + viewForward * safeGateDistance + Vector3.up * safeHeight;
+            return center;
         }
 
         Transform anchor = handAnchor != null ? handAnchor : transform;
@@ -2293,16 +2747,10 @@ public class PetalPollenMagicController : MonoBehaviour
 
         float safeDistance = Mathf.Clamp(attractorViewDistance, 1.35f, 3.2f);
         float safeHeight = Mathf.Clamp(attractorViewHeight, 0.05f, 1.45f);
-        float safeSideOffset = Mathf.Clamp(attractorSideOffset, -0.55f, 0.55f);
-        Vector3 viewPosition;
-        Vector3 viewForward;
-        Vector3 viewRight;
-        if (TryResolveViewFrame(out viewPosition, out viewForward, out viewRight))
+        float safeSideOffset = Mathf.Clamp(attractorSideOffset, -0.65f, 0.65f);
+        if (TryResolveQuestDisplayFrame(safeDistance, safeHeight, safeSideOffset, out Vector3 center, out Quaternion _))
         {
-            return viewPosition
-                + viewForward * safeDistance
-                + viewRight * safeSideOffset
-                + Vector3.up * safeHeight;
+            return center;
         }
 
         Transform anchor = handAnchor != null ? handAnchor : transform;
@@ -2321,16 +2769,10 @@ public class PetalPollenMagicController : MonoBehaviour
 
         float safeDistance = Mathf.Clamp(attractorGateDistance, 0.65f, 1.55f);
         float safeHeight = Mathf.Clamp(attractorViewHeight * 0.35f, 0.02f, 0.6f);
-        float safeSideOffset = Mathf.Clamp(attractorSideOffset, -0.55f, 0.55f);
-        Vector3 viewPosition;
-        Vector3 viewForward;
-        Vector3 viewRight;
-        if (TryResolveViewFrame(out viewPosition, out viewForward, out viewRight))
+        float safeSideOffset = Mathf.Clamp(attractorSideOffset, -0.65f, 0.65f);
+        if (TryResolveQuestDisplayFrame(safeDistance, safeHeight, safeSideOffset, out Vector3 center, out Quaternion _))
         {
-            return viewPosition
-                + viewForward * safeDistance
-                + viewRight * safeSideOffset
-                + Vector3.up * safeHeight;
+            return center;
         }
 
         Transform anchor = handAnchor != null ? handAnchor : transform;
@@ -2349,18 +2791,128 @@ public class PetalPollenMagicController : MonoBehaviour
             Mathf.Cos(Time.time * 0.29f) * 3.5f);
     }
 
-    private void CaptureReleaseShowcasePose()
+    private void CaptureReleaseShowcasePose(Vector3 referenceCenter)
     {
-        releaseShowcaseCenter = ResolveMathRibbonCenter();
-        releaseMathRibbonGateCenter = ResolveMathRibbonGateCenter();
+        // If we have a usable view frame, project the showcase into the XZ plane in front of the
+        // player at each mode's authored offset so the visualization always reads from the
+        // player's perspective regardless of which side of the source they pressed from. If no
+        // view is available we fall back to the hold-center reference so the show still appears.
+        bool hasViewFrame = TryResolveViewFrame(out Vector3 _, out Vector3 _, out Vector3 _);
+        if (hasViewFrame)
+        {
+            // Temporarily reset the captured flag so the per-mode resolvers compute live targets
+            // instead of returning their own cached values.
+            hasReleaseShowcasePose = false;
+            releaseShowcaseCenter = ResolveMathRibbonCenter();
+            releaseMathRibbonGateCenter = ResolveMathRibbonGateCenter();
+            releaseTornadoCenter = ResolveTornadoCenter();
+            releaseTornadoGateCenter = ResolveTornadoGateCenter();
+            releaseAttractorCenter = ResolveAttractorCenter();
+            releaseAttractorGateCenter = ResolveAttractorGateCenter();
+        }
+        else
+        {
+            releaseShowcaseCenter = referenceCenter;
+            releaseMathRibbonGateCenter = referenceCenter;
+            releaseTornadoCenter = referenceCenter;
+            releaseTornadoGateCenter = referenceCenter;
+            releaseAttractorCenter = referenceCenter;
+            releaseAttractorGateCenter = referenceCenter;
+        }
+
         releaseShowcasePose = ResolveFallbackMathRibbonPose(releaseShowcaseCenter);
-        releaseTornadoCenter = ResolveTornadoCenter();
-        releaseTornadoGateCenter = ResolveTornadoGateCenter();
         releaseTornadoPose = ResolveFallbackMathRibbonPose(releaseTornadoCenter);
-        releaseAttractorCenter = ResolveAttractorCenter();
-        releaseAttractorGateCenter = ResolveAttractorGateCenter();
         releaseAttractorPose = ResolveFallbackMathRibbonPose(releaseAttractorCenter);
         hasReleaseShowcasePose = true;
+
+        // Seed live-tracking state so the first frame of tracking starts on the captured pose
+        // and the SmoothDamp Slerp doesn't pop from yaw 0.
+        releaseShowcaseYawDegrees = releaseShowcasePose.eulerAngles.y;
+        releaseTornadoYawDegrees = releaseTornadoPose.eulerAngles.y;
+        releaseAttractorYawDegrees = releaseAttractorPose.eulerAngles.y;
+        releaseShowcaseCenterVelocity = Vector3.zero;
+        releaseMathRibbonGateVelocity = Vector3.zero;
+        releaseTornadoCenterVelocity = Vector3.zero;
+        releaseTornadoGateVelocity = Vector3.zero;
+        releaseAttractorCenterVelocity = Vector3.zero;
+        releaseAttractorGateVelocity = Vector3.zero;
+        releaseShowcaseYawVelocity = 0f;
+        releaseTornadoYawVelocity = 0f;
+        releaseAttractorYawVelocity = 0f;
+    }
+
+    /// <summary>
+    /// Each frame during release, re-derive the ideal camera-relative showcase pose, then
+    /// smoothly slide the cached centers / yaws toward it so the show follows the player's view.
+    /// </summary>
+    private void TrackReleaseViewLive()
+    {
+        if (!liveTrackViewDuringRelease || !hasReleaseShowcasePose)
+        {
+            return;
+        }
+
+        if (!TryResolveViewFrame(out Vector3 _, out Vector3 viewForward, out Vector3 _))
+        {
+            return;
+        }
+
+        // Compute "what the captured pose WOULD be if we re-released right now" — the per-mode
+        // resolvers already XZ-flatten internally via TryResolveViewFrame.
+        bool previousHasPose = hasReleaseShowcasePose;
+        hasReleaseShowcasePose = false;
+        Vector3 targetShowcaseCenter = ResolveMathRibbonCenter();
+        Vector3 targetMathGate = ResolveMathRibbonGateCenter();
+        Vector3 targetTornadoCenter = ResolveTornadoCenter();
+        Vector3 targetTornadoGate = ResolveTornadoGateCenter();
+        Vector3 targetAttractorCenter = ResolveAttractorCenter();
+        Vector3 targetAttractorGate = ResolveAttractorGateCenter();
+        hasReleaseShowcasePose = previousHasPose;
+
+        ApplyTrackedCenter(ref releaseShowcaseCenter, targetShowcaseCenter, ref releaseShowcaseCenterVelocity);
+        ApplyTrackedCenter(ref releaseMathRibbonGateCenter, targetMathGate, ref releaseMathRibbonGateVelocity);
+        ApplyTrackedCenter(ref releaseTornadoCenter, targetTornadoCenter, ref releaseTornadoCenterVelocity);
+        ApplyTrackedCenter(ref releaseTornadoGateCenter, targetTornadoGate, ref releaseTornadoGateVelocity);
+        ApplyTrackedCenter(ref releaseAttractorCenter, targetAttractorCenter, ref releaseAttractorCenterVelocity);
+        ApplyTrackedCenter(ref releaseAttractorGateCenter, targetAttractorGate, ref releaseAttractorGateVelocity);
+
+        float targetYaw = Mathf.Atan2(viewForward.x, viewForward.z) * Mathf.Rad2Deg;
+        UpdateTrackedYaw(ref releaseShowcaseYawDegrees, ref releaseShowcaseYawVelocity, targetYaw);
+        UpdateTrackedYaw(ref releaseTornadoYawDegrees, ref releaseTornadoYawVelocity, targetYaw);
+        UpdateTrackedYaw(ref releaseAttractorYawDegrees, ref releaseAttractorYawVelocity, targetYaw);
+
+        releaseShowcasePose = Quaternion.Euler(0f, releaseShowcaseYawDegrees, 0f);
+        releaseTornadoPose = Quaternion.Euler(0f, releaseTornadoYawDegrees, 0f);
+        releaseAttractorPose = Quaternion.Euler(0f, releaseAttractorYawDegrees, 0f);
+    }
+
+    private void ApplyTrackedCenter(ref Vector3 current, Vector3 target, ref Vector3 velocity)
+    {
+        float planarDelta = Vector3.Distance(
+            new Vector3(current.x, 0f, current.z),
+            new Vector3(target.x, 0f, target.z));
+        float verticalDelta = Mathf.Abs(current.y - target.y);
+        if (planarDelta < Mathf.Max(0f, releaseTrackPositionDeadzone) && verticalDelta < Mathf.Max(0f, releaseTrackPositionDeadzone))
+        {
+            velocity = Vector3.zero;
+            return;
+        }
+
+        float smoothing = Mathf.Max(0.001f, releaseCenterSmoothing);
+        current = Vector3.SmoothDamp(current, target, ref velocity, smoothing, Mathf.Infinity, Time.deltaTime);
+    }
+
+    private void UpdateTrackedYaw(ref float currentYaw, ref float yawVelocity, float targetYaw)
+    {
+        float delta = Mathf.DeltaAngle(currentYaw, targetYaw);
+        if (Mathf.Abs(delta) < Mathf.Max(0f, releaseTrackYawDeadzoneDegrees))
+        {
+            yawVelocity = 0f;
+            return;
+        }
+
+        float smoothing = Mathf.Max(0.001f, releasePoseSmoothing);
+        currentYaw = Mathf.SmoothDampAngle(currentYaw, targetYaw, ref yawVelocity, smoothing, Mathf.Infinity, Time.deltaTime);
     }
 
     private Quaternion ResolveFallbackMathRibbonPose(Vector3 center)
@@ -2370,6 +2922,11 @@ public class PetalPollenMagicController : MonoBehaviour
         Vector3 viewRight;
         if (TryResolveViewFrame(out viewPosition, out viewForward, out viewRight))
         {
+            if (useViewFacingQuestShowcasePose)
+            {
+                return Quaternion.LookRotation(viewForward, Vector3.up);
+            }
+
             Vector3 fromView = center - viewPosition;
             if (fromView.sqrMagnitude < 0.001f)
             {
