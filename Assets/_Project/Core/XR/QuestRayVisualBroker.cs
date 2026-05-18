@@ -35,9 +35,16 @@ public static class QuestRayVisualBroker
         int ownerId = owner.GetHashCode();
         float now = Time.unscaledTime;
 
-        ref int currentOwner = ref (rightHand ? ref rightOwnerId : ref leftOwnerId);
-        ref float lastFrame = ref (rightHand ? ref rightOwnerLastFrame : ref leftOwnerLastFrame);
+        if (rightHand)
+        {
+            return TryClaim(ref rightOwnerId, ref rightOwnerLastFrame, ownerId, now);
+        }
 
+        return TryClaim(ref leftOwnerId, ref leftOwnerLastFrame, ownerId, now);
+    }
+
+    private static bool TryClaim(ref int currentOwner, ref float lastFrame, int ownerId, float now)
+    {
         if (currentOwner == 0 || currentOwner == ownerId || (now - lastFrame) > OwnershipGraceSeconds)
         {
             currentOwner = ownerId;

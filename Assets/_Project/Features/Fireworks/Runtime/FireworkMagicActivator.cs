@@ -25,7 +25,7 @@ namespace WonderfulWorld.Features.Fireworks
         [Header("Quest Feedback")]
         [SerializeField] private Transform rightRayOrigin;
         [SerializeField] private QuestInteractableFeedback interactionFeedback;
-        [SerializeField] private bool showQuestAimRay = true;
+        [SerializeField] private bool showQuestAimRay = false;
         [SerializeField] private float aimRayWidth = 0.012f;
         [SerializeField] private Color aimRayIdleColor = new Color(1f, 0.46f, 0.12f, 0.18f);
         [SerializeField] private Color aimRayHoverColor = new Color(1f, 0.68f, 0.2f, 0.78f);
@@ -166,6 +166,7 @@ namespace WonderfulWorld.Features.Fireworks
             {
                 Ray ray = new Ray(rightRayOrigin.position, rightRayOrigin.forward);
                 hover = RayHitsThisDevice(ray, out _, out endPoint);
+                QuestRayVisualLengthProfile.ReportHover(true, hover, Vector3.Distance(ray.origin, endPoint));
                 if (!hover)
                 {
                     endPoint = ray.origin + ray.direction.normalized * Mathf.Min(maxInteractDistance, 7f);
@@ -350,10 +351,20 @@ namespace WonderfulWorld.Features.Fireworks
 
         private void UpdateAimRay(bool hover, Vector3 endPoint)
         {
+            if (!showQuestAimRay || rightRayOrigin == null)
+            {
+                if (questAimRay != null)
+                {
+                    questAimRay.enabled = false;
+                }
+
+                return;
+            }
+
             // Single-owner arbitration: if another feature already drew the right-hand ray this
             // frame, skip drawing ours so the player doesn't see two stacked LineRenderers.
             bool owned = QuestRayVisualBroker.TryClaim(this, true);
-            if (!showQuestAimRay || rightRayOrigin == null || !owned)
+            if (!owned)
             {
                 if (questAimRay != null)
                 {

@@ -17,7 +17,7 @@ public class LotusEitherHandDriver : MonoBehaviour
     [SerializeField] private bool showDebugRays;
 
     [Header("Quest Ray Feedback")]
-    [SerializeField] private bool showQuestRays = true;
+    [SerializeField] private bool showQuestRays = false;
     [SerializeField] private float rayWidth = 0.01f;
     [SerializeField] private Color idleRayColor = new Color(0.42f, 0.92f, 1f, 0.2f);
     [SerializeField] private Color hoverRayColor = new Color(0.45f, 1f, 0.95f, 0.82f);
@@ -122,6 +122,7 @@ public class LotusEitherHandDriver : MonoBehaviour
 
         Ray ray = new Ray(origin.position, origin.forward);
         bool hitLotus = TryResolveLotus(ray, out LotusNoteTrigger lotus, out Vector3 point);
+        QuestRayVisualLengthProfile.ReportHover(!leftHand, hitLotus, Vector3.Distance(ray.origin, point));
         SetHandHover(leftHand, lotus, point, hitLotus, haptics);
         UpdateQuestRay(leftHand, hitLotus, hitLotus ? point : ray.origin + ray.direction.normalized * Mathf.Min(rayDistance, 8f));
     }
@@ -266,12 +267,23 @@ public class LotusEitherHandDriver : MonoBehaviour
 
     private void UpdateQuestRay(bool leftHand, bool hover, Vector3 endPoint)
     {
-        LineRenderer line = EnsureQuestRay(leftHand);
         Transform origin = leftHand ? leftRayOrigin : rightRayOrigin;
+        LineRenderer line = leftHand ? leftQuestRay : rightQuestRay;
+        if (!showQuestRays || origin == null)
+        {
+            if (line != null)
+            {
+                line.enabled = false;
+            }
+
+            return;
+        }
+
+        line = EnsureQuestRay(leftHand);
         // Yield the ray to whichever feature claimed it first this frame so multiple drivers
         // don't stack overlapping LineRenderers on the same controller.
         bool owned = QuestRayVisualBroker.TryClaim(this, !leftHand);
-        if (!showQuestRays || line == null || origin == null || !owned)
+        if (line == null || !owned)
         {
             if (line != null)
             {

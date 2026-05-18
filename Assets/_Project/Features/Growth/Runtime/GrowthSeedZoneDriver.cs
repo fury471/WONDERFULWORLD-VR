@@ -30,6 +30,14 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         public SeedRequest request;
     }
 
+    private struct MushroomSoftTarget
+    {
+        public GrowthPlant plant;
+        public Vector3 point;
+        public float entryDistance;
+        public float score;
+    }
+
     [Header("Zone")]
     [SerializeField] private Collider growthZone;
     [SerializeField] private LayerMask groundMask = ~0;
@@ -54,6 +62,10 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     [Header("Quest Hover Feedback")]
     [SerializeField] private bool enableMushroomHoverFeedback = true;
     [SerializeField] private Color mushroomHoverOutlineColor = new Color(0.74f, 0.5f, 0.2f, 0.66f);
+    [SerializeField] private bool enableMushroomSoftVisualTargeting = true;
+    [SerializeField] private float mushroomSoftTargetPadding = 0.055f;
+    [SerializeField] private float mushroomSoftTargetMinRadius = 0.075f;
+    [SerializeField] private float mushroomSoftTargetMaxRadius = 0.22f;
 
     [Header("Earth Magic")]
     [SerializeField] private bool enableEarthMagicProjectile = true;
@@ -303,7 +315,15 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             return;
         }
 
-        GrowthPlant plant = TryResolveHoveredMushroom(out _);
+        GrowthPlant plant = TryResolveHoveredMushroom(out Vector3 hitPoint);
+        if (plant != null && hitPoint != Vector3.positiveInfinity)
+        {
+            QuestRayVisualLengthProfile.ReportHover(
+                true,
+                true,
+                Vector3.Distance(interactionOrigin.position, hitPoint));
+        }
+
         if (plant == hoveredMushroom)
         {
             if (hoveredMushroomFeedback != null && hoveredMushroom != null)
@@ -334,10 +354,19 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         }
 
         Ray ray = new Ray(interactionOrigin.position, interactionOrigin.forward);
+        if (TryResolveMushroomSoftTarget(ray, out hitPoint, out GrowthPlant visualTarget, out float visualDistance))
+        {
+            float firstBlockingDistance = ResolveFirstBlockingHitDistance(ray, visualTarget);
+            if (visualDistance <= firstBlockingDistance + 0.03f)
+            {
+                return visualTarget;
+            }
+        }
+
         RaycastHit[] hits = Physics.RaycastAll(ray, rayDistance, groundMask, QueryTriggerInteraction.Ignore);
         if (hits == null || hits.Length == 0)
         {
-            return null;
+            return visualTarget;
         }
 
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
@@ -347,6 +376,12 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             if (IsIgnoredRaycastHit(hitCollider))
             {
                 continue;
+            }
+
+            if (visualTarget != null && visualDistance <= hits[i].distance + 0.03f)
+            {
+                hitPoint = ray.GetPoint(visualDistance);
+                return visualTarget;
             }
 
             if (TryResolveCultivationTarget(hitCollider, hits[i].point, out hitPoint, out GrowthPlant targetPlant))
@@ -616,6 +651,18 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     {
         targetPoint = Vector3.positiveInfinity;
         targetPlant = null;
+        Vector3 visualTargetPoint = Vector3.positiveInfinity;
+        GrowthPlant visualTargetPlant = null;
+        float visualTargetDistance = float.MaxValue;
+        bool hasVisualMushroomTarget = allowCultivateExistingMushrooms;
+        if (hasVisualMushroomTarget)
+        {
+            hasVisualMushroomTarget = TryResolveMushroomSoftTarget(
+                ray,
+                out visualTargetPoint,
+                out visualTargetPlant,
+                out visualTargetDistance);
+        }
 
         RaycastHit[] hits = Physics.RaycastAll(ray, rayDistance, groundMask, QueryTriggerInteraction.Ignore);
         if (hits != null && hits.Length > 0)
@@ -628,6 +675,13 @@ public class GrowthSeedZoneDriver : MonoBehaviour
                 if (IsIgnoredRaycastHit(hitCollider))
                 {
                     continue;
+                }
+
+                if (hasVisualMushroomTarget && visualTargetDistance <= hit.distance + 0.03f)
+                {
+                    targetPoint = visualTargetPoint;
+                    targetPlant = visualTargetPlant;
+                    return true;
                 }
 
                 if (allowCultivateExistingMushrooms && TryResolveCultivationTarget(hitCollider, hit.point, out targetPoint, out targetPlant))
@@ -655,6 +709,13 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             }
         }
 
+        if (hasVisualMushroomTarget)
+        {
+            targetPoint = visualTargetPoint;
+            targetPlant = visualTargetPlant;
+            return true;
+        }
+
         if (allowForwardFallbackForDebug)
         {
             Vector3 fallbackPoint = ResolveForwardSpawnPoint();
@@ -666,6 +727,212 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         }
 
         return false;
+    }
+
+    private bool TryResolveMushroomSoftTarget(Ray ray, out Vector3 targetPoint, out GrowthPlant targetPlant, out float hitDistance)
+    {
+        targetPoint = Vector3.positiveInfinity;
+        targetPlant = null;
+        hitDistance = float.MaxValue;
+
+        if (!enableMushroomSoftVisualTargeting || ray.direction.sqrMagnitude < 0.0001f)
+        {
+            return false;
+        }
+
+        ray = new Ray(ray.origin, ray.direction.normalized);
+        float maxDistance = Mathf.Max(0.1f, rayDistance);
+        bool found = false;
+        MushroomSoftTarget best = new MushroomSoftTarget
+        {
+            plant = null,
+            point = Vector3.positiveInfinity,
+            entryDistance = float.MaxValue,
+            score = float.MaxValue
+        };
+
+        for (int i = 0; i < slots.Count; i++)
+        {
+            PlantSlot slot = slots[i];
+            if (slot == null || slot.plant == null || !slot.active || slot.retiring)
+            {
+                continue;
+            }
+
+            if (!TryResolvePlantSoftTarget(ray, slot.plant, maxDistance, out MushroomSoftTarget candidate))
+            {
+                continue;
+            }
+
+            if (!found || candidate.score < best.score)
+            {
+                found = true;
+                best = candidate;
+            }
+        }
+
+        if (!found)
+        {
+            return false;
+        }
+
+        targetPoint = best.point;
+        targetPlant = best.plant;
+        hitDistance = best.entryDistance;
+        return true;
+    }
+
+    private bool TryResolvePlantSoftTarget(Ray ray, GrowthPlant plant, float maxDistance, out MushroomSoftTarget target)
+    {
+        target = default;
+        if (plant == null)
+        {
+            return false;
+        }
+
+        Renderer[] renderers = plant.GetComponentsInChildren<Renderer>(includeInactive: true);
+        bool found = false;
+        float bestScore = float.MaxValue;
+        Vector3 bestPoint = Vector3.positiveInfinity;
+        float bestEntryDistance = float.MaxValue;
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+            if (renderer == null || !renderer.enabled || IsToonOutlineRenderer(renderer))
+            {
+                continue;
+            }
+
+            Bounds bounds = renderer.bounds;
+            if (bounds.size.sqrMagnitude < 0.0001f)
+            {
+                continue;
+            }
+
+            Vector3 center = bounds.center;
+            float depth = Vector3.Dot(center - ray.origin, ray.direction);
+            if (depth <= 0f || depth > maxDistance)
+            {
+                continue;
+            }
+
+            Vector3 closestOnRay = ray.GetPoint(depth);
+            float missDistance = Vector3.Distance(closestOnRay, center);
+            float visualRadius = ResolveMushroomSoftTargetRadius(renderer, bounds);
+            if (missDistance > visualRadius)
+            {
+                continue;
+            }
+
+            bool preferredCap = IsPreferredMushroomTarget(renderer.transform);
+            float normalizedMiss = missDistance / Mathf.Max(0.001f, visualRadius);
+            float score = normalizedMiss * (preferredCap ? 0.72f : 1f) + depth * 0.018f + (preferredCap ? -0.08f : 0.08f);
+            if (score >= bestScore)
+            {
+                continue;
+            }
+
+            found = true;
+            bestScore = score;
+            bestPoint = center;
+            bestEntryDistance = Mathf.Max(0.05f, depth - visualRadius);
+        }
+
+        if (!found)
+        {
+            return false;
+        }
+
+        target = new MushroomSoftTarget
+        {
+            plant = plant,
+            point = bestPoint,
+            entryDistance = bestEntryDistance,
+            score = bestScore
+        };
+        return true;
+    }
+
+    private float ResolveMushroomSoftTargetRadius(Renderer renderer, Bounds bounds)
+    {
+        Vector3 extents = bounds.extents;
+        bool preferredCap = IsPreferredMushroomTarget(renderer.transform);
+        float horizontalRadius = Mathf.Max(extents.x, extents.z);
+        float verticalAssist = preferredCap ? extents.y * 0.35f : extents.y * 0.18f;
+        float rawRadius = horizontalRadius + verticalAssist + Mathf.Max(0f, mushroomSoftTargetPadding);
+        return Mathf.Clamp(rawRadius, Mathf.Max(0.01f, mushroomSoftTargetMinRadius), Mathf.Max(mushroomSoftTargetMinRadius, mushroomSoftTargetMaxRadius));
+    }
+
+    private static bool IsPreferredMushroomTarget(Transform candidate)
+    {
+        Transform current = candidate;
+        while (current != null)
+        {
+            string lowerName = current.name.ToLowerInvariant();
+            if (lowerName.Contains("bloom") ||
+                lowerName.Contains("cap") ||
+                lowerName.Contains("hat") ||
+                lowerName.Contains("umbrella") ||
+                lowerName.Contains("pileus"))
+            {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
+    }
+
+    private static bool IsToonOutlineRenderer(Renderer renderer)
+    {
+        Transform current = renderer != null ? renderer.transform : null;
+        while (current != null)
+        {
+            if (current.name.EndsWith("_ToonOutline", System.StringComparison.Ordinal) ||
+                current.name.EndsWith("_QuestHoverOutline", System.StringComparison.Ordinal) ||
+                current.name.StartsWith("QuestHoverRing_", System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
+    }
+
+    private float ResolveFirstBlockingHitDistance(Ray ray, GrowthPlant allowedPlant)
+    {
+        RaycastHit[] hits = Physics.RaycastAll(ray, rayDistance, groundMask, QueryTriggerInteraction.Ignore);
+        if (hits == null || hits.Length == 0)
+        {
+            return float.MaxValue;
+        }
+
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider hitCollider = hits[i].collider;
+            if (IsIgnoredRaycastHit(hitCollider))
+            {
+                continue;
+            }
+
+            GrowthPlant hitPlant = hitCollider.GetComponentInParent<GrowthPlant>();
+            if (hitPlant != null && hitPlant == allowedPlant)
+            {
+                continue;
+            }
+
+            if (IsValidPlantingSurface(hitCollider) || IsBlockingInteractableHit(hitCollider))
+            {
+                return hits[i].distance;
+            }
+        }
+
+        return float.MaxValue;
     }
 
     private bool TryResolveCultivationTarget(Collider hitCollider, Vector3 hitPoint, out Vector3 targetPoint, out GrowthPlant targetPlant)
