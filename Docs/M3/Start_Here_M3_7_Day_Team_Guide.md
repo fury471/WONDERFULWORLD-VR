@@ -28,6 +28,8 @@
    - one scene sync
    - one quick simulator play pass
    - one written blocker update
+9. **Unity 6 Standard Lock**: All team members must open the project strictly using **Unity 6 (`6000.3.11f1`)** and avoid any package upgrade or project migration that breaks compatibility.
+10. **Legacy Code Deprecation**: The `Assets/Scripts/` legacy prototype system (including legacy butterfly evolution, old pollination, old flowers/plants, old core systems) is completely deprecated. No team member may introduce any references, dependencies, or scripts that import or rely on `Assets/Scripts/`. All current features must use the modular, data-driven systems implemented under `Assets/_Project/`.
 
 ## 2. What “Done” Looks Like At The End Of 7 Days
 
@@ -48,29 +50,30 @@ By the end of this 7-day push:
 - create and maintain:
   - `Assets/_Project/Core/Runtime/GameFlowManager.cs`
   - `Assets/_Project/Core/Runtime/ParkAttractionState.cs`
+  - Core XR interaction and comfort setups (`Assets/_Project/Core/XR/QuestInteractionUtils.cs`, `QuestLocomotionComfortProfile.cs`, etc.)
 - decide what gets integrated into the scene and in what order
 - protect the exploration-first direction
 
 ### Haobo Xu
 
 - own park layout, scenic pacing, sightlines, and soft boundaries
-- integrate the cat ride as a scenic connector
+- integrate the cat ride as a scenic connector using the new V2 mounts (`Assets/_Project/Features/Mounts/Runtime/v2/CatRideControllerV2.cs`, `CatRideRouteController.cs`, `QuestSwingRideController.cs`)
 - help stage Growth and Lotus inside the real park
 
 ### Xuanyuan Qin
 
-- own system wiring for ScaleShift, Weather, ParticleVitality, and Fireworks
+- own system wiring for ScaleShift (`ScaleManager.cs`), Weather (`WeatherManager.cs`, `WeatherZoneTrigger.cs`), ParticleVitality (`PetalPollenMagicController.cs`, `ParticleShapeSystem.cs`), and Fireworks (`FireworkController.cs`, `FireworkRandomParticlePlayer.cs`, `FireworkMagicActivator.cs`)
 - support scene-safe state transitions and reliability
 
 ### Tongyan Sun
 
-- own onboarding clarity, prompts, first-time usability, and Lotus readability
+- own onboarding clarity, prompts, first-time usability, Lotus readability (`LotusSongManager.cs`, `LotusNoteTrigger.cs`, `LotusEitherHandDriver.cs`), and Growth integration (`GrowthController.cs`, `GrowthPlant.cs`, `GrowthDriver.cs`, `GrowthSeedZoneDriver.cs`)
 - run the first free-roam confusion pass
 
 ### Wenao Li
 
 - own skyline read, spectacle staging, VFX continuity, and soft-boundary atmosphere
-- apply M2 VFX hooks in the real park scene
+- apply M2 VFX hooks in the real park scene (supporting Fireworks and Weather visuals)
 
 ## 4. Day 1: Bootstrap And Scene Safety
 

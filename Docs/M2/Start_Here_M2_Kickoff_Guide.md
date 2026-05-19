@@ -23,13 +23,17 @@ The repo is ready for M2 feature kickoff planning, but M2 should begin as isolat
 
 Current confirmed baseline:
 
-- Unity version is locked to `6000.3.11f1`
+- Unity version is locked strictly to **Unity 6 (`6000.3.11f1`)**
 - Render pipeline is `URP`
 - XR stack is `OpenXR` on tethered `PCVR`
 - Input path is the Unity `Input System`
 - production content must live under `Assets/_Project`
 - feature folders already exist under `Assets/_Project/Features`
 - the master park scene exists, but M2 should not begin by stuffing new mechanic logic directly into that scene
+
+> [!WARNING]
+> **Legacy Code Deprecation Alert**:
+> The root-level `Assets/Scripts/` directory contains legacy prototype folders (`Audio`, `Butterflies`, `Core`, `Flowers`, `Interaction`, `Plants`) that are now fully deprecated. These legacy systems are completely superseded by the modular, data-driven architecture under `Assets/_Project/Core/` and `Assets/_Project/Features/`. No new feature work, scripting, or referencing should touch any files in the old `Assets/Scripts/` folder.
 
 Current M2 mindset:
 
@@ -157,32 +161,65 @@ Xuanyuan Qin:
 4. `Assets/_Project/Features/ScaleShift/ScriptableObjects/ScaleSettings_SO.asset`
 5. `Assets/_Project/Features/Weather/Runtime/WeatherManager.cs`
 6. `Assets/_Project/Features/Weather/Runtime/RegionWeatherResponder.cs`
-7. `Assets/_Project/Features/Weather/ScriptableObjects/WeatherPreset_Clear.asset`
-8. `Assets/_Project/Features/Weather/ScriptableObjects/WeatherPreset_Overcast.asset`
-9. `Assets/_Project/Features/Weather/ScriptableObjects/WeatherPreset_Rain.asset`
-10. `Assets/_Project/Features/Weather/ScriptableObjects/WeatherPreset_Windy.asset`
-11. `Assets/_Project/Features/ParticleVitality/Runtime/ParticleCollector.cs`
-12. `Assets/_Project/Features/ParticleVitality/Runtime/ParticleShapeSystem.cs`
-13. `Assets/_Project/Features/ParticleVitality/Runtime/ParticlePreviewAnchor.cs`
-14. `Assets/_Project/Features/ParticleVitality/ScriptableObjects/ParticleShapeLibrary_SO.asset`
-15. `Assets/_Project/Features/Fireworks/Runtime/FireworkController.cs`
-16. `Assets/_Project/Features/Fireworks/Runtime/FireworkLaunchPad.cs`
-17. `Assets/_Project/Features/Fireworks/ScriptableObjects/FireworkPatternLibrary_SO.asset`
+7. `Assets/_Project/Features/Weather/Runtime/WeatherZoneTrigger.cs`
+8. `Assets/_Project/Features/Weather/ScriptableObjects/WeatherPreset_Clear.asset`
+9. `Assets/_Project/Features/Weather/ScriptableObjects/WeatherPreset_Overcast.asset`
+10. `Assets/_Project/Features/Weather/ScriptableObjects/WeatherPreset_Rain.asset`
+11. `Assets/_Project/Features/Weather/ScriptableObjects/WeatherPreset_Windy.asset`
+12. `Assets/_Project/Features/ParticleVitality/Runtime/ParticleCollector.cs`
+13. `Assets/_Project/Features/ParticleVitality/Runtime/ParticleShapeSystem.cs`
+14. `Assets/_Project/Features/ParticleVitality/Runtime/ParticlePreviewAnchor.cs`
+15. `Assets/_Project/Features/ParticleVitality/Runtime/PetalPollenMagicController.cs`
+16. `Assets/_Project/Features/ParticleVitality/Runtime/PetalPollenReleaseMode.cs`
+17. `Assets/_Project/Features/ParticleVitality/Runtime/PetalPollenSource.cs`
+18. `Assets/_Project/Features/Fireworks/Runtime/FireworkController.cs`
+19. `Assets/_Project/Features/Fireworks/Runtime/FireworkLaunchPad.cs`
+20. `Assets/_Project/Features/Fireworks/Runtime/FireworkMagicActivator.cs`
+21. `Assets/_Project/Features/Fireworks/Runtime/FireworkRandomParticlePlayer.cs`
+22. `Assets/_Project/Features/Fireworks/Runtime/LegacyFireworkPatternTypes.cs`
+23. `Assets/_Project/Features/Fireworks/Runtime/PointCloudFireworkRenderer.cs`
+24. `Assets/_Project/Features/Fireworks/Runtime/PointCloudFireworkTypes.cs`
+25. `Assets/_Project/Features/Fireworks/Runtime/VRFireworkMenuController.cs`
+26. `Assets/_Project/Features/Fireworks/ScriptableObjects/FireworkPatternLibrary_SO.asset`
 
 Tongyan Sun:
 
 1. `Assets/_Project/Features/Growth/Runtime/GrowthController.cs`
-2. `Assets/_Project/Features/Growth/Runtime/GrowthStageDriver.cs`
-3. `Assets/_Project/Features/Growth/ScriptableObjects/GrowthProfile_SO.asset`
-4. `Assets/_Project/Features/LotusPond/Runtime/LotusNoteTrigger.cs`
-5. `Assets/_Project/Features/LotusPond/Runtime/LotusRippleController.cs`
-6. `Assets/_Project/Features/LotusPond/ScriptableObjects/LotusScale_SO.asset`
+2. `Assets/_Project/Features/Growth/Runtime/GrowthDriver.cs`
+3. `Assets/_Project/Features/Growth/Runtime/GrowthPlant.cs`
+4. `Assets/_Project/Features/Growth/Runtime/GrowthSeedZoneDriver.cs`
+5. `Assets/_Project/Features/Growth/Runtime/GrowthCluster.cs`
+6. `Assets/_Project/Features/Growth/Runtime/GrowthColorGradientDriver.cs`
+7. `Assets/_Project/Features/Growth/Runtime/GrowthEnergyEffectDriver.cs`
+8. `Assets/_Project/Features/Growth/Runtime/SimpleBreathingFeedback.cs`
+9. `Assets/_Project/Features/Growth/ScriptableObjects/GrowthProfile_SO.asset`
+10. `Assets/_Project/Features/LotusPond/Runtime/LotusNoteTrigger.cs`
+11. `Assets/_Project/Features/LotusPond/Runtime/LotusRippleController.cs`
+12. `Assets/_Project/Features/LotusPond/Runtime/LotusEitherHandDriver.cs`
+13. `Assets/_Project/Features/LotusPond/Runtime/LotusGlowController.cs`
+14. `Assets/_Project/Features/LotusPond/Runtime/LotusMusicStaff.cs`
+15. `Assets/_Project/Features/LotusPond/Runtime/LotusNoteId.cs`
+16. `Assets/_Project/Features/LotusPond/Runtime/LotusSongData.cs`
+17. `Assets/_Project/Features/LotusPond/Runtime/LotusSongManager.cs`
+18. `Assets/_Project/Features/LotusPond/Runtime/LotusSongUIController.cs`
+19. `Assets/_Project/Features/LotusPond/Runtime/LotusStylizedWaterMesh.cs`
+20. `Assets/_Project/Features/LotusPond/Runtime/StaffWave.cs`
+21. `Assets/_Project/Features/LotusPond/Runtime/WaterDropSlide.cs`
+22. `Assets/_Project/Features/LotusPond/ScriptableObjects/LotusScale_SO.asset`
 
 Haobo Xu:
 
 1. `Assets/_Project/Features/Mounts/Runtime/MountController.cs`
 2. `Assets/_Project/Features/Mounts/Runtime/CatRideRouteController.cs`
-3. `Assets/_Project/Features/Mounts/ScriptableObjects/MountSettings_SO.asset`
+3. `Assets/_Project/Features/Mounts/Runtime/QuestSwingRideController.cs`
+4. `Assets/_Project/Features/Mounts/Runtime/v2/ButterflyAutoTriggerV2.cs`
+5. `Assets/_Project/Features/Mounts/Runtime/v2/ButterflyFlightControllerV2.cs`
+6. `Assets/_Project/Features/Mounts/Runtime/v2/CatIdlePaceV2.cs`
+7. `Assets/_Project/Features/Mounts/Runtime/v2/CatRideAutoTriggerV2.cs`
+8. `Assets/_Project/Features/Mounts/Runtime/v2/CatRideControllerV2.cs`
+9. `Assets/_Project/Features/Mounts/Runtime/v2/CatRideV2Bootstrap.cs`
+10. `Assets/_Project/Features/Mounts/Runtime/v2/HorseSummonV2.cs`
+11. `Assets/_Project/Features/Mounts/ScriptableObjects/MountSettings_SO.asset`
 
 Wenao Li:
 
@@ -192,7 +229,7 @@ Wenao Li:
 
 Yu Fu:
 
-1. verify the XR rig exposes safe integration points for future feature hooks
+1. verify the XR rig exposes safe integration points for future feature hooks (e.g. standardizing on `QuestInteractionUtils.cs`, `QuestLocomotionComfortProfile.cs`)
 2. review whether any system needs player-rig references, input hooks, or scene-safe bootstrap support
 3. avoid deep integration until feature owners can demo isolated v1 behavior
 
@@ -268,12 +305,12 @@ Do not move on to M3 systems until all of this is true:
 
 1. `ScaleManager.cs` exists and scale shift works in isolation.
 2. `WeatherManager.cs` exists and 4 presets work in isolation.
-3. `GrowthController.cs` exists and one route-changing growth interaction works.
-4. `ParticleShapeSystem.cs` exists and 3 preset particle shapes work.
-5. `LotusNoteTrigger.cs` exists and note + ripple + cooldown works.
-6. `MountController.cs` exists and guided cat ride flow works safely.
-7. `FireworkController.cs` exists and 3 patterns trigger correctly.
-8. first-pass ScriptableObject assets exist for the systems that need tuning data.
+3. `GrowthController.cs` and `GrowthPlant.cs` exist, and one route-changing growth interaction works.
+4. `ParticleShapeSystem.cs` and `PetalPollenMagicController.cs` exist, and 3 preset particle shapes work.
+5. `LotusNoteTrigger.cs` and `LotusSongManager.cs` exist, and note triggers + song progression + ripples work.
+6. `MountController.cs` and `v2/CatRideControllerV2.cs` exist, and the guided cat ride and summoning flow work safely.
+7. `FireworkController.cs` and `FireworkRandomParticlePlayer.cs` exist, and 3 patterns trigger correctly.
+8. first-pass ScriptableObject assets (`ScaleSettings_SO.asset`, `GrowthProfile_SO.asset`, `LotusScale_SO.asset`, `MountSettings_SO.asset`) exist for the systems that need tuning data.
 9. no system hard-crashes play mode or blocks the rest of the experience from loading.
 10. each system can be demoed in isolation without requiring hidden scene-only setup.
 

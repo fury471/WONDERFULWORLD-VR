@@ -503,12 +503,11 @@ Recommended settings menu:
 
 ### 6.1 Engine
 
-Recommended stable target: Unity 2022.3 LTS or newer.
+Standardized production target: Unity 6 (`6000.3.11f1`).
 
 Important repository note:
 
-- The current repository appears to already use a Unity 6000.x editor branch.
-- This is acceptable because it is newer than 2022.3, but the whole team must standardize on one exact editor version before production work continues.
+- The project is officially standardized and locked to **Unity 6 (`6000.3.11f1`)** across the entire team to ensure stability, performance, and compatibility of XR APIs.
 
 ### 6.2 XR Framework
 
@@ -576,6 +575,11 @@ Implementation rules:
 - each module should still work when another optional feature module is disabled
 
 This structure supports both incremental development and parallel development.
+
+#### Legacy Code Deprecation
+
+> [!WARNING]
+> The root-level `Assets/Scripts/` directory contains legacy prototypes (Butterfly evolution, Flowers/Plants pollination, interaction, and old audio managers). These systems are fully deprecated, out of scope for the current exploration-first vertical slice, and superseded entirely by the modular, data-driven feature modules under `Assets/_Project/Features/` (e.g., `ScaleShift`, `Weather`, `Growth`, `ParticleVitality`, `Fireworks`, `Mounts`, `LotusPond`). Developers must avoid introducing dependencies on `Assets/Scripts/` files.
 
 ### 6.6 Placeholder-First Development Strategy
 
