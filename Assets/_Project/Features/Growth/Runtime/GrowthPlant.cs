@@ -729,7 +729,7 @@ public class GrowthPlant : MonoBehaviour
     {
         if (enableOrganicShapeVariation && !string.IsNullOrWhiteSpace(bloomPartName) && partName == bloomPartName)
         {
-            statePosition += runtimeBloomOffset * ResolveShapeVariationWeight(currentGrowthTime);
+            statePosition += runtimeBloomOffset * runtimeScaleMultiplier * ResolveShapeVariationWeight(currentGrowthTime);
         }
 
         if (useBloomAnchorPosition &&

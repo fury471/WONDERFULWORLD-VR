@@ -46,7 +46,7 @@ namespace ButterflyHouse.Editor
             }
             
             // Also fix trails in scene
-            TrailRenderer[] sceneTrails = FindObjectsOfType<TrailRenderer>(true);
+            TrailRenderer[] sceneTrails = FindObjectsByType<TrailRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.InstanceID);
             foreach (TrailRenderer trail in sceneTrails)
             {
                 if (trail.sharedMaterial == null || 
@@ -102,7 +102,7 @@ namespace ButterflyHouse.Editor
             Debug.Log("=== Audio Setup Check ===");
             
             // Check AudioManager
-            Audio.AudioManager audioManager = FindObjectOfType<Audio.AudioManager>();
+            Audio.AudioManager audioManager = FindFirstObjectByType<Audio.AudioManager>();
             if (audioManager == null)
             {
                 Debug.LogWarning("AudioManager not found in scene!");

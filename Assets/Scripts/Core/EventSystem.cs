@@ -42,7 +42,7 @@ namespace ButterflyHouse.Core
         
         private void Awake()
         {
-            _ecosystemManager = FindObjectOfType<EcosystemManager>();
+            _ecosystemManager = FindFirstObjectByType<EcosystemManager>();
             nextEventTime = Random.Range(minEventInterval, maxEventInterval);
         }
         

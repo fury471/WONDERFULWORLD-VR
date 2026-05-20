@@ -366,7 +366,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
             return false;
         }
 
-        if (surfaceCollider.GetComponentInParent<XRBaseInteractable>() != null)
+        if (HasOtherInteractableInHierarchy(surfaceCollider))
         {
             return false;
         }
@@ -418,6 +418,32 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
         }
 
         return true;
+    }
+
+    private static bool HasOtherInteractableInHierarchy(Collider surfaceCollider)
+    {
+        if (surfaceCollider == null)
+        {
+            return false;
+        }
+
+        var parentInteractable = surfaceCollider.GetComponentInParent<XRBaseInteractable>();
+        if (parentInteractable != null && parentInteractable.gameObject != surfaceCollider.gameObject)
+        {
+            return true;
+        }
+
+        var childInteractables = surfaceCollider.GetComponentsInChildren<XRBaseInteractable>(true);
+        for (int i = 0; i < childInteractables.Length; i++)
+        {
+            var childInteractable = childInteractables[i];
+            if (childInteractable != null && childInteractable.gameObject != surfaceCollider.gameObject)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ConfigureTeleportInteractable(BaseTeleportationInteractable teleportInteractable)

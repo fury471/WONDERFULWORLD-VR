@@ -28,28 +28,28 @@ namespace ButterflyHouse.Core
         {
             // Ensure systems are initialized
             if (butterflyManager == null)
-                butterflyManager = FindObjectOfType<ButterflyHouse.Butterflies.ButterflyManager>();
+                butterflyManager = FindFirstObjectByType<ButterflyHouse.Butterflies.ButterflyManager>();
             
             if (audioManager == null)
-                audioManager = FindObjectOfType<ButterflyHouse.Audio.AudioManager>();
+                audioManager = FindFirstObjectByType<ButterflyHouse.Audio.AudioManager>();
             
             if (interactionManager == null)
-                interactionManager = FindObjectOfType<ButterflyHouse.Interaction.InteractionManager>();
+                interactionManager = FindFirstObjectByType<ButterflyHouse.Interaction.InteractionManager>();
             
             if (ecosystemStateController == null)
-                ecosystemStateController = FindObjectOfType<EcosystemStateController>();
+                ecosystemStateController = FindFirstObjectByType<EcosystemStateController>();
             
             if (handAuraSystem == null)
-                handAuraSystem = FindObjectOfType<HandAuraSystem>();
+                handAuraSystem = FindFirstObjectByType<HandAuraSystem>();
             
             if (eventOrchestrator == null)
-                eventOrchestrator = FindObjectOfType<EventOrchestrator>();
+                eventOrchestrator = FindFirstObjectByType<EventOrchestrator>();
             
             if (stageManager == null)
-                stageManager = FindObjectOfType<ProgressionStageManager>();
+                stageManager = FindFirstObjectByType<ProgressionStageManager>();
             
             if (lightCycle == null)
-                lightCycle = FindObjectOfType<LightCycle>();
+                lightCycle = FindFirstObjectByType<LightCycle>();
         }
         
         private void Start()

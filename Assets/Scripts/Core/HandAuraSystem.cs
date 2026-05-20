@@ -59,7 +59,7 @@ namespace ButterflyHouse.Core
         
         private void Awake()
         {
-            _interactionManager = FindObjectOfType<InteractionManager>();
+            _interactionManager = FindFirstObjectByType<InteractionManager>();
             
             if (_interactionManager != null)
             {
@@ -194,7 +194,7 @@ namespace ButterflyHouse.Core
                 Vector3 rightVel = (rightPos - _lastRightHandPos) / Time.deltaTime;
                 
                 // If hands are rotating around a point
-                if (leftVel.magnitude > 0.1f && rightVel.magnitude > 0.1f)
+                if (leftVel.magnitude > pulseGestureThreshold && rightVel.magnitude > pulseGestureThreshold)
                 {
                     _currentGesture = GestureType.Circle;
                     OnGestureDetected?.Invoke(_currentGesture);
@@ -244,7 +244,7 @@ namespace ButterflyHouse.Core
                 {
                     _gestureStartTime += Time.deltaTime;
                     
-                    if (_gestureStartTime > 2f) // Held for 2 seconds
+                    if (_gestureStartTime > palmUpHoldDuration)
                     {
                         _currentGesture = GestureType.Pulse; // Palm-up = pulse
                         OnGestureDetected?.Invoke(_currentGesture);
@@ -263,7 +263,7 @@ namespace ButterflyHouse.Core
         {
             // Enhanced circle detection for gesture spells
             Vector3 leftVel = (leftPos - _lastLeftHandPos) / Time.deltaTime;
-            if (leftVel.magnitude > 0.2f && leftVel.magnitude < 2f)
+            if (leftVel.magnitude > circleGestureThreshold && leftVel.magnitude < circleGestureThreshold * 10f)
             {
                 _currentGesture = GestureType.Circle;
                 OnGestureDetected?.Invoke(_currentGesture);
@@ -277,7 +277,9 @@ namespace ButterflyHouse.Core
             float handDistance = Vector3.Distance(leftPos, rightPos);
             float midPointY = (leftPos.y + rightPos.y) / 2f;
             
-            if (handDistance > 0.3f && handDistance < 1f && midPointY > 1f)
+            if (handDistance > gestureDetectionRadius * 0.6f &&
+                handDistance < gestureDetectionRadius * 2f &&
+                midPointY > 1f)
             {
                 _currentGesture = GestureType.HandToHandArc;
                 OnGestureDetected?.Invoke(_currentGesture);

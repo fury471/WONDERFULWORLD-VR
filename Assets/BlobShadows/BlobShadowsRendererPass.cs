@@ -66,9 +66,12 @@ namespace BlobShadows
 
         public BlobShadowsRendererFeature.Settings Settings { get; set; }
 
+        [Obsolete("URP 17 marks ScriptableRenderPass.OnCameraSetup as compatibility-mode only. This pass still uses the compatibility path.")]
         public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
         {
+#pragma warning disable CS0618
             base.OnCameraSetup(cmd, ref renderingData);
+#pragma warning restore CS0618
 
             RecalculateBounds(renderingData.cameraData.camera);
             _shadowFrustumAabbSize = new Vector2(_shadowFrustumAabb.size.x, _shadowFrustumAabb.size.z);
@@ -80,6 +83,7 @@ namespace BlobShadows
             _shadowMapHandle = null;
         }
 
+        [Obsolete("URP 17 marks ScriptableRenderPass.Configure as compatibility-mode only. This pass still uses the compatibility path.")]
         public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
         {
             if (Settings == null)
@@ -96,7 +100,7 @@ namespace BlobShadows
                 sRGB = false
             };
 
-            RenderingUtils.ReAllocateIfNeeded(
+            RenderingUtils.ReAllocateHandleIfNeeded(
                 ref _shadowMapHandle,
                 desc,
                 filterMode: Settings.FilterMode,
@@ -104,10 +108,13 @@ namespace BlobShadows
                 name: ShadowMapName
             );
 
+#pragma warning disable CS0618
             ConfigureClear(ClearFlag.Color, Color.black);
             ConfigureTarget(_shadowMapHandle);
+#pragma warning restore CS0618
         }
 
+        [Obsolete("URP 17 marks ScriptableRenderPass.Execute as compatibility-mode only. This pass still uses the compatibility path.")]
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             if (Settings == null)

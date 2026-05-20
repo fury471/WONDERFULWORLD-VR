@@ -139,7 +139,7 @@ namespace ButterflyHouse.Interaction
             }
             
             // Add all other landing targets in scene
-            var allTargets = FindObjectsOfType<LandingTarget>();
+            var allTargets = FindObjectsByType<LandingTarget>(FindObjectsSortMode.InstanceID);
             foreach (var target in allTargets)
             {
                 if (target != null && target.IsAvailable && !targets.Contains(target))

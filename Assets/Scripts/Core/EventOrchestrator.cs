@@ -48,7 +48,7 @@ namespace ButterflyHouse.Core
         
         private void Awake()
         {
-            _stateController = FindObjectOfType<EcosystemStateController>();
+            _stateController = FindFirstObjectByType<EcosystemStateController>();
             nextEventTime = Random.Range(minEventInterval, maxEventInterval);
         }
         

@@ -172,7 +172,10 @@ public class ParticleShapeSystem : MonoBehaviour
         if (lifeCycleType.Active == currentLifeCycle)
         {
             main.simulationSpeed = 0f;
-            MoveParticles();
+            if (allowShapeMotion)
+            {
+                MoveParticles();
+            }
             SyncDisplayParticles(forceResetLifetime: false);
         
         }else if (lifeCycleType.nature == currentLifeCycle)
@@ -389,7 +392,19 @@ public class ParticleShapeSystem : MonoBehaviour
             ? previewAnchor.GetHoldWorldPosition(Vector3.zero)
             : previewAnchor.GetShapeWorldPosition(Vector3.zero);
         Gizmos.DrawWireSphere(gizmoCenter, gizmoRadius);
+
+        if (showPostCollectOptions)
+        {
+            Gizmos.color = Color.cyan;
+            Vector3 panelCenter = Camera.current != null
+                ? Camera.current.transform.position + Camera.current.transform.forward * selectionUiDistanceFromCamera
+                : gizmoCenter;
+            Vector3 panelSize = new Vector3(selectionPanelSize.x, selectionPanelSize.y, 1f) * 0.001f;
+            Gizmos.DrawWireCube(panelCenter, panelSize);
+        }
     }
+
+    public float PostCollectOptionsDelaySeconds => postCollectOptionsDelaySeconds;
 
 
 

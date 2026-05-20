@@ -85,6 +85,8 @@ namespace ButterflyHouse.Butterflies
                 }
             }
             
+            _evolutionProgress = Mathf.Min(1f, _evolutionProgress + Time.deltaTime);
+
             // Update visual form based on current tier
             UpdateWaveformVisuals();
         }
@@ -240,6 +242,7 @@ namespace ButterflyHouse.Butterflies
         }
         
         public WaveformTier CurrentTier => currentTier;
+        public float EvolutionProgress => _evolutionProgress;
     }
 }
 

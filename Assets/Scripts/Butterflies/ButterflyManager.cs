@@ -173,8 +173,6 @@ namespace ButterflyHouse.Butterflies
             
             Vector3 steer = Vector3.zero;
             float maxDistance = 0f;
-            bool nearGround = false;
-            bool nearCeiling = false;
             
             // Check X bounds with buffer zone
             float distToMinX = position.x - boundingBoxMin.x;
@@ -212,13 +210,11 @@ namespace ButterflyHouse.Butterflies
             {
                 float strength = 1f - (distToMinY / boundaryBufferZone);
                 steer.y += strength * groundUpwardBias; // Strong upward steer when near ground
-                nearGround = true;
                 maxDistance = Mathf.Max(maxDistance, boundaryBufferZone - distToMinY);
             }
             else if (distToMinY < 0f) // Below bounds
             {
                 steer.y += groundUpwardBias * 2f; // Very strong upward steer
-                nearGround = true;
                 maxDistance = Mathf.Max(maxDistance, Mathf.Abs(distToMinY));
             }
             
@@ -226,13 +222,11 @@ namespace ButterflyHouse.Butterflies
             {
                 float strength = 1f - (distToMaxY / boundaryBufferZone);
                 steer.y -= strength; // Steer down (away from ceiling)
-                nearCeiling = true;
                 maxDistance = Mathf.Max(maxDistance, boundaryBufferZone - distToMaxY);
             }
             else if (distToMaxY < 0f) // Above bounds
             {
                 steer.y -= 1f; // Strong steer down
-                nearCeiling = true;
                 maxDistance = Mathf.Max(maxDistance, Mathf.Abs(distToMaxY));
             }
             

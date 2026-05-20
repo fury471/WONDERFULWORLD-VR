@@ -44,6 +44,8 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     [SerializeField] private float rayDistance = 20f;
     [SerializeField] private float forwardSpawnDistance = 3.5f;
     [SerializeField] private float minSpacingBetweenPlants = 0.75f;
+    [SerializeField] private Transform playerClearanceOrigin;
+    [SerializeField] private float minSpawnDistanceFromPlayer = 1.6f;
     [SerializeField] private bool requireTerrainColliderForNewMushrooms = true;
     [SerializeField] private bool blockWhenPointingAtInteractable = true;
     [SerializeField] private bool allowForwardFallbackForDebug = false;
@@ -117,7 +119,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     [SerializeField] private float chargedBurstRadius = 4f;
 
     [Header("Variation")]
-    [SerializeField] private Vector2 randomScaleRange = new Vector2(0.16f, 1.05f);
+    [SerializeField] private Vector2 randomScaleRange = new Vector2(0.25f, 0.5f);
     [SerializeField] private Vector2 randomDurationRange = new Vector2(0.85f, 1.2f);
     [SerializeField] private Vector2 randomWobbleRange = new Vector2(0.8f, 1.25f);
 
@@ -188,6 +190,22 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         if (interactionOrigin == null && Camera.main != null)
         {
             interactionOrigin = Camera.main.transform;
+        }
+
+        if (playerClearanceOrigin == null)
+        {
+            if (Camera.main != null)
+            {
+                playerClearanceOrigin = Camera.main.transform;
+            }
+            else
+            {
+                CharacterController playerController = FindFirstObjectByType<CharacterController>();
+                if (playerController != null)
+                {
+                    playerClearanceOrigin = playerController.transform;
+                }
+            }
         }
 
         if (preferRightControllerOrigin && !IsRightControllerOrigin(interactionOrigin))
@@ -997,6 +1015,15 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             return;
         }
 
+        if (IsTooCloseToPlayer(targetPoint))
+        {
+            if (logDebugMessages)
+            {
+                Debug.Log("GrowthSeedZoneDriver: target point is too close to the player.");
+            }
+            return;
+        }
+
         int mushroomsToSpawn = charged
             ? Random.Range(
                 Mathf.Max(1, chargedMinMushroomsPerSeed),
@@ -1107,6 +1134,26 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         return false;
     }
 
+    private bool IsTooCloseToPlayer(Vector3 point)
+    {
+        if (minSpawnDistanceFromPlayer <= 0f)
+        {
+            return false;
+        }
+
+        Transform clearanceOrigin = playerClearanceOrigin != null
+            ? playerClearanceOrigin
+            : (Camera.main != null ? Camera.main.transform : interactionOrigin);
+        if (clearanceOrigin == null)
+        {
+            return false;
+        }
+
+        Vector3 flatDelta = point - clearanceOrigin.position;
+        flatDelta.y = 0f;
+        return flatDelta.sqrMagnitude < minSpawnDistanceFromPlayer * minSpawnDistanceFromPlayer;
+    }
+
     private PlantSlot FindAvailableSlot()
     {
         foreach (PlantSlot slot in slots)
@@ -1154,7 +1201,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         List<Vector3> results = new();
         int attempts = Mathf.Max(8, desiredCount * 8);
 
-        if (!IsTooCloseToActivePlant(centerPoint))
+        if (!IsTooCloseToActivePlant(centerPoint) && !IsTooCloseToPlayer(centerPoint))
         {
             results.Add(centerPoint);
         }
@@ -1171,6 +1218,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
 
             if (!IsPointInsideZone(candidate) ||
                 IsTooCloseToActivePlant(candidate) ||
+                IsTooCloseToPlayer(candidate) ||
                 IsTooCloseToOtherSpawn(candidate, results))
             {
                 continue;

@@ -261,6 +261,7 @@ namespace ButterflyHouse.Butterflies
         
         public ButterflyArchetype Archetype => archetype;
         public float Energy => _energy;
+        public bool HasSpawnedFirst => _hasSpawnedFirst;
     }
 }
 
