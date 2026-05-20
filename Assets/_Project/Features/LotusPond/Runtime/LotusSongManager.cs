@@ -32,7 +32,7 @@ public class LotusSongManager : MonoBehaviour
     void Start()
     {
         // Find and map all controllers in the scene
-        LotusGlowController[] allControllers = FindObjectsOfType<LotusGlowController>();
+        LotusGlowController[] allControllers = FindObjectsByType<LotusGlowController>(FindObjectsSortMode.InstanceID);
 
         foreach (var ctrl in allControllers)
         {

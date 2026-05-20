@@ -40,7 +40,7 @@ namespace ButterflyHouse.Plants
         private void FindAllPlants()
         {
             plants.Clear();
-            plants.AddRange(FindObjectsOfType<GenerativePlant>());
+            plants.AddRange(FindObjectsByType<GenerativePlant>(FindObjectsSortMode.InstanceID));
         }
         
         /// <summary>

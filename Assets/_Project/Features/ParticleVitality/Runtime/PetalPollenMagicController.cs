@@ -192,15 +192,6 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private float attractorParticleSizeMultiplier = 1.08f;
     [SerializeField] private int attractorIntegrationSteps = 380;
 
-    [Header("Weighted Surprise")]
-    [SerializeField] private float spiralBloomWeight = 0.28f;
-    [SerializeField] private float mathRibbonWeight = 0.25f;
-    [SerializeField] private float tornadoVortexWeight = 0.32f;
-    [SerializeField] private float aizawaFountainWeight = 0.22f;
-    [SerializeField] private float dreamAttractorWeight = 0.22f;
-    [SerializeField] private float galaxyVeilWeight = 0.3f;
-    [SerializeField] private float chargedGalaxyBonusWeight = 0.35f;
-
     [Header("Look")]
     [SerializeField] private float pollenSize = 0.045f;
     [SerializeField] private float petalSize = 0.12f;
@@ -236,36 +227,16 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private float questChargeViewHeight = -0.16f;
     [SerializeField] private float questChargeSideOffset = 0.08f;
 
-    [Header("Charge Sphere View Tracking")]
+    [Header("Charge Sphere Anchor")]
     [Tooltip("When true, the charge sphere is driven by the player's camera/HMD frame instead of the controller hand anchor.")]
     [SerializeField] private bool forceViewFrontChargeAnchorOnBegin = true;
     [Tooltip("Log one line to the Console the first time the charge anchor view-lock engages, so you can verify in Play mode that the code path is firing.")]
     [SerializeField] private bool logChargeAnchorOnce = false;
-    [Tooltip("Smoothing time (seconds) for the charge sphere to slide to its new XZ position as the player turns. Higher = lazier follow. Used while the sphere is being held.")]
-    [Range(0.0f, 1.5f)]
-    [SerializeField] private float chargeAnchorPositionSmoothing = 0.18f;
-    [Tooltip("Smoothing time (seconds) for the charge sphere's yaw to track the view direction.")]
-    [Range(0.0f, 1.5f)]
-    [SerializeField] private float chargeAnchorYawSmoothing = 0.22f;
-    [Tooltip("Min planar (XZ) distance between current and target positions before tracking kicks in. Below this threshold the sphere stays put to filter micro head jitter.")]
-    [SerializeField] private float chargeAnchorPositionDeadzone = 0.02f;
-    [Range(0f, 30f)]
-    [SerializeField] private float chargeAnchorYawDeadzoneDegrees = 2f;
     [SerializeField] private Color questSourceOutlineColor = new Color(1f, 0.72f, 0.34f, 0.66f);
 
-    [Header("Release View Tracking")]
-    [Tooltip("When true, the captured showcase center / pose are continuously realigned to the player's XZ view direction during the release. The visualization will stay in front of the player even if they walk around or turn.")]
-    [SerializeField] private bool liveTrackViewDuringRelease = true;
-    [Tooltip("Smoothing time (seconds) for the showcase center to slide to the new XZ position. Higher = lazier follow.")]
-    [Range(0.0f, 1.5f)]
-    [SerializeField] private float releaseCenterSmoothing = 0.35f;
-    [Tooltip("Smoothing time (seconds) for the showcase rotation to track the new view yaw. Higher = lazier turn.")]
-    [Range(0.0f, 1.5f)]
-    [SerializeField] private float releasePoseSmoothing = 0.45f;
-    [Tooltip("Min XZ distance the player must move (or yaw must turn — see degrees) before tracking applies a correction. Filters out micro head jitter.")]
-    [SerializeField] private float releaseTrackPositionDeadzone = 0.04f;
-    [Range(0f, 30f)]
-    [SerializeField] private float releaseTrackYawDeadzoneDegrees = 3f;
+    [Header("Release Stage")]
+    [Tooltip("Extra distance, in meters, from the fixed charge sphere toward the frozen view direction where the release animation unfolds.")]
+    [SerializeField] private float releaseShowcaseForwardOffset = 0.55f;
 
     private readonly List<MagicParticle> activeParticles = new List<MagicParticle>();
     private ParticleSystem.Particle[] particleBuffer = new ParticleSystem.Particle[0];
@@ -275,25 +246,9 @@ public class PetalPollenMagicController : MonoBehaviour
     private float collectStartTime;
     private float releaseStartTime;
     private float releaseCharge;
-    private Vector3 chargeAnchorPositionVelocity;
-    private float chargeAnchorYawDegrees;
-    private float chargeAnchorYawVelocity;
-    private bool chargeAnchorTracking;
     private Vector3 questEffectCenter;
     private Quaternion questEffectPose = Quaternion.identity;
     private bool hasQuestEffectFrame;
-    private Vector3 releaseShowcaseCenterVelocity;
-    private Vector3 releaseMathRibbonGateVelocity;
-    private Vector3 releaseTornadoCenterVelocity;
-    private Vector3 releaseTornadoGateVelocity;
-    private Vector3 releaseAttractorCenterVelocity;
-    private Vector3 releaseAttractorGateVelocity;
-    private float releaseShowcaseYawDegrees;
-    private float releaseTornadoYawDegrees;
-    private float releaseAttractorYawDegrees;
-    private float releaseShowcaseYawVelocity;
-    private float releaseTornadoYawVelocity;
-    private float releaseAttractorYawVelocity;
     private bool isCollecting;
     private bool releaseActive;
     private PetalPollenReleaseMode activeReleaseMode;
@@ -357,21 +312,7 @@ public class PetalPollenMagicController : MonoBehaviour
 
         if (isCollecting)
         {
-            // Keep the view-locked charge anchor tracking the player's head while collecting so
-            // the floating sphere stays in front of them even if they turn during the hold.
-            if (useViewLockedQuestChargeAnchor && handAnchor == questChargeAnchor)
-            {
-                PrepareQuestChargeAnchor();
-            }
-
             SpawnCollectionParticles();
-        }
-
-        // Continuously realign the showcase pose to the player's view direction so the release
-        // animation stays in front of them as they walk around or turn during the spectacle.
-        if (releaseActive)
-        {
-            TrackReleaseViewLive();
         }
 
         UpdateMagicParticles();
@@ -382,12 +323,6 @@ public class PetalPollenMagicController : MonoBehaviour
 
     public void BeginCollect()
     {
-        if (handAnchor == null)
-        {
-            Debug.LogWarning("[PetalPollenMagic] Assign a hand anchor before collecting.", this);
-            return;
-        }
-
         if (!CanBeginCollect())
         {
             return;
@@ -400,20 +335,29 @@ public class PetalPollenMagicController : MonoBehaviour
             return;
         }
 
-        isCollecting = true;
-        releaseActive = false;
-        hasReleaseShowcasePose = false;
-        // Reset the smooth-tracking state so the charge sphere snaps cleanly into place at the
-        // first frame of this new collect and only starts lazy-following afterwards.
-        chargeAnchorTracking = false;
         hasQuestEffectFrame = false;
-        collectStartTime = Time.time;
-        spawnAccumulator = 0f;
 
         if (forceViewFrontChargeAnchorOnBegin && useViewLockedQuestChargeAnchor)
         {
             PrepareQuestChargeAnchor();
+            if (!hasQuestEffectFrame)
+            {
+                Debug.LogWarning("[PetalPollenMagic] Quest view frame was not available; collect will not start from a debug/head fallback.", this);
+                return;
+            }
         }
+
+        if (handAnchor == null)
+        {
+            Debug.LogWarning("[PetalPollenMagic] No Quest/controller anchor could be resolved before collecting.", this);
+            return;
+        }
+
+        isCollecting = true;
+        releaseActive = false;
+        hasReleaseShowcasePose = false;
+        collectStartTime = Time.time;
+        spawnAccumulator = 0f;
 
         PlayMagicClip(collectStartClip, collectStartVolume);
     }
@@ -431,14 +375,11 @@ public class PetalPollenMagicController : MonoBehaviour
         float holdSeconds = Time.time - collectStartTime;
         releaseCharge = Mathf.Clamp01(holdSeconds / Mathf.Max(0.01f, chargedHoldSeconds));
         activeReleaseMode = randomizeReleaseMode ? PickReleaseMode(holdSeconds) : fixedReleaseMode;
-        if (useViewLockedQuestChargeAnchor)
-        {
-            PrepareQuestChargeAnchor();
-        }
 
-        Vector3 center = GetHoldCenter();
-        releaseOriginCenter = center;
-        CaptureReleaseShowcasePose(center);
+        Vector3 gatherCenter = GetHoldCenter();
+        releaseOriginCenter = gatherCenter;
+        CaptureReleaseShowcasePose(gatherCenter);
+        releaseOriginCenter = GetReleaseImpactCenter();
         PrepareAttractorSamples(activeReleaseMode, Mathf.Max(activeParticles.Count, GetReleaseDensitySampleCount(activeReleaseMode)));
         PlayMagicClip(holdSeconds >= chargedHoldSeconds && chargedReleaseClip != null ? chargedReleaseClip : releaseClip, releaseVolume);
         BeginReleaseLightFeedback(holdSeconds >= chargedHoldSeconds);
@@ -451,14 +392,14 @@ public class PetalPollenMagicController : MonoBehaviour
             particle.releaseAge = 0f;
             particle.releaseOrder = i / (float)releaseCount;
             particle.releaseStartPosition = particle.currentPosition;
-            particle.releaseDirection = (particle.currentPosition - center).normalized;
+            particle.releaseDirection = (particle.currentPosition - gatherCenter).normalized;
             if (particle.releaseDirection.sqrMagnitude < 0.001f)
             {
                 particle.releaseDirection = Random.onUnitSphere;
             }
 
             float seedRadius = particle.isPetal ? releaseSeedRadius * 1.35f : releaseSeedRadius;
-            particle.releaseSeedPosition = center + particle.releaseDirection * Random.Range(seedRadius * 0.25f, seedRadius);
+            particle.releaseSeedPosition = gatherCenter + particle.releaseDirection * Random.Range(seedRadius * 0.25f, seedRadius);
         }
     }
 
@@ -527,6 +468,12 @@ public class PetalPollenMagicController : MonoBehaviour
         if (!enableQuestControllerInteraction)
         {
             return;
+        }
+
+        Transform resolvedHead = QuestInteractionUtils.FindHeadTransform();
+        if (resolvedHead != null)
+        {
+            playerHead = resolvedHead;
         }
 
         if (rightRayOrigin == null)
@@ -751,7 +698,7 @@ public class PetalPollenMagicController : MonoBehaviour
 
         Vector3 forward = pose * Vector3.forward;
         Vector3 anchorPosition = holdCenter - forward * Mathf.Max(0f, holdDistance);
-        DriveChargeAnchorSmoothly(anchorPosition, pose);
+        questChargeAnchor.SetPositionAndRotation(anchorPosition, Quaternion.Euler(0f, pose.eulerAngles.y, 0f));
         questEffectPose = questChargeAnchor.rotation;
         questEffectCenter = questChargeAnchor.position + questEffectPose * Vector3.forward * Mathf.Max(0f, holdDistance);
         hasQuestEffectFrame = true;
@@ -771,71 +718,6 @@ public class PetalPollenMagicController : MonoBehaviour
 
         didLogChargeAnchor = true;
         Debug.Log($"[PetalPollenMagic] Charge anchor view-lock engaged ({pathLabel}). handAnchor='{handAnchor?.name}', playerHead='{playerHead?.name}', anchorPos={questChargeAnchor?.position}.", this);
-    }
-
-    /// <summary>
-    /// Smoothly slides the charge anchor toward the requested ideal pose so the held sphere
-    /// follows the player's view direction with a gentle lazy-follow rather than snapping to
-    /// the head every frame. Position smoothing uses a yaw-only XZ deadzone so micro head
-    /// jitter doesn't make the sphere quiver; vertical motion uses the same SmoothDamp so it
-    /// settles naturally.
-    /// On the first frame after a fresh trigger press we snap into position (no lag) and start
-    /// tracking from there.
-    /// </summary>
-    private void DriveChargeAnchorSmoothly(Vector3 targetPosition, Quaternion targetRotation)
-    {
-        if (questChargeAnchor == null)
-        {
-            return;
-        }
-
-        float targetYaw = targetRotation.eulerAngles.y;
-
-        if (!chargeAnchorTracking)
-        {
-            // First frame after press: snap so the sphere appears in the right spot instantly.
-            questChargeAnchor.SetPositionAndRotation(targetPosition, Quaternion.Euler(0f, targetYaw, 0f));
-            chargeAnchorYawDegrees = targetYaw;
-            chargeAnchorPositionVelocity = Vector3.zero;
-            chargeAnchorYawVelocity = 0f;
-            chargeAnchorTracking = true;
-            return;
-        }
-
-        Vector3 current = questChargeAnchor.position;
-
-        // Planar (XZ) deadzone: small head movements should leave the sphere put.
-        float planarDelta = Vector3.Distance(
-            new Vector3(current.x, 0f, current.z),
-            new Vector3(targetPosition.x, 0f, targetPosition.z));
-        bool positionMoves = planarDelta >= Mathf.Max(0f, chargeAnchorPositionDeadzone);
-
-        if (positionMoves)
-        {
-            float positionSmoothing = Mathf.Max(0.001f, chargeAnchorPositionSmoothing);
-            current = Vector3.SmoothDamp(current, targetPosition, ref chargeAnchorPositionVelocity, positionSmoothing, Mathf.Infinity, Time.deltaTime);
-        }
-        else
-        {
-            chargeAnchorPositionVelocity = Vector3.zero;
-            // Still allow vertical settle so the sphere lands at the correct height even when
-            // the player is standing still.
-            current.y = Mathf.SmoothDamp(current.y, targetPosition.y, ref chargeAnchorPositionVelocity.y, Mathf.Max(0.001f, chargeAnchorPositionSmoothing), Mathf.Infinity, Time.deltaTime);
-        }
-
-        // Yaw deadzone: filter micro head twists.
-        float yawDelta = Mathf.DeltaAngle(chargeAnchorYawDegrees, targetYaw);
-        if (Mathf.Abs(yawDelta) >= Mathf.Max(0f, chargeAnchorYawDeadzoneDegrees))
-        {
-            float yawSmoothing = Mathf.Max(0.001f, chargeAnchorYawSmoothing);
-            chargeAnchorYawDegrees = Mathf.SmoothDampAngle(chargeAnchorYawDegrees, targetYaw, ref chargeAnchorYawVelocity, yawSmoothing, Mathf.Infinity, Time.deltaTime);
-        }
-        else
-        {
-            chargeAnchorYawVelocity = 0f;
-        }
-
-        questChargeAnchor.SetPositionAndRotation(current, Quaternion.Euler(0f, chargeAnchorYawDegrees, 0f));
     }
 
     private void EnsureQuestChargeAnchor()
@@ -865,6 +747,11 @@ public class PetalPollenMagicController : MonoBehaviour
         return Mathf.Clamp(questChargeSideOffset, -0.35f, 0.35f);
     }
 
+    private float ResolveSafeReleaseShowcaseForwardOffset()
+    {
+        return Mathf.Clamp(releaseShowcaseForwardOffset, 0.15f, 1.25f);
+    }
+
     private bool TryResolveQuestDisplayFrame(float distance, float height, float sideOffset, out Vector3 center, out Quaternion pose)
     {
         center = Vector3.zero;
@@ -884,15 +771,17 @@ public class PetalPollenMagicController : MonoBehaviour
         return true;
     }
 
+    private Vector3 ResolveQuestFrontCenter(float distance, float height, float sideOffset, Vector3 fallback)
+    {
+        return TryResolveQuestDisplayFrame(distance, height, sideOffset, out Vector3 center, out Quaternion _)
+            ? center
+            : fallback;
+    }
+
     private void RestoreAuthoredHandAnchor()
     {
-        if (authoredHandAnchor != null)
-        {
-            handAnchor = authoredHandAnchor;
-        }
+        handAnchor = authoredHandAnchor;
 
-        // Make sure the next collect re-snaps cleanly instead of lerping from a stale position.
-        chargeAnchorTracking = false;
         hasQuestEffectFrame = false;
     }
 
@@ -1738,7 +1627,7 @@ public class PetalPollenMagicController : MonoBehaviour
         }
 
         EnsureReleaseLight();
-        releaseLight.transform.position = releaseOriginCenter != Vector3.zero ? releaseOriginCenter : GetHoldCenter();
+        releaseLight.transform.position = GetReleaseImpactCenter();
         releaseLight.color = releaseLightColor;
         releaseLightPeakRange = releaseLightRange * (charged ? 1.25f : 1f);
         releaseLightPeakIntensity = releaseLightIntensity * (charged ? 1.35f : 1f);
@@ -1760,7 +1649,7 @@ public class PetalPollenMagicController : MonoBehaviour
         float duration = Mathf.Max(0.05f, releaseLightDuration);
         float t = Mathf.Clamp01(releaseLightAge / duration);
         float fade = 1f - Smoother01(t);
-        Vector3 lightTarget = releaseOriginCenter != Vector3.zero ? releaseOriginCenter : GetHoldCenter();
+        Vector3 lightTarget = GetReleaseImpactCenter();
         releaseLight.transform.position = Vector3.Lerp(releaseLight.transform.position, lightTarget, Time.deltaTime * 10f);
         releaseLight.intensity = releaseLightPeakIntensity * fade;
         releaseLight.range = releaseLightPeakRange * Mathf.Lerp(1.1f, 0.55f, t);
@@ -1789,56 +1678,19 @@ public class PetalPollenMagicController : MonoBehaviour
 
     private PetalPollenReleaseMode PickReleaseMode(float holdSeconds)
     {
-        float galaxyWeight = galaxyVeilWeight;
-        if (holdSeconds >= chargedHoldSeconds)
+        _ = holdSeconds;
+
+        PetalPollenReleaseMode[] releaseModes =
         {
-            galaxyWeight += chargedGalaxyBonusWeight;
-        }
+            PetalPollenReleaseMode.SpiralBloom,
+            PetalPollenReleaseMode.MathRibbon,
+            PetalPollenReleaseMode.TornadoVortex,
+            PetalPollenReleaseMode.AizawaFountain,
+            PetalPollenReleaseMode.DreamAttractor,
+            PetalPollenReleaseMode.GalaxyVeil
+        };
 
-        float total = Mathf.Max(0f, spiralBloomWeight)
-            + Mathf.Max(0f, mathRibbonWeight)
-            + Mathf.Max(0f, tornadoVortexWeight)
-            + Mathf.Max(0f, aizawaFountainWeight)
-            + Mathf.Max(0f, dreamAttractorWeight)
-            + Mathf.Max(0f, galaxyWeight);
-
-        if (total <= 0.001f)
-        {
-            return PetalPollenReleaseMode.GalaxyVeil;
-        }
-
-        float roll = Random.value * total;
-        roll -= Mathf.Max(0f, spiralBloomWeight);
-        if (roll <= 0f)
-        {
-            return PetalPollenReleaseMode.SpiralBloom;
-        }
-
-        roll -= Mathf.Max(0f, mathRibbonWeight);
-        if (roll <= 0f)
-        {
-            return PetalPollenReleaseMode.MathRibbon;
-        }
-
-        roll -= Mathf.Max(0f, tornadoVortexWeight);
-        if (roll <= 0f)
-        {
-            return PetalPollenReleaseMode.TornadoVortex;
-        }
-
-        roll -= Mathf.Max(0f, aizawaFountainWeight);
-        if (roll <= 0f)
-        {
-            return PetalPollenReleaseMode.AizawaFountain;
-        }
-
-        roll -= Mathf.Max(0f, dreamAttractorWeight);
-        if (roll <= 0f)
-        {
-            return PetalPollenReleaseMode.DreamAttractor;
-        }
-
-        return PetalPollenReleaseMode.GalaxyVeil;
+        return releaseModes[Random.Range(0, releaseModes.Length)];
     }
 
     private void RenderParticles()
@@ -1991,7 +1843,8 @@ public class PetalPollenMagicController : MonoBehaviour
         Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
         Vector3 up = Vector3.up;
 
-        Vector3 position = releaseOriginCenter
+        Vector3 impactCenter = GetReleaseImpactCenter();
+        Vector3 position = impactCenter
             + right * (Mathf.Cos(angle) * radius)
             + forward * (Mathf.Sin(angle) * radius * 0.72f)
             + up * lift;
@@ -2181,7 +2034,7 @@ public class PetalPollenMagicController : MonoBehaviour
         float progress = index / Mathf.Max(1f, count - 1f);
         float angle = progress * Mathf.PI * 10f + Time.time * 1.5f + seed;
         float radius = Mathf.Lerp(0.18f, burstRadius * GetChargedReleaseRadiusScale(), Smoother01(showT));
-        Vector3 center = GetHoldCenter();
+        Vector3 center = hasReleaseShowcasePose ? releaseShowcaseCenter : GetHoldCenter();
         return center + new Vector3(Mathf.Cos(angle) * radius, Mathf.Lerp(-0.7f, 1.35f, progress), Mathf.Sin(angle) * radius);
     }
 
@@ -2434,7 +2287,7 @@ public class PetalPollenMagicController : MonoBehaviour
 
     private Vector3 GetHoldCenter()
     {
-        if (useViewLockedQuestChargeAnchor && hasQuestEffectFrame && handAnchor == questChargeAnchor)
+        if (useViewLockedQuestChargeAnchor && hasQuestEffectFrame)
         {
             return questEffectCenter;
         }
@@ -2443,11 +2296,25 @@ public class PetalPollenMagicController : MonoBehaviour
         return anchor.position + anchor.forward * holdDistance;
     }
 
+    private Vector3 GetReleaseImpactCenter()
+    {
+        if (hasReleaseShowcasePose)
+        {
+            return releaseShowcaseCenter;
+        }
+
+        return ResolveQuestFrontCenter(
+            ResolveSafeChargeViewDistance(),
+            ResolveSafeChargeViewHeight(),
+            ResolveSafeChargeSideOffset(),
+            releaseOriginCenter != Vector3.zero ? releaseOriginCenter : GetHoldCenter());
+    }
+
     private Vector3 GetPlayerCenter()
     {
-        if (playerHead != null)
+        if (useViewLockedQuestChargeAnchor && hasQuestEffectFrame)
         {
-            return playerHead.position + Vector3.down * 0.35f;
+            return questEffectCenter;
         }
 
         return GetHoldCenter();
@@ -2793,6 +2660,24 @@ public class PetalPollenMagicController : MonoBehaviour
 
     private void CaptureReleaseShowcasePose(Vector3 referenceCenter)
     {
+        if (useViewLockedQuestChargeAnchor && hasQuestEffectFrame)
+        {
+            Quaternion frozenPose = Quaternion.Euler(0f, questEffectPose.eulerAngles.y, 0f);
+            Vector3 showcaseCenter = referenceCenter + frozenPose * Vector3.forward * ResolveSafeReleaseShowcaseForwardOffset();
+            releaseShowcaseCenter = showcaseCenter;
+            releaseMathRibbonGateCenter = showcaseCenter;
+            releaseTornadoCenter = showcaseCenter;
+            releaseTornadoGateCenter = showcaseCenter;
+            releaseAttractorCenter = showcaseCenter;
+            releaseAttractorGateCenter = showcaseCenter;
+
+            releaseShowcasePose = frozenPose;
+            releaseTornadoPose = frozenPose;
+            releaseAttractorPose = frozenPose;
+            hasReleaseShowcasePose = true;
+            return;
+        }
+
         // If we have a usable view frame, project the showcase into the XZ plane in front of the
         // player at each mode's authored offset so the visualization always reads from the
         // player's perspective regardless of which side of the source they pressed from. If no
@@ -2824,95 +2709,6 @@ public class PetalPollenMagicController : MonoBehaviour
         releaseTornadoPose = ResolveFallbackMathRibbonPose(releaseTornadoCenter);
         releaseAttractorPose = ResolveFallbackMathRibbonPose(releaseAttractorCenter);
         hasReleaseShowcasePose = true;
-
-        // Seed live-tracking state so the first frame of tracking starts on the captured pose
-        // and the SmoothDamp Slerp doesn't pop from yaw 0.
-        releaseShowcaseYawDegrees = releaseShowcasePose.eulerAngles.y;
-        releaseTornadoYawDegrees = releaseTornadoPose.eulerAngles.y;
-        releaseAttractorYawDegrees = releaseAttractorPose.eulerAngles.y;
-        releaseShowcaseCenterVelocity = Vector3.zero;
-        releaseMathRibbonGateVelocity = Vector3.zero;
-        releaseTornadoCenterVelocity = Vector3.zero;
-        releaseTornadoGateVelocity = Vector3.zero;
-        releaseAttractorCenterVelocity = Vector3.zero;
-        releaseAttractorGateVelocity = Vector3.zero;
-        releaseShowcaseYawVelocity = 0f;
-        releaseTornadoYawVelocity = 0f;
-        releaseAttractorYawVelocity = 0f;
-    }
-
-    /// <summary>
-    /// Each frame during release, re-derive the ideal camera-relative showcase pose, then
-    /// smoothly slide the cached centers / yaws toward it so the show follows the player's view.
-    /// </summary>
-    private void TrackReleaseViewLive()
-    {
-        if (!liveTrackViewDuringRelease || !hasReleaseShowcasePose)
-        {
-            return;
-        }
-
-        if (!TryResolveViewFrame(out Vector3 _, out Vector3 viewForward, out Vector3 _))
-        {
-            return;
-        }
-
-        // Compute "what the captured pose WOULD be if we re-released right now" — the per-mode
-        // resolvers already XZ-flatten internally via TryResolveViewFrame.
-        bool previousHasPose = hasReleaseShowcasePose;
-        hasReleaseShowcasePose = false;
-        Vector3 targetShowcaseCenter = ResolveMathRibbonCenter();
-        Vector3 targetMathGate = ResolveMathRibbonGateCenter();
-        Vector3 targetTornadoCenter = ResolveTornadoCenter();
-        Vector3 targetTornadoGate = ResolveTornadoGateCenter();
-        Vector3 targetAttractorCenter = ResolveAttractorCenter();
-        Vector3 targetAttractorGate = ResolveAttractorGateCenter();
-        hasReleaseShowcasePose = previousHasPose;
-
-        ApplyTrackedCenter(ref releaseShowcaseCenter, targetShowcaseCenter, ref releaseShowcaseCenterVelocity);
-        ApplyTrackedCenter(ref releaseMathRibbonGateCenter, targetMathGate, ref releaseMathRibbonGateVelocity);
-        ApplyTrackedCenter(ref releaseTornadoCenter, targetTornadoCenter, ref releaseTornadoCenterVelocity);
-        ApplyTrackedCenter(ref releaseTornadoGateCenter, targetTornadoGate, ref releaseTornadoGateVelocity);
-        ApplyTrackedCenter(ref releaseAttractorCenter, targetAttractorCenter, ref releaseAttractorCenterVelocity);
-        ApplyTrackedCenter(ref releaseAttractorGateCenter, targetAttractorGate, ref releaseAttractorGateVelocity);
-
-        float targetYaw = Mathf.Atan2(viewForward.x, viewForward.z) * Mathf.Rad2Deg;
-        UpdateTrackedYaw(ref releaseShowcaseYawDegrees, ref releaseShowcaseYawVelocity, targetYaw);
-        UpdateTrackedYaw(ref releaseTornadoYawDegrees, ref releaseTornadoYawVelocity, targetYaw);
-        UpdateTrackedYaw(ref releaseAttractorYawDegrees, ref releaseAttractorYawVelocity, targetYaw);
-
-        releaseShowcasePose = Quaternion.Euler(0f, releaseShowcaseYawDegrees, 0f);
-        releaseTornadoPose = Quaternion.Euler(0f, releaseTornadoYawDegrees, 0f);
-        releaseAttractorPose = Quaternion.Euler(0f, releaseAttractorYawDegrees, 0f);
-    }
-
-    private void ApplyTrackedCenter(ref Vector3 current, Vector3 target, ref Vector3 velocity)
-    {
-        float planarDelta = Vector3.Distance(
-            new Vector3(current.x, 0f, current.z),
-            new Vector3(target.x, 0f, target.z));
-        float verticalDelta = Mathf.Abs(current.y - target.y);
-        if (planarDelta < Mathf.Max(0f, releaseTrackPositionDeadzone) && verticalDelta < Mathf.Max(0f, releaseTrackPositionDeadzone))
-        {
-            velocity = Vector3.zero;
-            return;
-        }
-
-        float smoothing = Mathf.Max(0.001f, releaseCenterSmoothing);
-        current = Vector3.SmoothDamp(current, target, ref velocity, smoothing, Mathf.Infinity, Time.deltaTime);
-    }
-
-    private void UpdateTrackedYaw(ref float currentYaw, ref float yawVelocity, float targetYaw)
-    {
-        float delta = Mathf.DeltaAngle(currentYaw, targetYaw);
-        if (Mathf.Abs(delta) < Mathf.Max(0f, releaseTrackYawDeadzoneDegrees))
-        {
-            yawVelocity = 0f;
-            return;
-        }
-
-        float smoothing = Mathf.Max(0.001f, releasePoseSmoothing);
-        currentYaw = Mathf.SmoothDampAngle(currentYaw, targetYaw, ref yawVelocity, smoothing, Mathf.Infinity, Time.deltaTime);
     }
 
     private Quaternion ResolveFallbackMathRibbonPose(Vector3 center)
@@ -2943,7 +2739,17 @@ public class PetalPollenMagicController : MonoBehaviour
 
     private bool TryResolveViewFrame(out Vector3 position, out Vector3 forward, out Vector3 right)
     {
-        Transform view = playerHead;
+        Transform view = enableQuestControllerInteraction ? QuestInteractionUtils.FindHeadTransform() : null;
+        if (view != null)
+        {
+            playerHead = view;
+        }
+
+        if (view == null)
+        {
+            view = playerHead;
+        }
+
         if (view == null && Camera.main != null)
         {
             view = Camera.main.transform;

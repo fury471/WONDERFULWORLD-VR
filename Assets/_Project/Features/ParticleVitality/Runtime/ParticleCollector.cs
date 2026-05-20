@@ -196,5 +196,7 @@ public class ParticleCollector : MonoBehaviour
         return requireDebugSource ? null : leftHandTransform;
     }
 
+    public float WarningDurationSeconds => warningDurationSeconds;
+
 
 }

@@ -65,7 +65,7 @@ namespace ButterflyHouse.Plants
         private void FindAllFruits()
         {
             allFruits.Clear();
-            allFruits.AddRange(FindObjectsOfType<GenerativeFruit>());
+            allFruits.AddRange(FindObjectsByType<GenerativeFruit>(FindObjectsSortMode.InstanceID));
         }
         
         /// <summary>

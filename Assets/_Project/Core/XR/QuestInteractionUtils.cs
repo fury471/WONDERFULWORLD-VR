@@ -9,6 +9,49 @@ public static class QuestInteractionUtils
 {
     private const float DefaultHapticFrequency = 0f;
 
+    public static Transform FindHeadTransform()
+    {
+        Camera mainCamera = Camera.main;
+        if (mainCamera != null)
+        {
+            return mainCamera.transform;
+        }
+
+        Transform found = FindInScene("Main Camera");
+        if (found != null)
+        {
+            return found;
+        }
+
+        found = FindInScene("CenterEyeAnchor");
+        if (found != null)
+        {
+            return found;
+        }
+
+        found = FindInScene("Camera Offset");
+        if (found != null)
+        {
+            Camera childCamera = found.GetComponentInChildren<Camera>(true);
+            if (childCamera != null)
+            {
+                return childCamera.transform;
+            }
+        }
+
+        Camera[] cameras = Object.FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < cameras.Length; i++)
+        {
+            Camera camera = cameras[i];
+            if (camera != null && camera.stereoTargetEye != StereoTargetEyeMask.None)
+            {
+                return camera.transform;
+            }
+        }
+
+        return cameras.Length > 0 && cameras[0] != null ? cameras[0].transform : null;
+    }
+
     public static Transform FindControllerRayOrigin(bool rightHand)
     {
         if (rightHand)

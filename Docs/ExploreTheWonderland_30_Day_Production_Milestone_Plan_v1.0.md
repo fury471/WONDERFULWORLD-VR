@@ -37,7 +37,7 @@ The build must include the following shippable features:
 This plan assumes:
 
 - the current team is Group 5: Xuanyuan Qin, Tongyan Sun, Haobo Xu, Wenao Li, Yu Fu
-- Unity version remains the current project version already in the repo
+- Unity version is strictly standardized and locked to **Unity 6 (`6000.3.11f1`)**
 - target platform is tethered PCVR through OpenXR
 - the first 30 days are focused on one polished vertical slice, not the full park
 - all new production work is created under `Assets/_Project`
@@ -78,124 +78,109 @@ The following paths are the production target structure for the first 30 days. S
 ```text
 Assets/_Project/
   Core/
-    Bootstrap/
-      AppBootstrap.prefab
-      StartupSceneConfig.asset
-    Input/
-      WonderlandInputActions.inputactions
-      InputActionRouter.cs
     Runtime/
-      ServiceRegistry.cs
-      WorldStateManager.cs
       GameFlowManager.cs
       ParkAttractionState.cs
-    SceneManagement/
-      PlayerStartAnchor.cs
-      ParkZoneMarker.cs
-    ScriptableObjects/
-      ParkSettings_SO.asset
-      ComfortSettings_SO.asset
-      AttractionDescriptor_SO.asset
-    Settings/
-      GraphicsQualityProfile_SO.asset
-      VRComfortProfile_SO.asset
     XR/
-      WonderlandXROrigin.prefab
-      ComfortVignetteController.cs
-      XRPlayerRigController.cs
-    Tests/
-      PlayMode/
-        XRPlayerSmokeTests.cs
-        SceneLoadSmokeTests.cs
-      Editor/
-        ScriptableObjectValidationTests.cs
+      QuestHapticsInteractionProfile.cs
+      QuestInteractableFeedback.cs
+      QuestInteractionUtils.cs
+      QuestLocomotionComfortProfile.cs
+      QuestRayVisualBroker.cs
+      QuestRayVisualLengthProfile.cs
 
   Features/
+    CherryGarden/
+      Runtime/
+        CherryGardenToonOutlineController.cs
+        DynamicLightController.cs
+        FlowerVortexEffect.cs
+        LightFlicker.cs
+        TreeGrowthController.cs
+        WashiLightController.cs
+      Editor/
+        CherryGardenRegionBuilder.cs
+
     ScaleShift/
       Runtime/
         ScaleManager.cs
         ScaleState.cs
         ScaleTransitionController.cs
-      Prefabs/
-        ScaleShiftShrine.prefab
-      ScriptableObjects/
-        ScaleSettings_SO.asset
-      Tests/
-        ScaleTransitionTests.cs
 
     Weather/
       Runtime/
-        WeatherManager.cs
         RegionWeatherResponder.cs
-      Prefabs/
-        WeatherShrine.prefab
-      ScriptableObjects/
-        WeatherPreset_Clear.asset
-        WeatherPreset_Overcast.asset
-        WeatherPreset_Rain.asset
-        WeatherPreset_Windy.asset
-      Tests/
-        WeatherPresetTests.cs
+        WeatherManager.cs
+        WeatherPreset.cs
+        WeatherZoneTrigger.cs
 
     Growth/
       Runtime/
+        GrowthCluster.cs
+        GrowthColorGradientDriver.cs
         GrowthController.cs
-        GrowthStageDriver.cs
-      Prefabs/
-        GrowthFlowerRoute.prefab
-        GrowthVineBridge.prefab
+        GrowthDriver.cs
+        GrowthEnergyEffectDriver.cs
+        GrowthPlant.cs
+        GrowthSeedZoneDriver.cs
+        SimpleBreathingFeedback.cs
       ScriptableObjects/
-        GrowthProfile_SO.asset
-      Tests/
-        GrowthStageTests.cs
+        GrowthProfile_SO.cs
 
     ParticleVitality/
       Runtime/
         ParticleCollector.cs
-        ParticleShapeSystem.cs
         ParticlePreviewAnchor.cs
-      Prefabs/
-        ParticleSource_Flower.prefab
-        ParticleShapePreview.prefab
-      ScriptableObjects/
-        ParticleShapeLibrary_SO.asset
-      Tests/
-        ParticleBudgetTests.cs
+        ParticleShapeSystem.cs
+        PetalPollenMagicController.cs
+        PetalPollenReleaseMode.cs
+        PetalPollenSource.cs
 
     Fireworks/
       Runtime/
         FireworkController.cs
         FireworkLaunchPad.cs
-      Prefabs/
-        FireworksLauncher.prefab
-      ScriptableObjects/
-        FireworkPatternLibrary_SO.asset
+        FireworkMagicActivator.cs
+        FireworkPatternLibrary_SO.cs
+        FireworkPointCloudGenerator.cs
+        FireworkRandomParticlePlayer.cs
+        LegacyFireworkPatternTypes.cs
+        PointCloudFireworkRenderer.cs
+        PointCloudFireworkTypes.cs
+        VRFireworkMenuController.cs
       Tests/
-        FireworkPatternValidationTests.cs
+        WorldSpaceFollowUI.cs
 
     Mounts/
       Runtime/
-        MountController.cs
         CatRideRouteController.cs
-      Prefabs/
-        CatMount.prefab
-        CatRouteNode.prefab
-      ScriptableObjects/
-        MountSettings_SO.asset
-      Tests/
-        MountStateTests.cs
+        MountController.cs
+        MountSettings_SO.cs
+        QuestSwingRideController.cs
+        v2/
+          ButterflyAutoTriggerV2.cs
+          ButterflyFlightControllerV2.cs
+          CatIdlePaceV2.cs
+          CatRideAutoTriggerV2.cs
+          CatRideControllerV2.cs
+          CatRideV2Bootstrap.cs
+          HorseSummonV2.cs
 
     LotusPond/
       Runtime/
+        LotusEitherHandDriver.cs
+        LotusGlowController.cs
+        LotusMusicStaff.cs
+        LotusNoteId.cs
         LotusNoteTrigger.cs
         LotusRippleController.cs
-      Prefabs/
-        LotusPad.prefab
-        LotusMusicCluster.prefab
-      ScriptableObjects/
-        LotusScale_SO.asset
-      Tests/
-        LotusTriggerTests.cs
+        LotusScaleSettingsSO.cs
+        LotusSongData.cs
+        LotusSongManager.cs
+        LotusSongUIController.cs
+        LotusStylizedWaterMesh.cs
+        StaffWave.cs
+        WaterDropSlide.cs
 
   World/
     Persistent/

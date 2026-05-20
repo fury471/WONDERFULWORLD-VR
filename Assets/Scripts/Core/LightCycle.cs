@@ -41,7 +41,7 @@ namespace ButterflyHouse.Core
         private void Awake()
         {
             if (directionalLight == null)
-                directionalLight = FindObjectOfType<Light>();
+                directionalLight = FindFirstObjectByType<Light>();
         }
         
         private void Start()

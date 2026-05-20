@@ -66,25 +66,25 @@ namespace ButterflyHouse.Core
             
             // Auto-find components if not assigned
             if (ecosystemState == null)
-                ecosystemState = FindObjectOfType<EcosystemStateController>();
+                ecosystemState = FindFirstObjectByType<EcosystemStateController>();
             
             if (progressionStageManager == null)
-                progressionStageManager = FindObjectOfType<ProgressionStageManager>();
+                progressionStageManager = FindFirstObjectByType<ProgressionStageManager>();
             
             if (butterflyManager == null)
-                butterflyManager = FindObjectOfType<ButterflyManager>();
+                butterflyManager = FindFirstObjectByType<ButterflyManager>();
             
             if (fruitManager == null)
-                fruitManager = FindObjectOfType<FruitManager>();
+                fruitManager = FindFirstObjectByType<FruitManager>();
             
             if (plantManager == null)
-                plantManager = FindObjectOfType<PlantManager>();
+                plantManager = FindFirstObjectByType<PlantManager>();
             
             if (handAuraManager == null)
-                handAuraManager = FindObjectOfType<HandAuraSystem>();
+                handAuraManager = FindFirstObjectByType<HandAuraSystem>();
             
             if (eventOrchestrator == null)
-                eventOrchestrator = FindObjectOfType<EventOrchestrator>();
+                eventOrchestrator = FindFirstObjectByType<EventOrchestrator>();
         }
         
         private void Start()
@@ -302,7 +302,7 @@ namespace ButterflyHouse.Core
             if (keyboard != null)
             {
                 // Cycle stages up (Page Up)
-                if (keyboard.pageUpKey.wasPressedThisFrame)
+                if (WasKeyPressed(keyboard, stageUpKey))
                 {
                     int currentStage = ecosystemState.ProgressionStage;
                     int nextStage = Mathf.Min(5, currentStage + 1);
@@ -313,7 +313,7 @@ namespace ButterflyHouse.Core
                 }
                 
                 // Cycle stages down (Page Down)
-                if (keyboard.pageDownKey.wasPressedThisFrame)
+                if (WasKeyPressed(keyboard, stageDownKey))
                 {
                     int currentStage = ecosystemState.ProgressionStage;
                     int prevStage = Mathf.Max(0, currentStage - 1);
@@ -324,12 +324,13 @@ namespace ButterflyHouse.Core
                 }
                 
                 // Direct stage selection with number keys (1-6)
-                if (keyboard.digit1Key.wasPressedThisFrame) SetStageManually(0);
-                if (keyboard.digit2Key.wasPressedThisFrame) SetStageManually(1);
-                if (keyboard.digit3Key.wasPressedThisFrame) SetStageManually(2);
-                if (keyboard.digit4Key.wasPressedThisFrame) SetStageManually(3);
-                if (keyboard.digit5Key.wasPressedThisFrame) SetStageManually(4);
-                if (keyboard.digit6Key.wasPressedThisFrame) SetStageManually(5);
+                for (int i = 0; i < stageKeys.Length && i <= 5; i++)
+                {
+                    if (WasKeyPressed(keyboard, stageKeys[i]))
+                    {
+                        SetStageManually(i);
+                    }
+                }
             }
             else
             {
@@ -393,6 +394,27 @@ namespace ButterflyHouse.Core
                     progressionStageManager.OnStageEntered(targetStage);
                 }
             }
+        }
+
+        private static bool WasKeyPressed(Keyboard keyboard, KeyCode keyCode)
+        {
+            if (keyboard == null)
+            {
+                return false;
+            }
+
+            return keyCode switch
+            {
+                KeyCode.PageUp => keyboard.pageUpKey.wasPressedThisFrame,
+                KeyCode.PageDown => keyboard.pageDownKey.wasPressedThisFrame,
+                KeyCode.Alpha1 => keyboard.digit1Key.wasPressedThisFrame,
+                KeyCode.Alpha2 => keyboard.digit2Key.wasPressedThisFrame,
+                KeyCode.Alpha3 => keyboard.digit3Key.wasPressedThisFrame,
+                KeyCode.Alpha4 => keyboard.digit4Key.wasPressedThisFrame,
+                KeyCode.Alpha5 => keyboard.digit5Key.wasPressedThisFrame,
+                KeyCode.Alpha6 => keyboard.digit6Key.wasPressedThisFrame,
+                _ => false
+            };
         }
         
         // Public getters

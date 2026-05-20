@@ -8,8 +8,9 @@ public static class TerrainGrassDetailInstaller
 {
     private const string WonderlandParkScenePath = "Assets/_Project/World/Persistent/World_WonderlandPark.unity";
 
-    private const float PerformanceDetailDistance = 38f;
-    private const float PerformanceDetailDensity = 0.62f;
+    private const float PerformanceDetailDistance = 56f;
+    private const float PerformanceDetailDensity = 0.5f;
+    private const float SlopeAlignedDetailAmount = 1f;
 
     private static readonly GrassDetailInstallSpec[] GrassDetails =
     {
@@ -135,6 +136,77 @@ public static class TerrainGrassDetailInstaller
             $"Terrain detail distance={PerformanceDetailDistance}, density={PerformanceDetailDensity}.");
     }
 
+    [MenuItem("Wonderland/World/Fix Painted Grass Slope Alignment")]
+    public static void FixPaintedGrassSlopeAlignment()
+    {
+        Terrain[] terrains = Terrain.activeTerrains;
+        if (terrains == null || terrains.Length == 0)
+        {
+            Debug.LogWarning("TerrainGrassDetailInstaller: no active terrains found in the current scene.");
+            return;
+        }
+
+        GrassDetailInstallSpec[] grassDetails = LoadGrassDetails();
+        if (grassDetails.Length == 0)
+        {
+            Debug.LogError("TerrainGrassDetailInstaller: no vegetation detail prefabs could be loaded.");
+            return;
+        }
+
+        HashSet<TerrainData> edited = new();
+        int updatedPrototypeCount = 0;
+        for (int i = 0; i < terrains.Length; i++)
+        {
+            Terrain terrain = terrains[i];
+            if (terrain == null || terrain.terrainData == null || !edited.Add(terrain.terrainData))
+            {
+                continue;
+            }
+
+            Undo.RegisterCompleteObjectUndo(terrain.terrainData, "Fix Painted Grass Slope Alignment");
+            if (ApplySlopeAlignmentToInstalledDetails(terrain.terrainData, grassDetails, out int terrainUpdatedPrototypeCount))
+            {
+                updatedPrototypeCount += terrainUpdatedPrototypeCount;
+                EditorUtility.SetDirty(terrain.terrainData);
+            }
+        }
+
+        AssetDatabase.SaveAssets();
+        Debug.Log(
+            $"TerrainGrassDetailInstaller: slope-aligned {updatedPrototypeCount} painted grass/flower detail prototypes across {edited.Count} TerrainData assets. " +
+            "Existing painted detail layers were preserved.");
+    }
+
+    [MenuItem("Wonderland/World/Apply Grass View Range")]
+    public static void ApplyGrassViewRange()
+    {
+        Terrain[] terrains = Terrain.activeTerrains;
+        if (terrains == null || terrains.Length == 0)
+        {
+            Debug.LogWarning("TerrainGrassDetailInstaller: no active terrains found in the current scene.");
+            return;
+        }
+
+        int updatedCount = 0;
+        for (int i = 0; i < terrains.Length; i++)
+        {
+            Terrain terrain = terrains[i];
+            if (terrain == null)
+            {
+                continue;
+            }
+
+            Undo.RecordObject(terrain, "Apply Grass View Range");
+            ConfigureTerrainForDenseStylizedGrass(terrain);
+            EditorUtility.SetDirty(terrain);
+            updatedCount++;
+        }
+
+        Debug.Log(
+            $"TerrainGrassDetailInstaller: applied grass view range to {updatedCount} terrains. " +
+            $"Terrain detail distance={PerformanceDetailDistance}, density={PerformanceDetailDensity}.");
+    }
+
     [MenuItem("Wonderland/World/Install Toon Grass Detail Prototypes In Wonderland Park")]
     public static void InstallToonGrassDetailPrototypesInWonderlandPark()
     {
@@ -146,6 +218,22 @@ public static class TerrainGrassDetailInstaller
     {
         EditorSceneManager.OpenScene(WonderlandParkScenePath);
         InstallToonVegetationDetailPrototypes();
+        EditorSceneManager.SaveOpenScenes();
+    }
+
+    [MenuItem("Wonderland/World/Fix Painted Grass Slope Alignment In Wonderland Park")]
+    public static void FixPaintedGrassSlopeAlignmentInWonderlandPark()
+    {
+        EditorSceneManager.OpenScene(WonderlandParkScenePath);
+        FixPaintedGrassSlopeAlignment();
+        EditorSceneManager.SaveOpenScenes();
+    }
+
+    [MenuItem("Wonderland/World/Apply Grass View Range In Wonderland Park")]
+    public static void ApplyGrassViewRangeInWonderlandPark()
+    {
+        EditorSceneManager.OpenScene(WonderlandParkScenePath);
+        ApplyGrassViewRange();
         EditorSceneManager.SaveOpenScenes();
     }
 
@@ -382,6 +470,7 @@ public static class TerrainGrassDetailInstaller
             noiseSpread = detail.NoiseSpread,
             healthyColor = Color.white,
             dryColor = Color.white,
+            alignToGround = SlopeAlignedDetailAmount,
         };
 
 #if !UNITY_6000_0_OR_NEWER
@@ -393,6 +482,73 @@ public static class TerrainGrassDetailInstaller
 #endif
 
         return prototype;
+    }
+
+    private static bool ApplySlopeAlignmentToInstalledDetails(
+        TerrainData terrainData,
+        IReadOnlyList<GrassDetailInstallSpec> grassDetails,
+        out int updatedPrototypeCount)
+    {
+        updatedPrototypeCount = 0;
+        DetailPrototype[] prototypes = terrainData.detailPrototypes;
+        if (prototypes == null || prototypes.Length == 0)
+        {
+            return false;
+        }
+
+        bool changed = false;
+        for (int i = 0; i < prototypes.Length; i++)
+        {
+            DetailPrototype prototype = prototypes[i];
+            if (!IsInstalledVegetationDetail(grassDetails, prototype?.prototype))
+            {
+                continue;
+            }
+
+            if (Mathf.Approximately(prototype.alignToGround, SlopeAlignedDetailAmount))
+            {
+                continue;
+            }
+
+            prototype.alignToGround = SlopeAlignedDetailAmount;
+            prototypes[i] = prototype;
+            updatedPrototypeCount++;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            terrainData.detailPrototypes = prototypes;
+        }
+
+        return changed;
+    }
+
+    private static bool IsInstalledVegetationDetail(IReadOnlyList<GrassDetailInstallSpec> grassDetails, GameObject prefab)
+    {
+        if (prefab == null)
+        {
+            return false;
+        }
+
+        string prefabPath = AssetDatabase.GetAssetPath(prefab);
+        for (int i = 0; i < grassDetails.Count; i++)
+        {
+            if (grassDetails[i].Prefab == prefab || grassDetails[i].PrefabPath == prefabPath)
+            {
+                return true;
+            }
+        }
+
+        for (int i = 0; i < LegacyGrassPrefabPaths.Length; i++)
+        {
+            if (LegacyGrassPrefabPaths[i] == prefabPath)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private readonly struct GrassDetailInstallSpec

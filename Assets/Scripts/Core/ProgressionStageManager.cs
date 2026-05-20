@@ -32,7 +32,7 @@ namespace ButterflyHouse.Core
         private void Awake()
         {
             if (butterflyManager == null)
-                butterflyManager = FindObjectOfType<ButterflyManager>();
+                butterflyManager = FindFirstObjectByType<ButterflyManager>();
             
             // Initialize default stage configs if not assigned
             if (stageConfigs == null || stageConfigs.Length == 0)
@@ -183,6 +183,11 @@ namespace ButterflyHouse.Core
         
         private void UpdateTrailSettings(float time, float width)
         {
+            if (!enableStageVisualEffects)
+            {
+                return;
+            }
+
             // Update trail settings for all butterflies
             if (butterflyManager != null)
             {
