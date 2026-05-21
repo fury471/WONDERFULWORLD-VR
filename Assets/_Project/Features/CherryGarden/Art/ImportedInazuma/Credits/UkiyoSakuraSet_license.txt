@@ -1,0 +1,11 @@
+Model Information:
+* title:	Ukiyo Sakura
+* source:	https://sketchfab.com/3d-models/ukiyo-sakura-751c9b74233749068e4c1ac04035cdcd
+* author:	Blender IDK STH (https://sketchfab.com/Blender_IDK)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Ukiyo Sakura" (https://sketchfab.com/3d-models/ukiyo-sakura-751c9b74233749068e4c1ac04035cdcd) by Blender IDK STH (https://sketchfab.com/Blender_IDK) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

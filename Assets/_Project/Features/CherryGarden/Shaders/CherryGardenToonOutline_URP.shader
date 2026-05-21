@@ -28,6 +28,7 @@ Shader "Wonderland/CherryGarden/Toon Outline URP"
             #pragma target 3.0
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile_fog
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
@@ -45,6 +46,7 @@ Shader "Wonderland/CherryGarden/Toon Outline URP"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
+                half fogFactor : TEXCOORD0;
             };
 
             Varyings vert(Attributes input)
@@ -52,12 +54,14 @@ Shader "Wonderland/CherryGarden/Toon Outline URP"
                 Varyings output;
                 float3 positionOS = input.positionOS.xyz + normalize(input.normalOS) * _OutlineWidth;
                 output.positionCS = TransformObjectToHClip(positionOS);
+                output.fogFactor = ComputeFogFactor(output.positionCS.z);
                 return output;
             }
 
             half4 frag(Varyings input) : SV_Target
             {
-                return _OutlineColor;
+                half3 color = MixFog(_OutlineColor.rgb, input.fogFactor);
+                return half4(color, _OutlineColor.a);
             }
             ENDHLSL
         }

@@ -9,6 +9,10 @@ Shader "Wonderland/Props/Toon Band Lit URP"
         _RampThreshold ("Ramp Threshold", Range(0, 1)) = 0.48
         _RampSoftness ("Ramp Softness", Range(0.001, 0.2)) = 0.018
         _AmbientStrength ("Ambient Strength", Range(0, 1)) = 0.38
+        _LightInfluence ("Scene Light Influence", Range(0, 1)) = 0.48
+        _AmbientFloor ("Scene-Scaled Fill", Range(0, 1)) = 0.18
+        _ShadowStrength ("Stylized Shadow Strength", Range(0, 1)) = 0.52
+        _FogInfluence ("Fog Influence", Range(0, 1)) = 1
         _Cutoff ("Alpha Cutoff", Range(0, 1)) = 0.45
         _AlphaClip ("Alpha Clip", Float) = 0
         _Cull ("Cull", Float) = 2
@@ -41,6 +45,7 @@ Shader "Wonderland/Props/Toon Band Lit URP"
             #pragma fragment frag
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
+            #pragma multi_compile_fog
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -58,6 +63,10 @@ Shader "Wonderland/Props/Toon Band Lit URP"
                 half _RampThreshold;
                 half _RampSoftness;
                 half _AmbientStrength;
+                half _LightInfluence;
+                half _AmbientFloor;
+                half _ShadowStrength;
+                half _FogInfluence;
                 half _Cutoff;
                 half _AlphaClip;
                 half4 _EmissionColor;
@@ -77,6 +86,7 @@ Shader "Wonderland/Props/Toon Band Lit URP"
                 float3 normalWS : TEXCOORD0;
                 float3 positionWS : TEXCOORD1;
                 float2 uv : TEXCOORD2;
+                half fogFactor : TEXCOORD3;
             };
 
             Varyings vert(Attributes input)
@@ -88,6 +98,7 @@ Shader "Wonderland/Props/Toon Band Lit URP"
                 output.positionWS = positionInputs.positionWS;
                 output.normalWS = normalInputs.normalWS;
                 output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
+                output.fogFactor = ComputeFogFactor(positionInputs.positionCS.z);
                 return output;
             }
 
@@ -99,13 +110,27 @@ Shader "Wonderland/Props/Toon Band Lit URP"
                     clip(albedo.a - _Cutoff);
                 }
 
+                half3 normalWS = normalize(input.normalWS);
                 Light mainLight = GetMainLight(TransformWorldToShadowCoord(input.positionWS));
-                half ndotl = saturate(dot(normalize(input.normalWS), normalize(mainLight.direction)));
+                half ndotl = saturate(dot(normalWS, normalize(mainLight.direction)));
                 half lit = smoothstep(_RampThreshold - _RampSoftness, _RampThreshold + _RampSoftness, ndotl * mainLight.shadowAttenuation);
                 half3 ramp = lerp(_ShadowColor.rgb, _HighlightColor.rgb, lit);
-                half3 color = albedo.rgb * lerp(ramp, half3(1.0h, 1.0h, 1.0h), _AmbientStrength);
+                half3 toonLight = lerp(ramp * mainLight.color.rgb, half3(1.0h, 1.0h, 1.0h), _AmbientStrength);
+
+                half wrappedNdotL = saturate(dot(normalWS, normalize(mainLight.direction)) * 0.5h + 0.5h);
+                half stylizedShade = lerp(1.0h, wrappedNdotL * mainLight.shadowAttenuation, _ShadowStrength);
+                half3 ambient = max(SampleSH(normalWS), 0.0h.xxx);
+                half3 sceneLight = ambient * 0.65h + mainLight.color.rgb * stylizedShade;
+                half sceneEnergy = saturate(
+                    dot(ambient, half3(0.2126h, 0.7152h, 0.0722h)) +
+                    dot(mainLight.color.rgb, half3(0.2126h, 0.7152h, 0.0722h)) * 0.25h);
+                sceneLight = max(sceneLight, (_AmbientFloor * sceneEnergy).xxx);
+
+                half3 color = albedo.rgb * lerp(toonLight, sceneLight, _LightInfluence);
                 half3 emission = SAMPLE_TEXTURE2D(_EmissionMap, sampler_EmissionMap, input.uv).rgb * _EmissionColor.rgb * _EmissionStrength;
-                return half4(color + emission, albedo.a);
+                color += emission;
+                color = lerp(color, MixFog(color, input.fogFactor), _FogInfluence);
+                return half4(color, albedo.a);
             }
             ENDHLSL
         }
