@@ -173,6 +173,7 @@ public class ScaleManager : MonoBehaviour
         switch (currentState)
         {
             case ScaleState.Normal:
+                // Normal -> Small requires double click.
                 if (Time.time <= lastRightThumbstickClickTime + rightThumbstickDoubleClickSeconds)
                 {
                     lastRightThumbstickClickTime = -999f;
@@ -180,17 +181,35 @@ public class ScaleManager : MonoBehaviour
                     return true;
                 }
 
+                // First click: wait for possible second click.
                 lastRightThumbstickClickTime = Time.time;
                 return false;
-            case ScaleState.Large:
+
+            case ScaleState.Small:
+                // Double click / short click is invalid while small.
                 lastRightThumbstickClickTime = -999f;
-                SetScale(ScaleState.Normal);
-                return true;
+                return false;
+
+            case ScaleState.Large:
+                // Large -> Normal also requires double click.
+                if (Time.time <= lastRightThumbstickClickTime + rightThumbstickDoubleClickSeconds)
+                {
+                    lastRightThumbstickClickTime = -999f;
+                    SetScale(ScaleState.Normal);
+                    return true;
+                }
+
+                // First click: wait for possible second click.
+                lastRightThumbstickClickTime = Time.time;
+                return false;
+
             default:
                 lastRightThumbstickClickTime = -999f;
                 return false;
         }
     }
+
+
 
     private bool TryApplyQuestScaleLongPress()
     {
