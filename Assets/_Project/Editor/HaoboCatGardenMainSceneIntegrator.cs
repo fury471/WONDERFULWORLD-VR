@@ -142,6 +142,7 @@ public static class HaoboCatGardenMainSceneIntegrator
         SetField(scaleManager, "targetCamera", mainCamera);
         SetField(scaleManager, "transitionController", transition);
         SetField(scaleManager, "characterController", characterController);
+        SetField(scaleManager, "keepXrRigShapeDuringScale", true);
         SetField(scaleManager, "enableDebugKeyboardScaleShortcuts", false);
         SetField(scaleManager, "enableQuestThumbstickScale", true);
         EditorUtility.SetDirty(scaleManager);

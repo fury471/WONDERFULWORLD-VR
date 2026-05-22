@@ -2,6 +2,7 @@ using System.Collections;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Unity.XR.CoreUtils;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -13,10 +14,14 @@ public class ScaleManager : MonoBehaviour
     [SerializeField] private Transform scaleRoot;
     [SerializeField] private Transform cameraPivot;
     [SerializeField] private Camera targetCamera;
+    [SerializeField] private XROrigin xrOrigin;
     [SerializeField] private ScaleTransitionController transitionController;
     [SerializeField] private ScaleSettings settings;
     [SerializeField] private CharacterController characterController;
     [SerializeField] private CatRideControllerV2 rideController;
+
+    [Header("XR Rig Scale")]
+    [SerializeField] private bool keepXrRigShapeDuringScale = true;
 
     [Header("Optional Runtime Targets")]
     [SerializeField] private Component[] moveSpeedTargets;
@@ -48,9 +53,14 @@ public class ScaleManager : MonoBehaviour
     private float baseControllerRadius;
     private float baseControllerStepOffset;
     private Vector3 baseControllerCenter;
+    private Vector3 baseControllerLossyScale = Vector3.one;
     private bool baseControllerCaptured;
     private Vector3 baseCameraPivotLocalPosition;
+    private float baseCameraPivotParentScaleY = 1f;
     private bool baseCameraPivotCaptured;
+    private float baseXrCameraYOffset;
+    private float baseXrCameraOffsetParentScaleY = 1f;
+    private bool baseXrCameraYOffsetCaptured;
     private Vector3 baseScaleRootLocalScale = Vector3.one;
     private bool baseScaleRootCaptured;
     private bool rightThumbstickWasPressed;
@@ -262,6 +272,24 @@ public class ScaleManager : MonoBehaviour
             transitionController = GetComponent<ScaleTransitionController>();
         }
 
+        if (xrOrigin == null)
+        {
+            if (scaleRoot != null)
+            {
+                xrOrigin = scaleRoot.GetComponent<XROrigin>();
+            }
+
+            if (xrOrigin == null)
+            {
+                xrOrigin = GetComponentInParent<XROrigin>();
+            }
+
+            if (xrOrigin == null && targetCamera != null)
+            {
+                xrOrigin = targetCamera.GetComponentInParent<XROrigin>();
+            }
+        }
+
         if (characterController == null)
         {
             characterController = GetComponent<CharacterController>();
@@ -342,10 +370,15 @@ public class ScaleManager : MonoBehaviour
         if (targetCamera != null)
             targetCamera.nearClipPlane = profile.nearClip;
 
-        ApplyEyeHeight(profile.eyeHeightMultiplier);
+        bool useUnifiedXrRigScale = ShouldUseUnifiedXrRigScale();
+        float eyeHeightMultiplier = useUnifiedXrRigScale ? profile.playerScale : profile.eyeHeightMultiplier;
+        float controllerHeightMultiplier = useUnifiedXrRigScale ? profile.playerScale : profile.controllerHeightMultiplier;
+        float controllerRadiusMultiplier = useUnifiedXrRigScale ? profile.playerScale : profile.controllerRadiusMultiplier;
+
+        ApplyEyeHeight(eyeHeightMultiplier);
         ApplyMoveSpeed(profile.moveSpeedMultiplier);
         ApplyInteractionDistance(profile.interactionDistanceMultiplier);
-        ApplyCharacterController(profile.controllerHeightMultiplier, profile.controllerRadiusMultiplier);
+        ApplyCharacterController(controllerHeightMultiplier, controllerRadiusMultiplier);
         RestoreCharacterControllerEnabled(characterControllerWasEnabled);
         Physics.SyncTransforms();
         RestoreScalePoseAnchor(preScaleAnchor);
@@ -401,6 +434,7 @@ public class ScaleManager : MonoBehaviour
             baseControllerRadius = characterController.radius;
             baseControllerStepOffset = characterController.stepOffset;
             baseControllerCenter = characterController.center;
+            baseControllerLossyScale = characterController.transform.lossyScale;
             baseControllerCaptured = true;
         }
 
@@ -408,7 +442,18 @@ public class ScaleManager : MonoBehaviour
         if (cameraPivot != null)
         {
             baseCameraPivotLocalPosition = cameraPivot.localPosition;
+            baseCameraPivotParentScaleY = GetParentLossyScaleY(cameraPivot);
             baseCameraPivotCaptured = true;
+        }
+
+        if (xrOrigin != null)
+        {
+            baseXrCameraYOffset = xrOrigin.CameraYOffset;
+            Transform offsetTransform = ResolveXrCameraOffsetTransform();
+            baseXrCameraOffsetParentScaleY = offsetTransform != null
+                ? GetParentLossyScaleY(offsetTransform)
+                : GetParentLossyScaleY(cameraPivot);
+            baseXrCameraYOffsetCaptured = true;
         }
 
         if (scaleRoot != null)
@@ -470,19 +515,26 @@ public class ScaleManager : MonoBehaviour
         if (!baseControllerCaptured || characterController == null)
             return;
 
-        float scaledHeight = baseControllerHeight * heightMultiplier;
-        float scaledRadius = baseControllerRadius * radiusMultiplier;
+        Vector3 currentLossyScale = characterController.transform.lossyScale;
+        float verticalScaleRatio = GetSafeAxisScaleRatio(currentLossyScale.y, baseControllerLossyScale.y);
+        float radiusScaleRatio = GetSafeScaleRatio(
+            GetHorizontalScale(currentLossyScale),
+            GetHorizontalScale(baseControllerLossyScale));
+        float localHeightMultiplier = heightMultiplier / verticalScaleRatio;
+        float localRadiusMultiplier = radiusMultiplier / radiusScaleRatio;
+        float localHeight = baseControllerHeight * localHeightMultiplier;
+        float localRadius = baseControllerRadius * localRadiusMultiplier;
 
         characterController.stepOffset = 0f;
-        characterController.height = scaledHeight;
-        characterController.radius = scaledRadius;
+        characterController.height = localHeight;
+        characterController.radius = localRadius;
 
-        float scaledStepOffset = baseControllerStepOffset * heightMultiplier * GetCharacterControllerVerticalScale();
-        float maxAllowedStepOffset = GetMaxAllowedStepOffset(scaledHeight, scaledRadius);
-        characterController.stepOffset = Mathf.Min(scaledStepOffset, maxAllowedStepOffset);
+        float targetStepOffset = baseControllerStepOffset * heightMultiplier;
+        float maxAllowedStepOffset = GetMaxAllowedStepOffset(localHeight, localRadius, currentLossyScale);
+        characterController.stepOffset = Mathf.Min(targetStepOffset, maxAllowedStepOffset);
 
         Vector3 center = baseControllerCenter;
-        center.y = baseControllerCenter.y * heightMultiplier;
+        center.y = baseControllerCenter.y * localHeightMultiplier;
         characterController.center = center;
     }
 
@@ -497,12 +549,39 @@ public class ScaleManager : MonoBehaviour
 
     private void ApplyEyeHeight(float eyeHeightMultiplier)
     {
-        if (!baseCameraPivotCaptured || cameraPivot == null)
+        if ((!baseCameraPivotCaptured || cameraPivot == null) && (!baseXrCameraYOffsetCaptured || xrOrigin == null))
             return;
 
-        Vector3 localPosition = baseCameraPivotLocalPosition;
-        localPosition.y = baseCameraPivotLocalPosition.y * eyeHeightMultiplier;
-        cameraPivot.localPosition = localPosition;
+        bool appliedThroughXrOrigin = false;
+        if (xrOrigin != null && baseXrCameraYOffsetCaptured)
+        {
+            Transform offsetTransform = ResolveXrCameraOffsetTransform();
+            float currentParentScaleY = offsetTransform != null
+                ? GetParentLossyScaleY(offsetTransform)
+                : GetParentLossyScaleY(cameraPivot);
+            xrOrigin.CameraYOffset = ResolveCompensatedLocalY(
+                baseXrCameraYOffset,
+                baseXrCameraOffsetParentScaleY,
+                currentParentScaleY,
+                eyeHeightMultiplier);
+            appliedThroughXrOrigin = IsXrManagedCameraPivot(cameraPivot);
+        }
+
+        if (!appliedThroughXrOrigin && cameraPivot != null && baseCameraPivotCaptured)
+        {
+            Vector3 localPosition = baseCameraPivotLocalPosition;
+            localPosition.y = ResolveCompensatedLocalY(
+                baseCameraPivotLocalPosition.y,
+                baseCameraPivotParentScaleY,
+                GetParentLossyScaleY(cameraPivot),
+                eyeHeightMultiplier);
+            cameraPivot.localPosition = localPosition;
+        }
+    }
+
+    private bool ShouldUseUnifiedXrRigScale()
+    {
+        return keepXrRigShapeDuringScale && xrOrigin != null;
     }
 
     private ScalePoseAnchor CaptureScalePoseAnchor()
@@ -510,7 +589,7 @@ public class ScaleManager : MonoBehaviour
         return new ScalePoseAnchor
         {
             cameraWorldPosition = targetCamera != null ? targetCamera.transform.position : Vector3.zero,
-            rootY = scaleRoot != null ? scaleRoot.position.y : ResolveGroundY(),
+            groundY = ResolveGroundY(),
             hasCamera = targetCamera != null,
             hasRoot = scaleRoot != null,
         };
@@ -556,7 +635,7 @@ public class ScaleManager : MonoBehaviour
 
         if (anchor.hasRoot)
         {
-            delta.y = anchor.rootY - scaleRoot.position.y;
+            delta.y = anchor.groundY - ResolveGroundY();
         }
 
         bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
@@ -593,38 +672,73 @@ public class ScaleManager : MonoBehaviour
             return;
         }
 
-        float maxAllowedStepOffset = GetMaxAllowedStepOffset(characterController.height, characterController.radius);
+        float maxAllowedStepOffset = GetMaxAllowedStepOffset(
+            characterController.height,
+            characterController.radius,
+            characterController.transform.lossyScale);
         if (characterController.stepOffset > maxAllowedStepOffset)
         {
             characterController.stepOffset = maxAllowedStepOffset;
         }
     }
 
-    private float GetMaxAllowedStepOffset(float controllerHeight, float controllerRadius)
+    private static float GetMaxAllowedStepOffset(float controllerHeight, float controllerRadius, Vector3 controllerLossyScale)
     {
-        float verticalScale = GetCharacterControllerVerticalScale();
-        float radiusScale = GetCharacterControllerRadiusScale();
-        float scaledHeight = controllerHeight * verticalScale;
-        float scaledRadius = controllerRadius * radiusScale;
+        float scaledHeight = controllerHeight * Mathf.Max(0.0001f, Mathf.Abs(controllerLossyScale.y));
+        float scaledRadius = controllerRadius * GetHorizontalScale(controllerLossyScale);
         return Mathf.Max(0f, scaledHeight + scaledRadius * 2f - 0.001f);
     }
 
-    private float GetCharacterControllerVerticalScale()
+    private Transform ResolveXrCameraOffsetTransform()
     {
-        return characterController != null
-            ? Mathf.Max(0.0001f, Mathf.Abs(characterController.transform.lossyScale.y))
-            : 1f;
+        if (xrOrigin == null || xrOrigin.CameraFloorOffsetObject == null)
+        {
+            return null;
+        }
+
+        return xrOrigin.CameraFloorOffsetObject.transform;
     }
 
-    private float GetCharacterControllerRadiusScale()
+    private bool IsXrManagedCameraPivot(Transform candidate)
     {
-        if (characterController == null)
+        Transform offsetTransform = ResolveXrCameraOffsetTransform();
+        return candidate != null && offsetTransform != null && candidate == offsetTransform;
+    }
+
+    private static float ResolveCompensatedLocalY(
+        float baseLocalY,
+        float baseParentScaleY,
+        float currentParentScaleY,
+        float targetWorldMultiplier)
+    {
+        float baseWorldY = baseLocalY * Mathf.Max(0.0001f, Mathf.Abs(baseParentScaleY));
+        float targetWorldY = baseWorldY * targetWorldMultiplier;
+        return targetWorldY / Mathf.Max(0.0001f, Mathf.Abs(currentParentScaleY));
+    }
+
+    private static float GetParentLossyScaleY(Transform child)
+    {
+        if (child == null || child.parent == null)
         {
             return 1f;
         }
 
-        Vector3 scale = characterController.transform.lossyScale;
+        return Mathf.Max(0.0001f, Mathf.Abs(child.parent.lossyScale.y));
+    }
+
+    private static float GetHorizontalScale(Vector3 scale)
+    {
         return Mathf.Max(0.0001f, Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z)));
+    }
+
+    private static float GetSafeAxisScaleRatio(float current, float baseline)
+    {
+        return GetSafeScaleRatio(Mathf.Abs(current), Mathf.Abs(baseline));
+    }
+
+    private static float GetSafeScaleRatio(float current, float baseline)
+    {
+        return Mathf.Max(0.0001f, current) / Mathf.Max(0.0001f, baseline);
     }
 
     private void SuppressRightHandTurnInput()
@@ -690,7 +804,7 @@ public class ScaleManager : MonoBehaviour
     private struct ScalePoseAnchor
     {
         public Vector3 cameraWorldPosition;
-        public float rootY;
+        public float groundY;
         public bool hasCamera;
         public bool hasRoot;
     }
