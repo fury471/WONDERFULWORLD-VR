@@ -14,6 +14,8 @@ public class HorseSummonV2 : MonoBehaviour
 
     [Header("Summon")]
     [SerializeField] private Key summonKey = Key.X;
+    [SerializeField] private InputActionReference summonAction;
+    [SerializeField] private bool enableQuestLeftXButton = true;
     [SerializeField] private float summonMoveSpeed = 5f;
     [SerializeField] private float summonRotateSpeed = 240f;
     [SerializeField] private float arriveDistance = 0.2f;
@@ -23,17 +25,23 @@ public class HorseSummonV2 : MonoBehaviour
     [SerializeField] private bool debugLogs = true;
 
     private bool isSummoning;
+    private bool questLeftXWasPressed;
     private Vector3 summonTargetPosition;
     private Quaternion summonTargetRotation;
 
+    private void Awake()
+    {
+        AutoAssignReferences(includeSceneReferences: true);
+    }
+
+    private void OnValidate()
+    {
+        AutoAssignReferences(includeSceneReferences: false);
+    }
+
     private void Update()
     {
-        if (Keyboard.current == null)
-        {
-            return;
-        }
-
-        if (!isSummoning && Keyboard.current[summonKey].wasPressedThisFrame)
+        if (!isSummoning && WasSummonPressedThisFrame())
         {
             StartSummon();
         }
@@ -44,8 +52,71 @@ public class HorseSummonV2 : MonoBehaviour
         }
     }
 
+    private void AutoAssignReferences(bool includeSceneReferences)
+    {
+        if (rideController == null)
+        {
+            rideController = GetComponent<CatRideControllerV2>();
+            if (rideController == null)
+            {
+                rideController = GetComponentInParent<CatRideControllerV2>();
+            }
+        }
+
+        if (idlePaceController == null)
+        {
+            idlePaceController = GetComponent<CatIdlePaceV2>();
+        }
+
+        if (horseAnimator == null)
+        {
+            horseAnimator = GetComponentInChildren<Animator>(true);
+        }
+
+        if (!includeSceneReferences)
+        {
+            return;
+        }
+
+        if (playerView == null)
+        {
+            playerView = QuestInteractionUtils.FindHeadTransform();
+        }
+
+        if (playerRigRoot == null && playerView != null)
+        {
+            playerRigRoot = playerView.root;
+        }
+    }
+
+    private bool WasSummonPressedThisFrame()
+    {
+        if (summonAction != null && summonAction.action != null && summonAction.action.WasPressedThisFrame())
+        {
+            return true;
+        }
+
+        if (Keyboard.current != null && Keyboard.current[summonKey].wasPressedThisFrame)
+        {
+            return true;
+        }
+
+        if (!enableQuestLeftXButton)
+        {
+            questLeftXWasPressed = false;
+            return false;
+        }
+
+        bool pressed = QuestInteractionUtils.TryReadPrimaryButton(false, out bool leftPrimaryPressed) && leftPrimaryPressed;
+        bool pressedThisFrame = pressed && !questLeftXWasPressed;
+        questLeftXWasPressed = pressed;
+        return pressedThisFrame;
+    }
+
     private void StartSummon()
     {
+        AutoAssignReferences(includeSceneReferences: true);
+
         if (rideController != null && rideController.IsRideActive)
         {
             return;

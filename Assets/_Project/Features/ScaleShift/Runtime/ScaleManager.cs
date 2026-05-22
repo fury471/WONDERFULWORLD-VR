@@ -33,6 +33,9 @@ public class ScaleManager : MonoBehaviour
     [SerializeField] private bool enableQuestThumbstickScale = true;
     [SerializeField] private InputActionReference rightThumbstickClickAction;
     [SerializeField, Min(0.1f)] private float rightThumbstickLongPressSeconds = 0.45f;
+    [SerializeField, Min(0.05f)] private float rightThumbstickDoubleClickSeconds = 0.32f;
+    [SerializeField, Min(0f)] private float thumbstickLocomotionSuppressSeconds = 0.15f;
+    [SerializeField] private QuestLocomotionComfortProfile locomotionProfile;
 
     [SerializeField] private ScaleState currentState = ScaleState.Normal;
 
@@ -48,9 +51,12 @@ public class ScaleManager : MonoBehaviour
     private bool baseControllerCaptured;
     private Vector3 baseCameraPivotLocalPosition;
     private bool baseCameraPivotCaptured;
+    private Vector3 baseScaleRootLocalScale = Vector3.one;
+    private bool baseScaleRootCaptured;
     private bool rightThumbstickWasPressed;
     private bool rightThumbstickLongPressConsumed;
     private float rightThumbstickPressStartTime;
+    private float lastRightThumbstickClickTime = -999f;
     public ScaleState CurrentState => currentState;
     public bool IsSmallScale => currentState == ScaleState.Small;
 
@@ -121,16 +127,22 @@ public class ScaleManager : MonoBehaviour
             rightThumbstickLongPressConsumed = false;
         }
 
+        if (pressed)
+        {
+            SuppressRightHandTurnInput();
+        }
+
         if (pressed && !rightThumbstickLongPressConsumed &&
             Time.time >= rightThumbstickPressStartTime + rightThumbstickLongPressSeconds)
         {
             rightThumbstickLongPressConsumed = true;
-            ApplyQuestScaleLongPress();
+            TryApplyQuestScaleLongPress();
         }
 
         if (!pressed && rightThumbstickWasPressed && !rightThumbstickLongPressConsumed)
         {
-            ApplyQuestScaleClick();
+            SuppressRightHandTurnInput();
+            TryApplyQuestScaleClick();
         }
 
         rightThumbstickWasPressed = pressed;
@@ -146,29 +158,45 @@ public class ScaleManager : MonoBehaviour
         return QuestInteractionUtils.TryReadPrimary2DAxisClick(true, out bool pressed) && pressed;
     }
 
-    private void ApplyQuestScaleClick()
+    private bool TryApplyQuestScaleClick()
     {
         switch (currentState)
         {
             case ScaleState.Normal:
-                SetScale(ScaleState.Small);
-                break;
+                if (Time.time <= lastRightThumbstickClickTime + rightThumbstickDoubleClickSeconds)
+                {
+                    lastRightThumbstickClickTime = -999f;
+                    SetScale(ScaleState.Small);
+                    return true;
+                }
+
+                lastRightThumbstickClickTime = Time.time;
+                return false;
             case ScaleState.Large:
+                lastRightThumbstickClickTime = -999f;
                 SetScale(ScaleState.Normal);
-                break;
+                return true;
+            default:
+                lastRightThumbstickClickTime = -999f;
+                return false;
         }
     }
 
-    private void ApplyQuestScaleLongPress()
+    private bool TryApplyQuestScaleLongPress()
     {
         switch (currentState)
         {
             case ScaleState.Normal:
+                lastRightThumbstickClickTime = -999f;
                 SetScale(ScaleState.Large);
-                break;
+                return true;
             case ScaleState.Small:
+                lastRightThumbstickClickTime = -999f;
                 SetScale(ScaleState.Normal);
-                break;
+                return true;
+            default:
+                lastRightThumbstickClickTime = -999f;
+                return false;
         }
     }
 
@@ -176,6 +204,7 @@ public class ScaleManager : MonoBehaviour
     {
         rightThumbstickWasPressed = false;
         rightThumbstickLongPressConsumed = false;
+        lastRightThumbstickClickTime = -999f;
     }
 
     private bool IsAnyRideActive()
@@ -245,6 +274,11 @@ public class ScaleManager : MonoBehaviour
                 "Assets/_Project/Features/ScaleShift/ScriptableObjects/ScaleSettings_SO.asset");
 #endif
         }
+
+        if (locomotionProfile == null)
+        {
+            locomotionProfile = GetComponent<QuestLocomotionComfortProfile>();
+        }
     }
 
     public void SetScale(ScaleState newState)
@@ -298,12 +332,12 @@ public class ScaleManager : MonoBehaviour
 
     private void ApplyScaleImmediate(ScaleState state)
     {
-        Vector3 preScaleAnchorPosition = GetGroundAnchorPosition();
+        ScalePoseAnchor preScaleAnchor = CaptureScalePoseAnchor();
+        bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
 
         ScaleSettings.ScaleProfile profile = GetProfile(state);
 
-        if (scaleRoot != null)
-            scaleRoot.localScale = Vector3.one * profile.playerScale;
+        ApplyScaleRoot(profile.playerScale);
 
         if (targetCamera != null)
             targetCamera.nearClipPlane = profile.nearClip;
@@ -312,7 +346,9 @@ public class ScaleManager : MonoBehaviour
         ApplyMoveSpeed(profile.moveSpeedMultiplier);
         ApplyInteractionDistance(profile.interactionDistanceMultiplier);
         ApplyCharacterController(profile.controllerHeightMultiplier, profile.controllerRadiusMultiplier);
-        RestoreGroundAnchorPosition(preScaleAnchorPosition);
+        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
+        Physics.SyncTransforms();
+        RestoreScalePoseAnchor(preScaleAnchor);
 
         if (logDebug)
         {
@@ -374,6 +410,12 @@ public class ScaleManager : MonoBehaviour
             baseCameraPivotLocalPosition = cameraPivot.localPosition;
             baseCameraPivotCaptured = true;
         }
+
+        if (scaleRoot != null)
+        {
+            baseScaleRootLocalScale = scaleRoot.localScale;
+            baseScaleRootCaptured = true;
+        }
     }
 
     private ScaleSettings.ScaleProfile GetProfile(ScaleState state)
@@ -431,11 +473,12 @@ public class ScaleManager : MonoBehaviour
         float scaledHeight = baseControllerHeight * heightMultiplier;
         float scaledRadius = baseControllerRadius * radiusMultiplier;
 
+        characterController.stepOffset = 0f;
         characterController.height = scaledHeight;
         characterController.radius = scaledRadius;
 
-        float scaledStepOffset = baseControllerStepOffset * heightMultiplier;
-        float maxAllowedStepOffset = Mathf.Max(0f, scaledHeight + scaledRadius * 2f - 0.001f);
+        float scaledStepOffset = baseControllerStepOffset * heightMultiplier * GetCharacterControllerVerticalScale();
+        float maxAllowedStepOffset = GetMaxAllowedStepOffset(scaledHeight, scaledRadius);
         characterController.stepOffset = Mathf.Min(scaledStepOffset, maxAllowedStepOffset);
 
         Vector3 center = baseControllerCenter;
@@ -443,6 +486,14 @@ public class ScaleManager : MonoBehaviour
         characterController.center = center;
     }
 
+    private void ApplyScaleRoot(float playerScale)
+    {
+        if (scaleRoot == null)
+            return;
+
+        Vector3 rootBaseScale = baseScaleRootCaptured ? baseScaleRootLocalScale : Vector3.one;
+        scaleRoot.localScale = rootBaseScale * playerScale;
+    }
 
     private void ApplyEyeHeight(float eyeHeightMultiplier)
     {
@@ -454,49 +505,134 @@ public class ScaleManager : MonoBehaviour
         cameraPivot.localPosition = localPosition;
     }
 
-    private Vector3 GetGroundAnchorPosition()
+    private ScalePoseAnchor CaptureScalePoseAnchor()
     {
-        if (targetCamera != null)
+        return new ScalePoseAnchor
         {
-            float groundY = 0f;
+            cameraWorldPosition = targetCamera != null ? targetCamera.transform.position : Vector3.zero,
+            rootY = scaleRoot != null ? scaleRoot.position.y : ResolveGroundY(),
+            hasCamera = targetCamera != null,
+            hasRoot = scaleRoot != null,
+        };
+    }
 
-            if (characterController != null)
-            {
-                groundY = characterController.bounds.min.y;
-            }
-            else if (scaleRoot != null)
-            {
-                groundY = scaleRoot.position.y;
-            }
-
-            Vector3 cameraPosition = targetCamera.transform.position;
-            return new Vector3(cameraPosition.x, groundY, cameraPosition.z);
+    private float ResolveGroundY()
+    {
+        if (characterController != null && characterController.enabled)
+        {
+            return characterController.bounds.min.y;
         }
 
         if (characterController != null)
         {
-            Bounds bounds = characterController.bounds;
-            return new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+            Vector3 worldCenter = characterController.transform.TransformPoint(characterController.center);
+            float verticalScale = Mathf.Max(0.0001f, Mathf.Abs(characterController.transform.lossyScale.y));
+            return worldCenter.y - characterController.height * verticalScale * 0.5f;
         }
 
         if (scaleRoot != null)
         {
-            return scaleRoot.position;
+            return scaleRoot.position.y;
         }
 
-        return transform.position;
+        return transform.position.y;
     }
 
-    private void RestoreGroundAnchorPosition(Vector3 desiredAnchorPosition)
+    private void RestoreScalePoseAnchor(ScalePoseAnchor anchor)
     {
         if (scaleRoot == null)
         {
             return;
         }
 
-        Vector3 currentAnchorPosition = GetGroundAnchorPosition();
-        Vector3 delta = desiredAnchorPosition - currentAnchorPosition;
+        Vector3 delta = Vector3.zero;
+
+        if (anchor.hasCamera && targetCamera != null)
+        {
+            Vector3 currentCameraPosition = targetCamera.transform.position;
+            delta.x = anchor.cameraWorldPosition.x - currentCameraPosition.x;
+            delta.z = anchor.cameraWorldPosition.z - currentCameraPosition.z;
+        }
+
+        if (anchor.hasRoot)
+        {
+            delta.y = anchor.rootY - scaleRoot.position.y;
+        }
+
+        bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
         scaleRoot.position += delta;
+        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
+        Physics.SyncTransforms();
+    }
+
+    private bool SetCharacterControllerEnabled(bool enabled)
+    {
+        if (characterController == null)
+        {
+            return false;
+        }
+
+        bool wasEnabled = characterController.enabled;
+        characterController.enabled = enabled;
+        return wasEnabled;
+    }
+
+    private void RestoreCharacterControllerEnabled(bool wasEnabled)
+    {
+        if (characterController != null)
+        {
+            ClampCharacterControllerStepOffset();
+            characterController.enabled = wasEnabled;
+        }
+    }
+
+    private void ClampCharacterControllerStepOffset()
+    {
+        if (characterController == null)
+        {
+            return;
+        }
+
+        float maxAllowedStepOffset = GetMaxAllowedStepOffset(characterController.height, characterController.radius);
+        if (characterController.stepOffset > maxAllowedStepOffset)
+        {
+            characterController.stepOffset = maxAllowedStepOffset;
+        }
+    }
+
+    private float GetMaxAllowedStepOffset(float controllerHeight, float controllerRadius)
+    {
+        float verticalScale = GetCharacterControllerVerticalScale();
+        float radiusScale = GetCharacterControllerRadiusScale();
+        float scaledHeight = controllerHeight * verticalScale;
+        float scaledRadius = controllerRadius * radiusScale;
+        return Mathf.Max(0f, scaledHeight + scaledRadius * 2f - 0.001f);
+    }
+
+    private float GetCharacterControllerVerticalScale()
+    {
+        return characterController != null
+            ? Mathf.Max(0.0001f, Mathf.Abs(characterController.transform.lossyScale.y))
+            : 1f;
+    }
+
+    private float GetCharacterControllerRadiusScale()
+    {
+        if (characterController == null)
+        {
+            return 1f;
+        }
+
+        Vector3 scale = characterController.transform.lossyScale;
+        return Mathf.Max(0.0001f, Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z)));
+    }
+
+    private void SuppressRightHandTurnInput()
+    {
+        if (locomotionProfile != null && thumbstickLocomotionSuppressSeconds > 0f)
+        {
+            locomotionProfile.SuppressRightHandTurn(thumbstickLocomotionSuppressSeconds);
+        }
     }
 
     private static bool TryGetFloatMemberValue(Component target, out float value, params string[] memberNames)
@@ -549,5 +685,13 @@ public class ScaleManager : MonoBehaviour
         }
 
         return false;
+    }
+
+    private struct ScalePoseAnchor
+    {
+        public Vector3 cameraWorldPosition;
+        public float rootY;
+        public bool hasCamera;
+        public bool hasRoot;
     }
 }

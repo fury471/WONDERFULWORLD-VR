@@ -93,6 +93,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     private readonly List<LocomotionVignetteProvider> vignetteProviders = new List<LocomotionVignetteProvider>(3);
 
     private int lastInstalledTeleportAreaCount;
+    private float suppressRightHandTurnUntil;
 
     public int lastTeleportSurfaceInstallCount => lastInstalledTeleportAreaCount;
 
@@ -140,6 +141,12 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
         smoothMoveAperture = aperture;
         smoothTurnAperture = aperture;
         ApplyProfile();
+    }
+
+    public void SuppressRightHandTurn(float seconds)
+    {
+        suppressRightHandTurnUntil = Mathf.Max(suppressRightHandTurnUntil, Time.time + Mathf.Max(0f, seconds));
+        EnforceInputOwnership();
     }
 
     private void Reset()
@@ -419,7 +426,8 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
         SetActionEnabled(rightTeleportModeAction, false);
         SetActionEnabled(rightTeleportCancelAction, false);
         SetActionEnabled(rightContinuousMoveAction, false);
-        SetActionEnabled(rightContinuousTurnAction, turnMode == TurnMode.Smooth);
+        bool rightTurnSuppressed = Time.time < suppressRightHandTurnUntil;
+        SetActionEnabled(rightContinuousTurnAction, turnMode == TurnMode.Smooth && !rightTurnSuppressed);
     }
 
     private bool TryInstallTeleportArea(Collider surfaceCollider)

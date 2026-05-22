@@ -5,6 +5,7 @@ using UnityEngine.InputSystem;
 using Unity.XR.CoreUtils;
 using UnityEngine.XR.Interaction.Toolkit.Inputs.Simulation;
 using UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion.Comfort;
 
 public class CatRideControllerV2 : MonoBehaviour
 {
@@ -66,6 +67,15 @@ public class CatRideControllerV2 : MonoBehaviour
     [SerializeField] private bool lockXRDeviceSimulatorDuringRide = true;
     [SerializeField] private float debugSimulatorRestoreDelay = 0.15f;
 
+    [Header("Ride Comfort")]
+    [SerializeField] private bool enableRideComfortVignette = true;
+    [SerializeField, Range(0.2f, 1f)] private float rideVignetteAperture = 0.58f;
+    [SerializeField, Range(0f, 1f)] private float rideVignetteFeathering = 0.30f;
+    [SerializeField, Min(0f)] private float rideVignetteEaseInTime = 0.10f;
+    [SerializeField, Min(0f)] private float rideVignetteEaseOutTime = 0.20f;
+    [SerializeField, Min(0f)] private float rideVignetteEaseOutDelayTime = 0.06f;
+    [SerializeField, Min(0f)] private float rideVignetteInputDeadzone = 0.08f;
+
     [Header("Auto Ride")]
     [SerializeField] private List<Transform> autoRoutePoints = new List<Transform>();
 
@@ -112,6 +122,8 @@ public class CatRideControllerV2 : MonoBehaviour
     private bool playerCharacterControllerWasEnabled;
     private bool playerCharacterControllerDetectCollisionsWasEnabled;
     private bool locomotionRootWasActive;
+    private Behaviour[] locomotionRootBehaviours;
+    private bool[] locomotionRootBehaviourWasEnabled;
     private Transform rigOriginalParent;
     private int rigOriginalSiblingIndex = -1;
     private bool hasRigOriginalParent;
@@ -139,6 +151,9 @@ public class CatRideControllerV2 : MonoBehaviour
     private bool questHovering;
     private bool questTriggerLastFrame;
     private bool questPrimaryLastFrame;
+    private TunnelingVignetteController[] rideVignetteControllers;
+    private RideVignetteProvider rideVignetteProvider;
+    private bool rideVignetteActive;
 
     public bool IsRideActive => currentState != RideState.Idle;
 
@@ -153,6 +168,12 @@ public class CatRideControllerV2 : MonoBehaviour
         CacheRigReferences();
         CacheQuestInteractionReferences();
         CacheScaleManagerReference();
+        CacheRideVignetteReferences();
+    }
+
+    private void OnDisable()
+    {
+        SetRideVignetteActive(false);
     }
 
     private void Update()
@@ -467,6 +488,86 @@ public class CatRideControllerV2 : MonoBehaviour
 #endif
     }
 
+    private void CacheRideVignetteReferences()
+    {
+        if (rideVignetteProvider == null)
+        {
+            rideVignetteProvider = new RideVignetteProvider(CreateRideVignetteParameters());
+        }
+        else
+        {
+            rideVignetteProvider.SetParameters(CreateRideVignetteParameters());
+        }
+
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+        rideVignetteControllers = FindObjectsByType<TunnelingVignetteController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+#else
+#pragma warning disable CS0618
+        rideVignetteControllers = FindObjectsOfType<TunnelingVignetteController>(false);
+#pragma warning restore CS0618
+#endif
+    }
+
+    private VignetteParameters CreateRideVignetteParameters()
+    {
+        return new VignetteParameters
+        {
+            apertureSize = rideVignetteAperture,
+            featheringEffect = rideVignetteFeathering,
+            easeInTime = rideVignetteEaseInTime,
+            easeOutTime = rideVignetteEaseOutTime,
+            easeInTimeLock = false,
+            easeOutDelayTime = rideVignetteEaseOutDelayTime,
+            vignetteColor = Color.black,
+            vignetteColorBlend = Color.black,
+            apertureVerticalPosition = 0f,
+        };
+    }
+
+    private void SetRideVignetteActive(bool active)
+    {
+        if (!enableRideComfortVignette)
+        {
+            active = false;
+        }
+
+        if (rideVignetteProvider == null || rideVignetteControllers == null || rideVignetteControllers.Length == 0)
+        {
+            CacheRideVignetteReferences();
+        }
+
+        if (rideVignetteProvider == null || rideVignetteControllers == null)
+        {
+            rideVignetteActive = false;
+            return;
+        }
+
+        if (rideVignetteActive == active)
+        {
+            return;
+        }
+
+        for (int i = 0; i < rideVignetteControllers.Length; i++)
+        {
+            TunnelingVignetteController vignetteController = rideVignetteControllers[i];
+            if (vignetteController == null || !vignetteController.isActiveAndEnabled)
+            {
+                continue;
+            }
+
+            if (active)
+            {
+                vignetteController.BeginTunnelingVignette(rideVignetteProvider);
+            }
+            else
+            {
+                vignetteController.EndTunnelingVignette(rideVignetteProvider);
+            }
+        }
+
+        rideVignetteActive = active;
+    }
+
     private bool IsPlayerInsideMountZone()
     {
         if (playerRigRoot == null)
@@ -573,7 +674,7 @@ public class CatRideControllerV2 : MonoBehaviour
             if (locomotionRoot != null)
             {
                 locomotionRootWasActive = locomotionRoot.activeSelf;
-                locomotionRoot.SetActive(false);
+                SetLocomotionRootBehavioursLocked(true);
             }
 
             if (xrDeviceSimulator != null)
@@ -591,6 +692,7 @@ public class CatRideControllerV2 : MonoBehaviour
 
             if (locomotionRoot != null)
             {
+                SetLocomotionRootBehavioursLocked(false);
                 locomotionRoot.SetActive(locomotionRootWasActive);
             }
 
@@ -871,6 +973,7 @@ public class CatRideControllerV2 : MonoBehaviour
             return;
         }
 
+        SetRideVignetteActive(false);
         stateRoutine = StartCoroutine(DismountSequence());
     }
 
@@ -1364,6 +1467,10 @@ public class CatRideControllerV2 : MonoBehaviour
             if (Keyboard.current.dKey.isPressed) turnInput += 1f;
         }
 
+        bool rideMotionActive = Mathf.Abs(moveInput) > rideVignetteInputDeadzone ||
+                                Mathf.Abs(turnInput) > rideVignetteInputDeadzone;
+        SetRideVignetteActive(rideMotionActive);
+
         transform.Rotate(Vector3.up, turnInput * manualTurnSpeed * Time.deltaTime);
 
         Vector3 moveDirection = transform.forward;
@@ -1401,6 +1508,7 @@ public class CatRideControllerV2 : MonoBehaviour
 
         currentAutoIndex = 0;
         currentState = RideState.MountedAuto;
+        SetRideVignetteActive(true);
 
         if (debugLogs)
         {
@@ -1417,6 +1525,8 @@ public class CatRideControllerV2 : MonoBehaviour
             FinishAutoRide();
             return;
         }
+
+        SetRideVignetteActive(true);
 
         Transform target = autoRoutePoints[currentAutoIndex];
         if (target == null)
@@ -1464,6 +1574,7 @@ public class CatRideControllerV2 : MonoBehaviour
 
     private void FinishAutoRide()
     {
+        SetRideVignetteActive(false);
         currentState = RideState.MountedManual;
         UpdateKittyAnimation(0f, false);
 
@@ -1605,6 +1716,75 @@ public class CatRideControllerV2 : MonoBehaviour
         a.y = 0f;
         b.y = 0f;
         return Vector3.Distance(a, b);
+    }
+
+    private sealed class RideVignetteProvider : ITunnelingVignetteProvider
+    {
+        public RideVignetteProvider(VignetteParameters parameters)
+        {
+            vignetteParameters = parameters;
+        }
+
+        public VignetteParameters vignetteParameters { get; private set; }
+
+        public void SetParameters(VignetteParameters parameters)
+        {
+            vignetteParameters = parameters;
+        }
+    }
+
+    private void SetLocomotionRootBehavioursLocked(bool locked)
+    {
+        if (locomotionRoot == null || !locomotionRootWasActive)
+        {
+            return;
+        }
+
+        if (locked)
+        {
+            locomotionRootBehaviours = locomotionRoot.GetComponentsInChildren<Behaviour>(true);
+            locomotionRootBehaviourWasEnabled = new bool[locomotionRootBehaviours.Length];
+
+            for (int i = 0; i < locomotionRootBehaviours.Length; i++)
+            {
+                Behaviour behaviour = locomotionRootBehaviours[i];
+                if (behaviour == null)
+                {
+                    continue;
+                }
+
+                locomotionRootBehaviourWasEnabled[i] = behaviour.enabled;
+                if (!ShouldKeepLocomotionBehaviourEnabledDuringRide(behaviour))
+                {
+                    behaviour.enabled = false;
+                }
+            }
+
+            return;
+        }
+
+        if (locomotionRootBehaviours == null || locomotionRootBehaviourWasEnabled == null)
+        {
+            return;
+        }
+
+        int count = Mathf.Min(locomotionRootBehaviours.Length, locomotionRootBehaviourWasEnabled.Length);
+        for (int i = 0; i < count; i++)
+        {
+            Behaviour behaviour = locomotionRootBehaviours[i];
+            if (behaviour != null)
+            {
+                behaviour.enabled = locomotionRootBehaviourWasEnabled[i];
+            }
+        }
+
+        locomotionRootBehaviours = null;
+        locomotionRootBehaviourWasEnabled = null;
+    }
+
+    private static bool ShouldKeepLocomotionBehaviourEnabledDuringRide(Behaviour behaviour)
+    {
+        return behaviour != null && behaviour.GetComponent<TunnelingVignetteController>() != null;
     }
 
     private sealed class RaycastHitDistanceComparer : System.Collections.IComparer
