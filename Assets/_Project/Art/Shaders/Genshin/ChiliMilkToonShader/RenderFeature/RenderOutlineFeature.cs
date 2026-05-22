@@ -29,11 +29,14 @@ public class RenderOutlineFeature : ScriptableRendererFeature
     {
         ShaderTagId outlineTag = new ShaderTagId("Outline");
 
+        [System.Obsolete("Execute with ref RenderingData is obsolete in newer URP versions, but required here for compatibility.")]
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             DrawingSettings drawingSettings = CreateDrawingSettings(outlineTag, ref renderingData, SortingCriteria.CommonOpaque);
             FilteringSettings filteringSettings = new FilteringSettings(RenderQueueRange.all);
-            context.DrawRenderers(renderingData.cullResults,ref drawingSettings,ref filteringSettings);
+#pragma warning disable CS0618
+            context.DrawRenderers(renderingData.cullResults, ref drawingSettings, ref filteringSettings);
+#pragma warning restore CS0618
         }
     }
 }

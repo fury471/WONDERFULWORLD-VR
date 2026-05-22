@@ -25,11 +25,33 @@ public sealed class CherryGardenPropToonOutline : MonoBehaviour
 
     private void OnValidate()
     {
-        if (isActiveAndEnabled)
+        if (!isActiveAndEnabled)
+        {
+            return;
+        }
+
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            UnityEditor.EditorApplication.delayCall -= RebuildOutlinesIfValid;
+            UnityEditor.EditorApplication.delayCall += RebuildOutlinesIfValid;
+            return;
+        }
+#endif
+
+        RebuildOutlines();
+    }
+
+#if UNITY_EDITOR
+    private void RebuildOutlinesIfValid()
+    {
+        if (this != null && isActiveAndEnabled)
         {
             RebuildOutlines();
         }
     }
+#endif
+
 
     private void OnDisable()
     {
