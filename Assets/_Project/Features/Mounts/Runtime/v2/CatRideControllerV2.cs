@@ -152,6 +152,7 @@ public class CatRideControllerV2 : MonoBehaviour
     {
         CacheRigReferences();
         CacheQuestInteractionReferences();
+        CacheScaleManagerReference();
     }
 
     private void Update()
@@ -408,6 +409,19 @@ public class CatRideControllerV2 : MonoBehaviour
         return actionReference.action.ReadValue<Vector2>();
     }
 
+    private static Vector2 ReadQuestAxisFallback(InputActionReference actionReference, bool rightHand)
+    {
+        Vector2 actionValue = ReadVector2(actionReference);
+        if (actionValue.sqrMagnitude > 0.0001f)
+        {
+            return actionValue;
+        }
+
+        return QuestInteractionUtils.TryReadPrimary2DAxis(rightHand, out Vector2 questValue)
+            ? questValue
+            : Vector2.zero;
+    }
+
     private void CacheRigReferences()
     {
         if (playerRigRoot != null)
@@ -435,6 +449,22 @@ public class CatRideControllerV2 : MonoBehaviour
             xrDeviceSimulator = xrDeviceSimulatorRoot.GetComponent<XRDeviceSimulator>();
         }
 
+    }
+
+    private void CacheScaleManagerReference()
+    {
+        if (scaleManager != null)
+        {
+            return;
+        }
+
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+        scaleManager = FindAnyObjectByType<ScaleManager>(FindObjectsInactive.Include);
+#else
+#pragma warning disable CS0618
+        scaleManager = FindObjectOfType<ScaleManager>(true);
+#pragma warning restore CS0618
+#endif
     }
 
     private bool IsPlayerInsideMountZone()
@@ -471,6 +501,8 @@ public class CatRideControllerV2 : MonoBehaviour
 
     private bool CanMountInCurrentScale()
     {
+        CacheScaleManagerReference();
+
         if (scaleManager == null)
         {
             return false;
@@ -1318,8 +1350,8 @@ public class CatRideControllerV2 : MonoBehaviour
 
     private void HandleManualRide()
     {
-        Vector2 moveValue = ReadVector2(moveAction);
-        Vector2 turnValue = ReadVector2(turnAction);
+        Vector2 moveValue = ReadQuestAxisFallback(moveAction, false);
+        Vector2 turnValue = ReadQuestAxisFallback(turnAction, true);
 
         float moveInput = moveValue.y;
         float turnInput = turnValue.x;

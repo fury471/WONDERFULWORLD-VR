@@ -16,8 +16,26 @@ using UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets;
 [DisallowMultipleComponent]
 public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 {
+    public enum MovementMode
+    {
+        Teleport,
+        Smooth
+    }
+
+    public enum TurnMode
+    {
+        Snap,
+        Smooth
+    }
+
     private const int DefaultTeleportSurfaceMask = (1 << 0) | (1 << 3);
     private const int DefaultTeleportRaycastMask = unchecked((int)0x80000009);
+
+    [Header("User Locomotion Preferences")]
+    [SerializeField] private MovementMode movementMode = MovementMode.Teleport;
+    [SerializeField] private TurnMode turnMode = TurnMode.Snap;
+    [SerializeField, Min(0.1f)] private float smoothMoveSpeed = 1.6f;
+    [SerializeField, Min(1f)] private float smoothTurnSpeed = 45f;
 
     [Header("Controller ownership")]
     [SerializeField] private ControllerInputActionManager leftController = null;
@@ -64,6 +82,9 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     [SerializeField] private bool configureSceneVignettes = true;
     [SerializeField, Range(0.2f, 1f)] private float teleportAperture = 0.52f;
     [SerializeField, Range(0.2f, 1f)] private float turnAperture = 0.58f;
+    [SerializeField, Range(0.2f, 1f)] private float smoothMoveAperture = 0.58f;
+    [SerializeField, Range(0.2f, 1f)] private float smoothTurnAperture = 0.62f;
+    [SerializeField] private bool comfortVignetteEnabled = true;
     [SerializeField, Range(0f, 1f)] private float feathering = 0.30f;
     [SerializeField, Min(0f)] private float easeInTime = 0.10f;
     [SerializeField, Min(0f)] private float easeOutTime = 0.20f;
@@ -74,6 +95,52 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     private int lastInstalledTeleportAreaCount;
 
     public int lastTeleportSurfaceInstallCount => lastInstalledTeleportAreaCount;
+
+    public MovementMode CurrentMovementMode => movementMode;
+    public TurnMode CurrentTurnMode => turnMode;
+    public float SmoothMoveSpeed => smoothMoveSpeed;
+    public float SmoothTurnSpeed => smoothTurnSpeed;
+    public bool ComfortVignetteEnabled => comfortVignetteEnabled;
+
+    public void SetMovementMode(MovementMode mode)
+    {
+        movementMode = mode;
+        ApplyProfile();
+    }
+
+    public void SetTurnMode(TurnMode mode)
+    {
+        turnMode = mode;
+        ApplyProfile();
+    }
+
+    public void SetSmoothMoveSpeed(float speed)
+    {
+        smoothMoveSpeed = Mathf.Max(0.1f, speed);
+        ApplyProfile();
+    }
+
+    public void SetSmoothTurnSpeed(float degreesPerSecond)
+    {
+        smoothTurnSpeed = Mathf.Max(1f, degreesPerSecond);
+        ApplyProfile();
+    }
+
+    public void SetComfortVignetteEnabled(bool enabled)
+    {
+        comfortVignetteEnabled = enabled;
+        ApplyProfile();
+    }
+
+    public void SetVignetteComfort(float comfort01)
+    {
+        float aperture = Mathf.Lerp(0.85f, 0.45f, Mathf.Clamp01(comfort01));
+        teleportAperture = aperture;
+        turnAperture = aperture;
+        smoothMoveAperture = aperture;
+        smoothTurnAperture = aperture;
+        ApplyProfile();
+    }
 
     private void Reset()
     {
@@ -243,7 +310,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     {
         if (leftController != null)
         {
-            leftController.smoothMotionEnabled = false;
+            leftController.smoothMotionEnabled = movementMode == MovementMode.Smooth;
             leftController.smoothTurnEnabled = false;
         }
         else
@@ -254,7 +321,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
         if (rightController != null)
         {
             rightController.smoothMotionEnabled = false;
-            rightController.smoothTurnEnabled = false;
+            rightController.smoothTurnEnabled = turnMode == TurnMode.Smooth;
         }
         else
         {
@@ -279,7 +346,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     {
         if (teleportationProvider != null)
         {
-            teleportationProvider.enabled = true;
+            teleportationProvider.enabled = movementMode == MovementMode.Teleport;
             teleportationProvider.delayTime = teleportDelayTime;
         }
         else
@@ -289,7 +356,8 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
         if (continuousMove != null)
         {
-            continuousMove.enabled = false;
+            continuousMove.enabled = movementMode == MovementMode.Smooth;
+            continuousMove.moveSpeed = smoothMoveSpeed;
             continuousMove.enableStrafe = false;
             continuousMove.enableFly = false;
         }
@@ -300,8 +368,8 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
         if (continuousTurn != null)
         {
-            continuousTurn.enabled = false;
-            continuousTurn.turnSpeed = 45f;
+            continuousTurn.enabled = turnMode == TurnMode.Smooth;
+            continuousTurn.turnSpeed = smoothTurnSpeed;
             continuousTurn.enableTurnLeftRight = true;
             continuousTurn.enableTurnAround = false;
         }
@@ -312,7 +380,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
         if (snapTurn != null)
         {
-            snapTurn.enabled = true;
+            snapTurn.enabled = turnMode == TurnMode.Snap;
             snapTurn.turnAmount = snapTurnAmount;
             snapTurn.debounceTime = snapTurnDebounceTime;
             snapTurn.delayTime = snapTurnDelayTime;
@@ -343,13 +411,15 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void EnforceInputOwnership()
     {
-        SetActionEnabled(leftMoveAction, false);
+        SetActionEnabled(leftTeleportModeAction, movementMode == MovementMode.Teleport);
+        SetActionEnabled(leftTeleportCancelAction, movementMode == MovementMode.Teleport);
+        SetActionEnabled(leftMoveAction, movementMode == MovementMode.Smooth);
         SetActionEnabled(leftContinuousTurnAction, false);
         SetActionEnabled(leftSnapTurnAction, false);
         SetActionEnabled(rightTeleportModeAction, false);
         SetActionEnabled(rightTeleportCancelAction, false);
         SetActionEnabled(rightContinuousMoveAction, false);
-        SetActionEnabled(rightContinuousTurnAction, false);
+        SetActionEnabled(rightContinuousTurnAction, turnMode == TurnMode.Smooth);
     }
 
     private bool TryInstallTeleportArea(Collider surfaceCollider)
@@ -483,8 +553,13 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
             vignette.locomotionVignetteProviders.Clear();
             vignetteProviders.Clear();
 
-            AddVignetteProvider(vignetteProviders, teleportationProvider, teleportAperture, true);
-            AddVignetteProvider(vignetteProviders, snapTurn, turnAperture, true);
+            if (comfortVignetteEnabled)
+            {
+                AddVignetteProvider(vignetteProviders, teleportationProvider, teleportAperture, true);
+                AddVignetteProvider(vignetteProviders, snapTurn, turnAperture, true);
+                AddVignetteProvider(vignetteProviders, continuousMove, smoothMoveAperture, false);
+                AddVignetteProvider(vignetteProviders, continuousTurn, smoothTurnAperture, false);
+            }
 
             for (int providerIndex = 0; providerIndex < vignetteProviders.Count; providerIndex++)
             {

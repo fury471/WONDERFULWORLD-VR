@@ -157,6 +157,18 @@ public static class QuestInteractionUtils
         return false;
     }
 
+    public static bool TryReadPrimary2DAxisClick(bool rightHand, out bool pressed)
+    {
+        XRInputDevice device = InputDevices.GetDeviceAtXRNode(rightHand ? XRNode.RightHand : XRNode.LeftHand);
+        if (device.isValid && device.TryGetFeatureValue(XRCommonUsages.primary2DAxisClick, out pressed))
+        {
+            return true;
+        }
+
+        pressed = false;
+        return false;
+    }
+
     public static Transform FindInScene(string targetName)
     {
         if (string.IsNullOrWhiteSpace(targetName))

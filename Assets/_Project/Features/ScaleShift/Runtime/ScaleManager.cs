@@ -29,6 +29,11 @@ public class ScaleManager : MonoBehaviour
     [SerializeField] private InputActionReference largeScaleAction;
     [SerializeField] private bool logDebug = false;
 
+    [Header("Quest Thumbstick Scale")]
+    [SerializeField] private bool enableQuestThumbstickScale = true;
+    [SerializeField] private InputActionReference rightThumbstickClickAction;
+    [SerializeField, Min(0.1f)] private float rightThumbstickLongPressSeconds = 0.45f;
+
     [SerializeField] private ScaleState currentState = ScaleState.Normal;
 
     private bool isTransitioning;
@@ -43,6 +48,9 @@ public class ScaleManager : MonoBehaviour
     private bool baseControllerCaptured;
     private Vector3 baseCameraPivotLocalPosition;
     private bool baseCameraPivotCaptured;
+    private bool rightThumbstickWasPressed;
+    private bool rightThumbstickLongPressConsumed;
+    private float rightThumbstickPressStartTime;
     public ScaleState CurrentState => currentState;
     public bool IsSmallScale => currentState == ScaleState.Small;
 
@@ -66,10 +74,13 @@ public class ScaleManager : MonoBehaviour
 
     private void Update()
     {
-        if (rideController != null && rideController.IsRideActive)
+        if (IsAnyRideActive())
         {
+            ResetQuestScaleGesture();
             return;
         }
+
+        UpdateQuestScaleGesture();
 
         if (WasPressed(normalScaleAction, Key.Digit1))
             SetScale(ScaleState.Normal);
@@ -92,6 +103,104 @@ public class ScaleManager : MonoBehaviour
         return enableDebugKeyboardScaleShortcuts &&
                Keyboard.current != null &&
                Keyboard.current[debugKey].wasPressedThisFrame;
+    }
+
+    private void UpdateQuestScaleGesture()
+    {
+        if (!enableQuestThumbstickScale)
+        {
+            ResetQuestScaleGesture();
+            return;
+        }
+
+        bool pressed = IsRightThumbstickClickPressed();
+
+        if (pressed && !rightThumbstickWasPressed)
+        {
+            rightThumbstickPressStartTime = Time.time;
+            rightThumbstickLongPressConsumed = false;
+        }
+
+        if (pressed && !rightThumbstickLongPressConsumed &&
+            Time.time >= rightThumbstickPressStartTime + rightThumbstickLongPressSeconds)
+        {
+            rightThumbstickLongPressConsumed = true;
+            ApplyQuestScaleLongPress();
+        }
+
+        if (!pressed && rightThumbstickWasPressed && !rightThumbstickLongPressConsumed)
+        {
+            ApplyQuestScaleClick();
+        }
+
+        rightThumbstickWasPressed = pressed;
+    }
+
+    private bool IsRightThumbstickClickPressed()
+    {
+        if (rightThumbstickClickAction != null && rightThumbstickClickAction.action != null)
+        {
+            return rightThumbstickClickAction.action.IsPressed();
+        }
+
+        return QuestInteractionUtils.TryReadPrimary2DAxisClick(true, out bool pressed) && pressed;
+    }
+
+    private void ApplyQuestScaleClick()
+    {
+        switch (currentState)
+        {
+            case ScaleState.Normal:
+                SetScale(ScaleState.Small);
+                break;
+            case ScaleState.Large:
+                SetScale(ScaleState.Normal);
+                break;
+        }
+    }
+
+    private void ApplyQuestScaleLongPress()
+    {
+        switch (currentState)
+        {
+            case ScaleState.Normal:
+                SetScale(ScaleState.Large);
+                break;
+            case ScaleState.Small:
+                SetScale(ScaleState.Normal);
+                break;
+        }
+    }
+
+    private void ResetQuestScaleGesture()
+    {
+        rightThumbstickWasPressed = false;
+        rightThumbstickLongPressConsumed = false;
+    }
+
+    private bool IsAnyRideActive()
+    {
+        if (rideController != null && rideController.IsRideActive)
+        {
+            return true;
+        }
+
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+        CatRideControllerV2[] rideControllers = FindObjectsByType<CatRideControllerV2>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+#pragma warning disable CS0618
+        CatRideControllerV2[] rideControllers = FindObjectsOfType<CatRideControllerV2>(true);
+#pragma warning restore CS0618
+#endif
+        for (int i = 0; i < rideControllers.Length; i++)
+        {
+            if (rideControllers[i] != null && rideControllers[i].IsRideActive)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void AutoAssignReferences()
