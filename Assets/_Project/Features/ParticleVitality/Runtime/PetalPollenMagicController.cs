@@ -279,6 +279,8 @@ public class PetalPollenMagicController : MonoBehaviour
     private Transform questChargeAnchor;
     private PetalPollenSource hoveredQuestSource;
     private PetalPollenSource pressedQuestSource;
+    private PetalPollenTrigger hoveredQuestTrigger;
+    private PetalPollenTrigger pressedQuestTrigger;
     private QuestInteractableFeedback hoveredQuestFeedback;
     private HapticImpulsePlayer rightHaptics;
     private bool questTriggerLastFrame;
@@ -430,6 +432,7 @@ public class PetalPollenMagicController : MonoBehaviour
         questReleaseLockActive = false;
         questCollectActive = false;
         pressedQuestSource = null;
+        pressedQuestTrigger = null;
         useViewFacingQuestShowcasePose = false;
         hasQuestEffectFrame = false;
         RestoreAuthoredHandAnchor();
@@ -495,17 +498,20 @@ public class PetalPollenMagicController : MonoBehaviour
             return;
         }
 
-        TryResolveQuestSource(new Ray(rightRayOrigin.position, rightRayOrigin.forward), out PetalPollenSource source);
+        TryResolveQuestSource(
+            new Ray(rightRayOrigin.position, rightRayOrigin.forward),
+            out PetalPollenSource source,
+            out PetalPollenTrigger trigger);
         QuestRayVisualLengthProfile.ReportHover(
             true,
             source != null,
-            source != null ? Vector3.Distance(rightRayOrigin.position, source.transform.position) : questRayDistance);
-        if (source == hoveredQuestSource)
+            source != null ? Vector3.Distance(rightRayOrigin.position, GetQuestTargetPosition(source, trigger)) : questRayDistance);
+        if (source == hoveredQuestSource && trigger == hoveredQuestTrigger)
         {
             if (hoveredQuestFeedback != null && source != null)
             {
                 hoveredQuestFeedback.SetHovered(true, rightHaptics);
-                source.SetInteractionFocus(1f);
+                SetQuestTargetFocus(source, trigger, 1f);
             }
 
             return;
@@ -513,14 +519,15 @@ public class PetalPollenMagicController : MonoBehaviour
 
         ClearQuestHover();
         hoveredQuestSource = source;
+        hoveredQuestTrigger = trigger;
         if (hoveredQuestSource == null)
         {
             return;
         }
 
-        hoveredQuestFeedback = EnsureQuestFeedback(hoveredQuestSource);
+        hoveredQuestFeedback = EnsureQuestFeedback(hoveredQuestSource, hoveredQuestTrigger);
         hoveredQuestFeedback?.SetHovered(true, rightHaptics);
-        hoveredQuestSource.SetInteractionFocus(1f);
+        SetQuestTargetFocus(hoveredQuestSource, hoveredQuestTrigger, 1f);
     }
 
     private bool UpdateQuestInput()
@@ -538,12 +545,13 @@ public class PetalPollenMagicController : MonoBehaviour
 
         if (pressedThisFrame)
         {
-            if (!CanStartQuestCollect(hoveredQuestSource))
+            if (!CanStartQuestCollect(hoveredQuestSource, hoveredQuestTrigger))
             {
                 return true;
             }
 
             pressedQuestSource = hoveredQuestSource;
+            pressedQuestTrigger = hoveredQuestTrigger;
             BeginCollect();
             questCollectActive = isCollecting;
             return true;
@@ -565,9 +573,10 @@ public class PetalPollenMagicController : MonoBehaviour
         return false;
     }
 
-    private bool TryResolveQuestSource(Ray ray, out PetalPollenSource source)
+    private bool TryResolveQuestSource(Ray ray, out PetalPollenSource source, out PetalPollenTrigger trigger)
     {
         source = null;
+        trigger = null;
         int hitCount = Physics.RaycastNonAlloc(
             ray,
             questRayHits,
@@ -589,10 +598,29 @@ public class PetalPollenMagicController : MonoBehaviour
                 continue;
             }
 
+            PetalPollenTrigger hitTrigger = hitCollider.GetComponentInParent<PetalPollenTrigger>();
+            if (hitTrigger != null)
+            {
+                if (!IsQuestTriggerNearEnough(hitTrigger))
+                {
+                    return false;
+                }
+
+                PetalPollenSource triggerSource = hitTrigger.PrimarySource;
+                if (triggerSource == null)
+                {
+                    continue;
+                }
+
+                source = triggerSource;
+                trigger = hitTrigger;
+                return true;
+            }
+
             PetalPollenSource hitSource = hitCollider.GetComponentInParent<PetalPollenSource>();
             if (hitSource == null)
             {
-                return false;
+                continue;
             }
 
             if (!IsQuestSourceNearEnough(hitSource))
@@ -607,21 +635,22 @@ public class PetalPollenMagicController : MonoBehaviour
         return false;
     }
 
-    private QuestInteractableFeedback EnsureQuestFeedback(PetalPollenSource source)
+    private QuestInteractableFeedback EnsureQuestFeedback(PetalPollenSource source, PetalPollenTrigger trigger)
     {
         if (source == null)
         {
             return null;
         }
 
-        QuestInteractableFeedback feedback = source.GetComponent<QuestInteractableFeedback>();
+        GameObject feedbackTarget = trigger != null ? trigger.gameObject : source.gameObject;
+        QuestInteractableFeedback feedback = feedbackTarget.GetComponent<QuestInteractableFeedback>();
         if (feedback == null)
         {
-            feedback = source.gameObject.AddComponent<QuestInteractableFeedback>();
+            feedback = feedbackTarget.AddComponent<QuestInteractableFeedback>();
         }
 
         feedback.Configure(questSourceOutlineColor, 0.035f);
-        feedback.SetInteractable(CanStartQuestCollect(source));
+        feedback.SetInteractable(CanStartQuestCollect(source, trigger));
         return feedback;
     }
 
@@ -634,6 +663,7 @@ public class PetalPollenMagicController : MonoBehaviour
 
         hoveredQuestFeedback = null;
         hoveredQuestSource = null;
+        hoveredQuestTrigger = null;
     }
 
     private bool CanShowQuestHover()
@@ -641,9 +671,9 @@ public class PetalPollenMagicController : MonoBehaviour
         return !isCollecting && !releaseActive && activeParticles.Count == 0 && !questReleaseLockActive;
     }
 
-    private bool CanStartQuestCollect(PetalPollenSource source)
+    private bool CanStartQuestCollect(PetalPollenSource source, PetalPollenTrigger trigger)
     {
-        return source != null && CanBeginCollect() && IsQuestSourceNearEnough(source);
+        return source != null && CanBeginCollect() && IsQuestTargetNearEnough(source, trigger);
     }
 
     private bool CanBeginCollect()
@@ -676,6 +706,49 @@ public class PetalPollenMagicController : MonoBehaviour
         }
 
         return Vector3.Distance(reference.position, source.transform.position) <= Mathf.Max(0.1f, questNearInteractDistance);
+    }
+
+    private bool IsQuestTriggerNearEnough(PetalPollenTrigger trigger)
+    {
+        if (trigger == null)
+        {
+            return false;
+        }
+
+        Transform reference = playerHead != null ? playerHead : rightRayOrigin;
+        if (reference == null)
+        {
+            Camera mainCamera = Camera.main;
+            reference = mainCamera != null ? mainCamera.transform : transform;
+        }
+
+        return Vector3.Distance(reference.position, trigger.InteractionPosition) <= Mathf.Max(0.1f, questNearInteractDistance);
+    }
+
+    private bool IsQuestTargetNearEnough(PetalPollenSource source, PetalPollenTrigger trigger)
+    {
+        return trigger != null ? IsQuestTriggerNearEnough(trigger) : IsQuestSourceNearEnough(source);
+    }
+
+    private Vector3 GetQuestTargetPosition(PetalPollenSource source, PetalPollenTrigger trigger)
+    {
+        if (trigger != null)
+        {
+            return trigger.InteractionPosition;
+        }
+
+        return source != null ? source.transform.position : transform.position;
+    }
+
+    private void SetQuestTargetFocus(PetalPollenSource source, PetalPollenTrigger trigger, float amount)
+    {
+        if (trigger != null)
+        {
+            trigger.SetInteractionFocus(amount);
+            return;
+        }
+
+        source?.SetInteractionFocus(amount);
     }
 
     private void PrepareQuestChargeAnchor()
@@ -799,6 +872,7 @@ public class PetalPollenMagicController : MonoBehaviour
 
         questReleaseLockActive = false;
         pressedQuestSource = null;
+        pressedQuestTrigger = null;
         RestoreAuthoredHandAnchor();
     }
 
@@ -1498,6 +1572,15 @@ public class PetalPollenMagicController : MonoBehaviour
     {
         RefreshSourcesIfNeeded();
 
+        if (pressedQuestTrigger != null && IsQuestTriggerNearEnough(pressedQuestTrigger))
+        {
+            PetalPollenSource triggerSource = pressedQuestTrigger.PickSource();
+            if (triggerSource != null)
+            {
+                return triggerSource;
+            }
+        }
+
         if (pressedQuestSource != null && sources.Contains(pressedQuestSource) && IsQuestSourceNearEnough(pressedQuestSource))
         {
             return pressedQuestSource;
@@ -1535,6 +1618,11 @@ public class PetalPollenMagicController : MonoBehaviour
         }
 
         RefreshSourcesIfNeeded();
+
+        if (pressedQuestTrigger != null && isCollecting)
+        {
+            pressedQuestTrigger.SetInteractionFocus(Mathf.Clamp01(collectingSourceFocusBoost));
+        }
 
         Vector3 handPosition = handAnchor != null ? handAnchor.position : transform.position;
         float radius = Mathf.Max(0.01f, sourceFocusRadius);
