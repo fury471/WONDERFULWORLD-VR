@@ -18,6 +18,8 @@ public class TreeGrowthController : MonoBehaviour
 
     [Header("Growth")]
     [SerializeField] private float maxGrowth = 8f;
+    [SerializeField] private bool playOnEnable = false;
+    [SerializeField] private bool setSeedStateWhenWaiting = true;
     [SerializeField, Min(0f)] private float startDelay = 3f;
     [SerializeField, Min(0.01f)] private float barkRoughDuration = 6f;
     [SerializeField, Min(0.01f)] private float knotDuration = 1f;
@@ -29,6 +31,10 @@ public class TreeGrowthController : MonoBehaviour
     private readonly Dictionary<Material, List<int>> materialSlots = new();
     private readonly Dictionary<int, MaterialPropertyBlock> propertyBlocks = new();
     private Coroutine growthRoutine;
+    private bool isPlaying;
+
+    public float TotalGrowthDuration => startDelay + barkRoughDuration + knotDuration + barkDuration + treeCrownDuration;
+    public bool IsPlaying => isPlaying;
 
     private void Awake()
     {
@@ -61,7 +67,14 @@ public class TreeGrowthController : MonoBehaviour
         }
 
         CacheMaterialSlots();
-        growthRoutine = StartCoroutine(GrowthSequence());
+        if (playOnEnable)
+        {
+            StartGrowth(loop);
+        }
+        else if (setSeedStateWhenWaiting)
+        {
+            SetGrowthValues(0f);
+        }
     }
 
     private void OnDisable()
@@ -71,9 +84,39 @@ public class TreeGrowthController : MonoBehaviour
             StopCoroutine(growthRoutine);
             growthRoutine = null;
         }
+
+        isPlaying = false;
     }
 
     public void RestartGrowth()
+    {
+        StartGrowth(loop);
+    }
+
+    public void PlayGrowthOnce()
+    {
+        StartGrowth(false);
+    }
+
+    public void PlayGrowthLoop()
+    {
+        StartGrowth(true);
+    }
+
+    public void SetSeedState()
+    {
+        if (growthRoutine != null)
+        {
+            StopCoroutine(growthRoutine);
+            growthRoutine = null;
+        }
+
+        isPlaying = false;
+        CacheMaterialSlots();
+        SetGrowthValues(0f);
+    }
+
+    private void StartGrowth(bool shouldLoop)
     {
         if (!isActiveAndEnabled)
         {
@@ -85,7 +128,7 @@ public class TreeGrowthController : MonoBehaviour
             StopCoroutine(growthRoutine);
         }
 
-        growthRoutine = StartCoroutine(GrowthSequence());
+        growthRoutine = StartCoroutine(GrowthSequence(shouldLoop));
     }
 
     public void SetFullyGrown()
@@ -95,12 +138,20 @@ public class TreeGrowthController : MonoBehaviour
             return;
         }
 
+        if (growthRoutine != null)
+        {
+            StopCoroutine(growthRoutine);
+            growthRoutine = null;
+        }
+
         CacheMaterialSlots();
+        isPlaying = false;
         SetGrowthValues(maxGrowth);
     }
 
-    private IEnumerator GrowthSequence()
+    private IEnumerator GrowthSequence(bool shouldLoop)
     {
+        isPlaying = true;
         do
         {
             SetGrowthValues(0f);
@@ -115,12 +166,15 @@ public class TreeGrowthController : MonoBehaviour
             yield return AnimateGrowth(material3_Bark, barkDuration, maxGrowth);
             yield return AnimateGrowth(material1_Tree, treeCrownDuration, maxGrowth);
 
-            if (loop && loopWaitTime > 0f)
+            if (shouldLoop && loopWaitTime > 0f)
             {
                 yield return new WaitForSeconds(loopWaitTime);
             }
         }
-        while (loop);
+        while (shouldLoop);
+
+        growthRoutine = null;
+        isPlaying = false;
     }
 
     private IEnumerator AnimateGrowth(Material material, float duration, float targetValue)

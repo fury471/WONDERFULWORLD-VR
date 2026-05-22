@@ -185,7 +185,7 @@ public class LotusNoteTrigger : MonoBehaviour
             GameObject drop = Instantiate(waterDropPrefab, transform);
             drop.transform.localPosition = localPos;
 
-            float s = Random.Range(0.2f, 0.4f);
+            float s = Random.Range(0.2f, 0.4f) / 4.5f;
             
             drop.transform.localScale = new Vector3(s, s * 0.5f, s); 
             drop.transform.localRotation = Quaternion.Euler(0, Random.Range(0, 360), 0);

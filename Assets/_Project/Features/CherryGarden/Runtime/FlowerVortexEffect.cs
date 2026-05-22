@@ -13,7 +13,9 @@ public class FlowerVortexEffect : MonoBehaviour
     [Header("Petal Pool")]
     [SerializeField, Min(1)] private int petalCount = 1200;
     [SerializeField, Min(1)] private int maxPetalCount = 1800;
-    [SerializeField] private bool loopEffect = true;
+    [SerializeField] private bool playOnStart = false;
+    [SerializeField] private bool loopEffect = false;
+    [SerializeField] private bool holdStaticBloomAfterPlay = true;
     [SerializeField, Min(0f)] private float maxSimulationDistance = 85f;
 
     [Header("Timeline")]
@@ -48,7 +50,8 @@ public class FlowerVortexEffect : MonoBehaviour
         Waiting,
         SpiralingUp,
         Gathering,
-        Exploded
+        Exploded,
+        StaticBloom
     }
 
     [SerializeField] private EffectPhase currentPhase = EffectPhase.Waiting;
@@ -59,9 +62,14 @@ public class FlowerVortexEffect : MonoBehaviour
     private float sphereRotationAngle;
     private Mesh[] uvMeshes;
     private bool initialized;
+    private bool playing;
+    private bool completed;
     private Camera cachedCamera;
 
     private Vector3 Origin => treeCenter != null ? treeCenter.position : transform.position;
+    public float TotalEffectDuration => delayBeforeStart + spiralDuration + gatherDuration + scatterLifetime;
+    public bool IsPlaying => playing;
+    public bool IsComplete => completed;
 
     private void Awake()
     {
@@ -83,6 +91,14 @@ public class FlowerVortexEffect : MonoBehaviour
     private void Start()
     {
         InitializeIfNeeded();
+        if (playOnStart)
+        {
+            RestartEffect();
+        }
+        else
+        {
+            SetEffectHidden();
+        }
     }
 
     private void OnDestroy()
@@ -110,6 +126,42 @@ public class FlowerVortexEffect : MonoBehaviour
         }
 
         ResetLoop();
+        playing = true;
+        completed = false;
+    }
+
+    public void PlayOnce()
+    {
+        loopEffect = false;
+        RestartEffect();
+    }
+
+    public void SetEffectHidden()
+    {
+        playing = false;
+        completed = false;
+        globalTimer = 0f;
+        sphereRotationAngle = 0f;
+        currentPhase = EffectPhase.Waiting;
+
+        for (int i = 0; i < petals.Count; i++)
+        {
+            petals[i].gameObject.SetActive(false);
+        }
+    }
+
+    public void SetStaticBloom()
+    {
+        InitializeIfNeeded();
+        if (!initialized)
+        {
+            return;
+        }
+
+        playing = false;
+        completed = true;
+        ChangePhase(EffectPhase.StaticBloom);
+        PlaceStaticBloom();
     }
 
     private void InitializeIfNeeded()
@@ -135,6 +187,11 @@ public class FlowerVortexEffect : MonoBehaviour
     private void Update()
     {
         if (!initialized)
+        {
+            return;
+        }
+
+        if (!playing)
         {
             return;
         }
@@ -181,7 +238,18 @@ public class FlowerVortexEffect : MonoBehaviour
         if (loopEffect)
         {
             ResetLoop();
+            playing = true;
+            return;
         }
+
+        if (holdStaticBloomAfterPlay)
+        {
+            SetStaticBloom();
+            return;
+        }
+
+        SetEffectHidden();
+        completed = true;
     }
 
     private void ChangePhase(EffectPhase newPhase)
@@ -204,6 +272,37 @@ public class FlowerVortexEffect : MonoBehaviour
         else if (newPhase == EffectPhase.Exploded)
         {
             ExplodeOmni();
+        }
+    }
+
+    private void PlaceStaticBloom()
+    {
+        Vector3 bloomCenter = Origin + Vector3.up * (maxGrowthHeight * 0.72f);
+        Vector3 trunkForward = treeCenter != null ? treeCenter.forward : transform.forward;
+        Quaternion treeRotation = Quaternion.LookRotation(
+            Vector3.ProjectOnPlane(trunkForward, Vector3.up).sqrMagnitude > 0.0001f
+                ? Vector3.ProjectOnPlane(trunkForward, Vector3.up).normalized
+                : Vector3.forward,
+            Vector3.up);
+
+        for (int i = 0; i < petals.Count; i++)
+        {
+            PetalData data = petals[i];
+            Vector3 spherePoint = GetFibonacciSpherePoint(i, petals.Count);
+            float petalOffset = Mathf.Repeat(data.NoiseOffset * 0.173f, 1f);
+            float canopyRadius = Mathf.Lerp(1.6f, 4.8f, petalOffset);
+            float verticalSquash = Mathf.Lerp(0.34f, 0.72f, Mathf.Repeat(data.NoiseOffset * 0.317f, 1f));
+            Vector3 localOffset = new Vector3(
+                spherePoint.x * canopyRadius,
+                spherePoint.y * canopyRadius * verticalSquash,
+                spherePoint.z * canopyRadius * 0.82f);
+
+            Transform petalTransform = data.CachedTransform;
+            petalTransform.SetPositionAndRotation(
+                bloomCenter + treeRotation * localOffset,
+                treeRotation * Quaternion.Euler(90f + spherePoint.y * 25f, data.NoiseOffset * 360f, petalOffset * 180f));
+            petalTransform.localScale = Vector3.one * PetalVisualScale;
+            data.gameObject.SetActive(true);
         }
     }
 
@@ -318,6 +417,7 @@ public class FlowerVortexEffect : MonoBehaviour
         }
 
         currentPhase = EffectPhase.Waiting;
+        completed = false;
     }
 
     private void InitializeUVMeshes()
