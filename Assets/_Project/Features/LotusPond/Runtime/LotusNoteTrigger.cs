@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
@@ -76,6 +77,27 @@ public class LotusNoteTrigger : MonoBehaviour
     private bool objectStillInside;
     private Material runtimeMagicMaterial;
 
+    // Pooled magic-projectile assembly: created lazily on first trigger and reused thereafter.
+    // Multiple in-flight projectiles (allowed because cooldown < flight duration) round-robin
+    // across the pool; the pool grows only when needed and never shrinks, so steady-state is
+    // alloc-free.
+    private readonly List<MagicProjectileInstance> magicProjectilePool = new List<MagicProjectileInstance>(2);
+    private Vector3[] sparkDirectionsBuffer;
+    private float[] sparkLengthsBuffer;
+    private static readonly AnimationCurve SharedTailTaperCurve = CreateTailTaperCurve();
+
+    private class MagicProjectileInstance
+    {
+        public GameObject root;
+        public Transform rootTransform;
+        public LineRenderer halo;
+        public LineRenderer core;
+        public LineRenderer[] strands;
+        public LineRenderer[] sparks;
+        public Light glow;
+        public bool inUse;
+    }
+
     [Header("Wobble Settings (Physical Response)")]
     [SerializeField] private float wobbleIntensity = 5f; 
     [SerializeField] private float duration = 0.5f;      
@@ -98,6 +120,17 @@ public class LotusNoteTrigger : MonoBehaviour
         {
             Destroy(runtimeMagicMaterial);
         }
+
+        for (int i = 0; i < magicProjectilePool.Count; i++)
+        {
+            MagicProjectileInstance instance = magicProjectilePool[i];
+            if (instance != null && instance.root != null)
+            {
+                Destroy(instance.root);
+            }
+        }
+
+        magicProjectilePool.Clear();
     }
     private void Reset()
     {
@@ -302,29 +335,14 @@ public class LotusNoteTrigger : MonoBehaviour
 
     private IEnumerator FlyWaterMagicProjectile(Vector3 start, Vector3 end)
     {
-        GameObject magicRoot = new GameObject("LotusWaterMagicRibbon");
-        Transform magicTransform = magicRoot.transform;
+        MagicProjectileInstance projectile = AcquireMagicProjectile();
+        projectile.root.SetActive(true);
 
-        LineRenderer halo = CreateMagicLine(magicRoot, "OuterWaterGlow", trailWidth * haloWidthMultiplier, waterTrailColor, 0.012f, 0.22f);
-        LineRenderer core = CreateMagicLine(magicRoot, "InnerWaterThread", trailWidth, waterCoreColor, 0.03f, 0.9f);
-
-        int strandCount = Mathf.Clamp(spiralStrandCount, 0, 6);
-        LineRenderer[] strands = new LineRenderer[strandCount];
-        for (int i = 0; i < strandCount; i++)
-        {
-            strands[i] = CreateMagicLine(
-                magicRoot,
-                $"SpiralWaterThread_{i + 1}",
-                trailWidth * strandWidthMultiplier,
-                Color.Lerp(waterTrailColor, waterCoreColor, 0.35f),
-                0f,
-                0.68f);
-        }
-
-        Light glow = magicRoot.AddComponent<Light>();
-        glow.color = waterCoreColor;
-        glow.intensity = 1.1f;
-        glow.range = 1.45f;
+        Transform magicTransform = projectile.rootTransform;
+        LineRenderer core = projectile.core;
+        LineRenderer halo = projectile.halo;
+        LineRenderer[] strands = projectile.strands;
+        Light glow = projectile.glow;
 
         Vector3 travel = end - start;
         Vector3 travelDirection = travel.sqrMagnitude > 0.0001f ? travel.normalized : transform.forward;
@@ -335,6 +353,19 @@ public class LotusNoteTrigger : MonoBehaviour
         }
 
         side.Normalize();
+
+        // pathForward / right / up are constant for the whole flight, so compute once and pass into
+        // UpdateRibbonLine instead of recomputing inside it for every line, every frame.
+        Vector3 pathForward = travelDirection;
+        Vector3 right = Vector3.Cross(Vector3.up, pathForward);
+        if (right.sqrMagnitude < 0.0001f)
+        {
+            right = Vector3.right;
+        }
+
+        right.Normalize();
+        Vector3 up = Vector3.Cross(pathForward, right).normalized;
+
         Vector3 controlA = Vector3.Lerp(start, end, 0.32f) + Vector3.up * (projectileArcHeight * 0.58f) + side * projectileSideCurve;
         Vector3 controlB = Vector3.Lerp(start, end, 0.76f) + Vector3.up * projectileArcHeight + side * projectileSecondarySideCurve;
         float flightSeconds = Mathf.Max(0.05f, projectileFlightSeconds);
@@ -348,30 +379,96 @@ public class LotusNoteTrigger : MonoBehaviour
             Vector3 current = CubicBezier(start, controlA, controlB, end, eased);
 
             magicTransform.position = current;
-            UpdateRibbonLine(core, start, controlA, controlB, end, eased, 0f, 0f, false);
-            UpdateRibbonLine(halo, start, controlA, controlB, end, eased, 0f, 0f, false);
+            UpdateRibbonLine(core, start, controlA, controlB, end, eased, 0f, 0f, false, right, up);
+            UpdateRibbonLine(halo, start, controlA, controlB, end, eased, 0f, 0f, false, right, up);
 
             for (int i = 0; i < strands.Length; i++)
             {
                 float phase = i / Mathf.Max(1f, strands.Length) * Mathf.PI * 2f;
-                UpdateRibbonLine(strands[i], start, controlA, controlB, end, eased, phase, spiralRadius, true);
+                UpdateRibbonLine(strands[i], start, controlA, controlB, end, eased, phase, spiralRadius, true, right, up);
             }
 
-            glow.intensity = Mathf.Lerp(0.75f, 1.65f, Mathf.Sin(t * Mathf.PI));
+            if (glow != null) glow.intensity = Mathf.Lerp(0.75f, 1.65f, Mathf.Sin(t * Mathf.PI));
             yield return null;
         }
 
         magicTransform.position = end;
-        UpdateRibbonLine(core, start, controlA, controlB, end, 1f, 0f, 0f, false);
-        UpdateRibbonLine(halo, start, controlA, controlB, end, 1f, 0f, 0f, false);
+        UpdateRibbonLine(core, start, controlA, controlB, end, 1f, 0f, 0f, false, right, up);
+        UpdateRibbonLine(halo, start, controlA, controlB, end, 1f, 0f, 0f, false, right, up);
         for (int i = 0; i < strands.Length; i++)
         {
             float phase = i / Mathf.Max(1f, strands.Length) * Mathf.PI * 2f;
-            UpdateRibbonLine(strands[i], start, controlA, controlB, end, 1f, phase, spiralRadius, true);
+            UpdateRibbonLine(strands[i], start, controlA, controlB, end, 1f, phase, spiralRadius, true, right, up);
         }
 
-        yield return PlayImpactSparks(magicRoot, end, travelDirection);
-        Destroy(magicRoot);
+        yield return PlayImpactSparks(projectile, end, travelDirection);
+        projectile.root.SetActive(false);
+        ReleaseMagicProjectile(projectile);
+    }
+
+    private MagicProjectileInstance AcquireMagicProjectile()
+    {
+        for (int i = 0; i < magicProjectilePool.Count; i++)
+        {
+            MagicProjectileInstance candidate = magicProjectilePool[i];
+            if (!candidate.inUse && candidate.root != null)
+            {
+                candidate.inUse = true;
+                return candidate;
+            }
+        }
+
+        MagicProjectileInstance created = CreateMagicProjectileInstance();
+        created.inUse = true;
+        magicProjectilePool.Add(created);
+        return created;
+    }
+
+    private void ReleaseMagicProjectile(MagicProjectileInstance projectile)
+    {
+        if (projectile == null) return;
+        projectile.inUse = false;
+    }
+
+    private MagicProjectileInstance CreateMagicProjectileInstance()
+    {
+        MagicProjectileInstance instance = new MagicProjectileInstance();
+        instance.root = new GameObject("LotusWaterMagicRibbon");
+        instance.root.SetActive(false);
+        instance.rootTransform = instance.root.transform;
+
+        instance.halo = CreateMagicLine(instance.root, "OuterWaterGlow", trailWidth * haloWidthMultiplier, waterTrailColor, 0.012f, 0.22f);
+        instance.core = CreateMagicLine(instance.root, "InnerWaterThread", trailWidth, waterCoreColor, 0.03f, 0.9f);
+
+        int strandCount = Mathf.Clamp(spiralStrandCount, 0, 6);
+        instance.strands = new LineRenderer[strandCount];
+        for (int i = 0; i < strandCount; i++)
+        {
+            instance.strands[i] = CreateMagicLine(
+                instance.root,
+                $"SpiralWaterThread_{i + 1}",
+                trailWidth * strandWidthMultiplier,
+                Color.Lerp(waterTrailColor, waterCoreColor, 0.35f),
+                0f,
+                0.68f);
+        }
+
+        instance.glow = instance.root.AddComponent<Light>();
+        instance.glow.color = waterCoreColor;
+        instance.glow.intensity = 1.1f;
+        instance.glow.range = 1.45f;
+
+        int sparkCount = Mathf.Clamp(impactSparkCount, 0, 32);
+        instance.sparks = new LineRenderer[sparkCount];
+        for (int i = 0; i < sparkCount; i++)
+        {
+            LineRenderer spark = CreateMagicLine(instance.root, $"ImpactWaterSpark_{i + 1}", trailWidth * 0.42f, waterCoreColor, 0.86f, 0f);
+            spark.positionCount = 2;
+            spark.enabled = false;
+            instance.sparks[i] = spark;
+        }
+
+        return instance;
     }
 
     private LineRenderer CreateMagicLine(GameObject parent, string lineName, float width, Color color, float startAlpha, float endAlpha)
@@ -386,23 +483,29 @@ public class LotusNoteTrigger : MonoBehaviour
         line.numCapVertices = 4;
         line.alignment = LineAlignment.View;
         line.textureMode = LineTextureMode.Stretch;
-        line.widthCurve = CreateTailTaperCurve();
+        line.widthCurve = SharedTailTaperCurve;
         line.startColor = new Color(color.r, color.g, color.b, startAlpha);
         line.endColor = new Color(color.r, color.g, color.b, endAlpha);
         return line;
     }
 
-    private IEnumerator PlayImpactSparks(GameObject parent, Vector3 impactPoint, Vector3 incomingDirection)
+    private IEnumerator PlayImpactSparks(MagicProjectileInstance projectile, Vector3 impactPoint, Vector3 incomingDirection)
     {
-        int sparkCount = Mathf.Clamp(impactSparkCount, 0, 32);
+        LineRenderer[] sparks = projectile.sparks;
+        int sparkCount = sparks != null ? sparks.Length : 0;
         if (sparkCount == 0 || impactSparkSeconds <= 0f)
         {
             yield break;
         }
 
-        LineRenderer[] sparks = new LineRenderer[sparkCount];
-        Vector3[] directions = new Vector3[sparkCount];
-        float[] lengths = new float[sparkCount];
+        if (sparkDirectionsBuffer == null || sparkDirectionsBuffer.Length < sparkCount)
+        {
+            sparkDirectionsBuffer = new Vector3[sparkCount];
+            sparkLengthsBuffer = new float[sparkCount];
+        }
+
+        Vector3[] directions = sparkDirectionsBuffer;
+        float[] lengths = sparkLengthsBuffer;
 
         Vector3 baseRight = Vector3.Cross(Vector3.up, incomingDirection);
         if (baseRight.sqrMagnitude < 0.0001f)
@@ -419,8 +522,7 @@ public class LotusNoteTrigger : MonoBehaviour
             float lift = Mathf.Lerp(0.12f, 0.58f, Halton(i + 1, 3));
             directions[i] = (baseRight * Mathf.Cos(angle) + baseUp * Mathf.Sin(angle) + Vector3.up * lift).normalized;
             lengths[i] = Mathf.Lerp(0.14f, 0.34f, Halton(i + 1, 5));
-            sparks[i] = CreateMagicLine(parent, $"ImpactWaterSpark_{i + 1}", trailWidth * 0.42f, waterCoreColor, 0.86f, 0f);
-            sparks[i].positionCount = 2;
+            sparks[i].enabled = true;
         }
 
         float elapsed = 0f;
@@ -430,10 +532,11 @@ public class LotusNoteTrigger : MonoBehaviour
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / sparkSeconds);
             float fade = 1f - t;
+            float sinPhase = Mathf.Sin(t * Mathf.PI * 0.85f);
 
-            for (int i = 0; i < sparks.Length; i++)
+            for (int i = 0; i < sparkCount; i++)
             {
-                Vector3 tip = impactPoint + directions[i] * lengths[i] * Mathf.Sin(t * Mathf.PI * 0.85f);
+                Vector3 tip = impactPoint + directions[i] * (lengths[i] * sinPhase);
                 sparks[i].startColor = new Color(waterCoreColor.r, waterCoreColor.g, waterCoreColor.b, 0.82f * fade);
                 sparks[i].endColor = new Color(waterTrailColor.r, waterTrailColor.g, waterTrailColor.b, 0f);
                 sparks[i].SetPosition(0, impactPoint);
@@ -441,6 +544,13 @@ public class LotusNoteTrigger : MonoBehaviour
             }
 
             yield return null;
+        }
+
+        // Hide the sparks again so they're invisible when the pool item is reused. Keep the
+        // LineRenderers themselves enabled for the next flight via projectile pooling.
+        for (int i = 0; i < sparkCount; i++)
+        {
+            sparks[i].enabled = false;
         }
     }
 
@@ -456,32 +566,43 @@ public class LotusNoteTrigger : MonoBehaviour
         spawnPoint += impactEffectWorldOffset;
         GameObject instance = Instantiate(waterImpactEffectPrefab, spawnPoint, rotation);
         instance.transform.localScale *= Mathf.Max(0.01f, impactEffectScale);
-        ApplyImpactEffectSimulationSpeed(instance);
-        ApplyImpactEffectAlpha(instance);
+        ConfigureImpactEffectParticles(instance);
         Destroy(instance, ResolveImpactEffectLifetime(instance));
     }
 
-    private void ApplyImpactEffectSimulationSpeed(GameObject instance)
+    private void ConfigureImpactEffectParticles(GameObject instance)
     {
         float speed = Mathf.Max(0.01f, impactEffectSimulationSpeed);
-        ParticleSystem[] particles = instance.GetComponentsInChildren<ParticleSystem>(true);
-        for (int i = 0; i < particles.Length; i++)
+        float alpha = Mathf.Clamp01(impactEffectAlphaMultiplier);
+
+        // Reuse a single GetComponentsInChildren result instead of running the walk twice,
+        // and reuse the buffer across triggers to keep per-tap allocations down.
+        instance.GetComponentsInChildren<ParticleSystem>(true, GetImpactEffectBuffer());
+        List<ParticleSystem> buffer = impactEffectListBuffer;
+        for (int i = 0; i < buffer.Count; i++)
         {
-            ParticleSystem.MainModule main = particles[i].main;
+            ParticleSystem.MainModule main = buffer[i].main;
             main.simulationSpeed *= speed;
+            main.startColor = ScaleGradientAlpha(main.startColor, alpha);
         }
     }
 
-    private void ApplyImpactEffectAlpha(GameObject instance)
+    // GetComponentsInChildren<T>(includeInactive, List<T>) reuses the buffer, so we only allocate
+    // the list itself once per LotusNoteTrigger lifetime.
+    private List<ParticleSystem> impactEffectListBuffer;
+
+    private List<ParticleSystem> GetImpactEffectBuffer()
     {
-        float alpha = Mathf.Clamp01(impactEffectAlphaMultiplier);
-        ParticleSystem[] particles = instance.GetComponentsInChildren<ParticleSystem>(true);
-        for (int i = 0; i < particles.Length; i++)
+        if (impactEffectListBuffer == null)
         {
-            ParticleSystem.MainModule main = particles[i].main;
-            ParticleSystem.MinMaxGradient startColor = main.startColor;
-            main.startColor = ScaleGradientAlpha(startColor, alpha);
+            impactEffectListBuffer = new List<ParticleSystem>(16);
         }
+        else
+        {
+            impactEffectListBuffer.Clear();
+        }
+
+        return impactEffectListBuffer;
     }
 
     private static ParticleSystem.MinMaxGradient ScaleGradientAlpha(ParticleSystem.MinMaxGradient gradient, float alpha)
@@ -572,18 +693,9 @@ public class LotusNoteTrigger : MonoBehaviour
         return runtimeMagicMaterial;
     }
 
-    private void UpdateRibbonLine(LineRenderer trail, Vector3 start, Vector3 controlA, Vector3 controlB, Vector3 end, float visibleT, float phase, float radius, bool spiral)
+    private void UpdateRibbonLine(LineRenderer trail, Vector3 start, Vector3 controlA, Vector3 controlB, Vector3 end, float visibleT, float phase, float radius, bool spiral, Vector3 right, Vector3 up)
     {
         int count = trail.positionCount;
-        Vector3 pathForward = (end - start).normalized;
-        Vector3 right = Vector3.Cross(Vector3.up, pathForward);
-        if (right.sqrMagnitude < 0.0001f)
-        {
-            right = Vector3.right;
-        }
-
-        right.Normalize();
-        Vector3 up = Vector3.Cross(pathForward, right).normalized;
         float tailStart = Mathf.Clamp01(visibleT - Mathf.Clamp01(trailVisibleFraction));
         float visibleSpan = Mathf.Max(0.001f, visibleT - tailStart);
 

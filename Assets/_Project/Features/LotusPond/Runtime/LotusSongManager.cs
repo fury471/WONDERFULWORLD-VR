@@ -5,7 +5,9 @@ using UnityEngine.InputSystem;
 public class LotusSongManager : MonoBehaviour
 {
     [Header("Song Data Assets")]
-    public LotusSongData currentSong; 
+    public LotusSongData currentSong;
+    [Tooltip("Pool of songs randomly chosen by StartRandomSong (used by lotus trigger).")]
+    [SerializeField] private LotusSongData[] songPool;
 
     [Header("Feedback")]
     [SerializeField] private AudioSource errorAudioSource;
@@ -64,6 +66,63 @@ public class LotusSongManager : MonoBehaviour
                 StopSong();
             }
         }
+    }
+
+    /// <summary>
+    /// Picks a random song from <see cref="songPool"/> and starts it.
+    /// Bound to UnityEvents (e.g. lotus onTriggered) so the same trigger can present different scores.
+    /// Falls back to <see cref="currentSong"/> if the pool is empty.
+    /// </summary>
+    public void StartRandomSong()
+    {
+        if (isSongActive) return;
+
+        int poolSize = songPool != null ? songPool.Length : 0;
+        if (poolSize == 0)
+        {
+            Debug.LogWarning($"[LotusSongManager] StartRandomSong: songPool is empty on '{name}'. " +
+                             "Falling back to currentSong. Populate Song Pool in the Inspector to enable random selection.");
+        }
+
+        LotusSongData chosen = PickRandomSong();
+        if (chosen == null)
+        {
+            Debug.LogWarning("[LotusSongManager] StartRandomSong: no song available (pool empty and currentSong null).");
+            return;
+        }
+
+        if (logDebugMessages)
+        {
+            Debug.Log($"[LotusSongManager] StartRandomSong picked '{chosen.songName}' from pool of {poolSize}.");
+        }
+
+        StartSong(chosen);
+    }
+
+    private LotusSongData PickRandomSong()
+    {
+        if (songPool == null || songPool.Length == 0)
+        {
+            return currentSong;
+        }
+
+        int validCount = 0;
+        for (int i = 0; i < songPool.Length; i++)
+        {
+            if (songPool[i] != null) validCount++;
+        }
+
+        if (validCount == 0) return currentSong;
+
+        int pick = Random.Range(0, validCount);
+        for (int i = 0; i < songPool.Length; i++)
+        {
+            if (songPool[i] == null) continue;
+            if (pick == 0) return songPool[i];
+            pick--;
+        }
+
+        return currentSong;
     }
 
     /// <summary>
