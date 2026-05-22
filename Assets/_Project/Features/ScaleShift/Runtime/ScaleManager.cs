@@ -2,6 +2,7 @@ using System.Collections;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion.Gravity;
 using Unity.XR.CoreUtils;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -19,6 +20,7 @@ public class ScaleManager : MonoBehaviour
     [SerializeField] private ScaleSettings settings;
     [SerializeField] private CharacterController characterController;
     [SerializeField] private CatRideControllerV2 rideController;
+    [SerializeField] private GravityProvider gravityProvider;
 
     [Header("XR Rig Scale")]
     [SerializeField] private bool keepXrRigShapeDuringScale = true;
@@ -67,6 +69,12 @@ public class ScaleManager : MonoBehaviour
     private bool rightThumbstickLongPressConsumed;
     private float rightThumbstickPressStartTime;
     private float lastRightThumbstickClickTime = -999f;
+    private Vector3 driftLastScaleRootPosition;
+    private Quaternion driftLastScaleRootRotation = Quaternion.identity;
+    private bool driftSamplingInitialized;
+    private float lastThumbstickEventTime = -999f;
+    private string lastThumbstickEventLabel = "none";
+    private int driftStreakFrames;
     public ScaleState CurrentState => currentState;
     public bool IsSmallScale => currentState == ScaleState.Small;
 
@@ -97,6 +105,7 @@ public class ScaleManager : MonoBehaviour
         }
 
         UpdateQuestScaleGesture();
+        SampleDriftDiagnostics();
 
         if (WasPressed(normalScaleAction, Key.Digit1))
             SetScale(ScaleState.Normal);
@@ -106,6 +115,11 @@ public class ScaleManager : MonoBehaviour
 
         if (WasPressed(largeScaleAction, Key.Digit3))
             SetScale(ScaleState.Large);
+    }
+
+    private void LateUpdate()
+    {
+        ClampGravityWhileGrounded();
     }
 
 
@@ -135,6 +149,7 @@ public class ScaleManager : MonoBehaviour
         {
             rightThumbstickPressStartTime = Time.time;
             rightThumbstickLongPressConsumed = false;
+            MarkThumbstickEvent("press-down");
         }
 
         if (pressed)
@@ -152,10 +167,91 @@ public class ScaleManager : MonoBehaviour
         if (!pressed && rightThumbstickWasPressed && !rightThumbstickLongPressConsumed)
         {
             SuppressRightHandTurnInput();
+            MarkThumbstickEvent("release-click");
             TryApplyQuestScaleClick();
         }
 
         rightThumbstickWasPressed = pressed;
+    }
+
+    private void ClampGravityWhileGrounded()
+    {
+        if (gravityProvider == null || characterController == null || !characterController.enabled)
+        {
+            return;
+        }
+
+        if (characterController.isGrounded)
+        {
+            gravityProvider.ResetFallForce();
+        }
+    }
+
+    private void MarkThumbstickEvent(string label)
+    {
+        lastThumbstickEventTime = Time.time;
+        lastThumbstickEventLabel = label;
+        if (logDebug)
+        {
+            Debug.Log($"[ScaleShift][Gesture] {label} | state={currentState} | t={Time.time:F3}");
+        }
+    }
+
+    private void SampleDriftDiagnostics()
+    {
+        if (!logDebug || scaleRoot == null)
+        {
+            return;
+        }
+
+        Vector3 currentPosition = scaleRoot.position;
+        Quaternion currentRotation = scaleRoot.rotation;
+
+        if (!driftSamplingInitialized)
+        {
+            driftLastScaleRootPosition = currentPosition;
+            driftLastScaleRootRotation = currentRotation;
+            driftSamplingInitialized = true;
+            return;
+        }
+
+        if (isTransitioning)
+        {
+            driftLastScaleRootPosition = currentPosition;
+            driftLastScaleRootRotation = currentRotation;
+            driftStreakFrames = 0;
+            return;
+        }
+
+        Vector3 delta = currentPosition - driftLastScaleRootPosition;
+        float deltaXZ = new Vector2(delta.x, delta.z).magnitude;
+        float deltaY = delta.y;
+        float yawDelta = Quaternion.Angle(driftLastScaleRootRotation, currentRotation);
+
+        const float positionThreshold = 0.0005f;
+        const float rotationThreshold = 0.05f;
+
+        if (deltaXZ > positionThreshold || Mathf.Abs(deltaY) > positionThreshold || yawDelta > rotationThreshold)
+        {
+            driftStreakFrames++;
+            float sinceEvent = Time.time - lastThumbstickEventTime;
+            Vector3 ccVelocity = characterController != null ? characterController.velocity : Vector3.zero;
+            bool ccGrounded = characterController != null && characterController.isGrounded;
+            Debug.Log(
+                $"[ScaleShift][Drift#{driftStreakFrames}] state={currentState} | " +
+                $"dXZ={deltaXZ:F4}m dY={deltaY:F4}m yaw={yawDelta:F2}deg | " +
+                $"ccVel={ccVelocity} ccGrounded={ccGrounded} | " +
+                $"sinceEvent={sinceEvent:F2}s last={lastThumbstickEventLabel} | " +
+                $"pos={currentPosition}");
+        }
+        else if (driftStreakFrames > 0)
+        {
+            Debug.Log($"[ScaleShift][Drift] streak ended after {driftStreakFrames} frames");
+            driftStreakFrames = 0;
+        }
+
+        driftLastScaleRootPosition = currentPosition;
+        driftLastScaleRootRotation = currentRotation;
     }
 
     private bool IsRightThumbstickClickPressed()
@@ -213,6 +309,7 @@ public class ScaleManager : MonoBehaviour
 
     private bool TryApplyQuestScaleLongPress()
     {
+        MarkThumbstickEvent($"long-press@{currentState}");
         switch (currentState)
         {
             case ScaleState.Normal:
@@ -314,6 +411,19 @@ public class ScaleManager : MonoBehaviour
             characterController = GetComponent<CharacterController>();
         }
 
+        if (gravityProvider == null)
+        {
+            if (xrOrigin != null)
+            {
+                gravityProvider = xrOrigin.GetComponentInChildren<GravityProvider>(true);
+            }
+
+            if (gravityProvider == null)
+            {
+                gravityProvider = GetComponentInChildren<GravityProvider>(true);
+            }
+        }
+
         if (settings == null)
         {
 #if UNITY_EDITOR
@@ -373,6 +483,7 @@ public class ScaleManager : MonoBehaviour
         currentState = newState;
         ApplyScaleImmediate(currentState);
         lastChangeTime = Time.time;
+        driftSamplingInitialized = false;
 
         isTransitioning = false;
     }

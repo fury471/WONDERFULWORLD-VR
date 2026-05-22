@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk '/guid: 21b9b6ecf9ec4a8bb7f85b8a8f8d5c4d/{flag=1} flag{print NR\": \"$0; if\\(/^---/\\){flag=0}}' Assets/_Project/Core/XR/WonderlandXROrigin.prefab)"
+    ]
+  }
+}
