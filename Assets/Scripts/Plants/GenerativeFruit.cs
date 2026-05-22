@@ -59,15 +59,37 @@ namespace ButterflyHouse.Plants
         private float _melodyTimer = 0f;
         private FruitGrowthSystem.FruitStage _currentStage = FruitGrowthSystem.FruitStage.Seed;
         private float _lastTouchTime = 0f;
+
+        // Cached shader property IDs and presence flags — avoid per-frame HasProperty(string) calls.
+        private static readonly int _emissionStrengthId = Shader.PropertyToID("_EmissionStrength");
+        private static readonly int _emissionId = Shader.PropertyToID("_Emission");
+        private static readonly int _baseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int _colorId = Shader.PropertyToID("_Color");
+        private bool _hasEmissionStrength;
+        private bool _hasEmission;
+        private bool _hasBaseColor;
+        private bool _hasColor;
+
+        // Throttle glow / energy updates — these don't need to fire every frame.
+        private const float ENERGY_UPDATE_INTERVAL = 0.5f;
+        private float _energyUpdateTimer;
         
         private void Awake()
         {
             if (fruitRenderer == null)
                 fruitRenderer = GetComponent<Renderer>();
-            
+
             if (fruitRenderer != null)
             {
                 _mpb = new MaterialPropertyBlock();
+                if (fruitRenderer.sharedMaterial != null)
+                {
+                    var mat = fruitRenderer.sharedMaterial;
+                    _hasEmissionStrength = mat.HasProperty(_emissionStrengthId);
+                    _hasEmission = mat.HasProperty(_emissionId);
+                    _hasBaseColor = mat.HasProperty(_baseColorId);
+                    _hasColor = mat.HasProperty(_colorId);
+                }
             }
             
             if (audioSource == null)
@@ -122,25 +144,28 @@ namespace ButterflyHouse.Plants
         
         private void Update()
         {
-            // Animate glow if enabled
-            if (animateGlow && fruitRenderer != null && fruitRenderer.sharedMaterial != null)
+            // Animate glow if enabled — uses cached property IDs/flags rather than string lookups per frame.
+            if (animateGlow && fruitRenderer != null)
             {
                 _glowPhase += Time.deltaTime * glowSpeed;
                 _currentGlow = 0.5f + Mathf.Sin(_glowPhase) * glowIntensity * 0.5f;
-                
-                fruitRenderer.GetPropertyBlock(_mpb);
-                if (fruitRenderer.sharedMaterial.HasProperty("_EmissionStrength"))
-                    _mpb.SetFloat("_EmissionStrength", _currentGlow);
-                else if (fruitRenderer.sharedMaterial.HasProperty("_Emission"))
-                    _mpb.SetFloat("_Emission", _currentGlow);
-                fruitRenderer.SetPropertyBlock(_mpb);
+
+                if (_hasEmissionStrength || _hasEmission)
+                {
+                    fruitRenderer.GetPropertyBlock(_mpb);
+                    if (_hasEmissionStrength)
+                        _mpb.SetFloat(_emissionStrengthId, _currentGlow);
+                    else
+                        _mpb.SetFloat(_emissionId, _currentGlow);
+                    fruitRenderer.SetPropertyBlock(_mpb);
+                }
             }
-            
+
             // Handle consumption
             if (_isBeingConsumed && canBeConsumed)
             {
                 _consumptionTimer += Time.deltaTime;
-                
+
                 if (_consumptionTimer >= consumptionTime)
                 {
                     OnConsumed();
@@ -152,21 +177,26 @@ namespace ButterflyHouse.Plants
                     UpdateConsumptionVisual(consumptionProgress);
                 }
             }
-            
+
             // Play continuous melody based on stage
             if (playMelodyContinuously && _currentStage != FruitGrowthSystem.FruitStage.Seed)
             {
                 _melodyTimer += Time.deltaTime;
-                
+
                 if (_melodyTimer >= melodyPlayInterval && melodicClips != null && melodicClips.Length > 0 && audioSource != null && !audioSource.isPlaying)
                 {
                     PlayMelody();
                     _melodyTimer = 0f;
                 }
             }
-            
-            // Update energy output based on stage
-            UpdateEnergyOutput();
+
+            // Energy output is driven by stage, which changes rarely — throttle to ~2x/sec.
+            _energyUpdateTimer += Time.deltaTime;
+            if (_energyUpdateTimer >= ENERGY_UPDATE_INTERVAL)
+            {
+                _energyUpdateTimer = 0f;
+                UpdateEnergyOutput();
+            }
         }
         
         private void UpdateEnergyOutput()
@@ -350,18 +380,15 @@ namespace ButterflyHouse.Plants
         private void PulseGlow()
         {
             if (fruitRenderer == null) return;
-            
+
             _currentGlow = 1f;
             fruitRenderer.GetPropertyBlock(_mpb);
-            if (fruitRenderer.sharedMaterial != null)
-            {
-                if (fruitRenderer.sharedMaterial.HasProperty("_EmissionStrength"))
-                    _mpb.SetFloat("_EmissionStrength", _currentGlow);
-                else if (fruitRenderer.sharedMaterial.HasProperty("_Emission"))
-                    _mpb.SetFloat("_Emission", _currentGlow);
-            }
+            if (_hasEmissionStrength)
+                _mpb.SetFloat(_emissionStrengthId, _currentGlow);
+            else if (_hasEmission)
+                _mpb.SetFloat(_emissionId, _currentGlow);
             fruitRenderer.SetPropertyBlock(_mpb);
-            
+
             // Fade back
             StartCoroutine(FadeGlowCoroutine());
         }
@@ -371,20 +398,23 @@ namespace ButterflyHouse.Plants
             float startGlow = _currentGlow;
             float elapsed = 0f;
             float duration = 0.5f;
-            
-            while (elapsed < duration && fruitRenderer != null && fruitRenderer.sharedMaterial != null)
+
+            while (elapsed < duration && fruitRenderer != null)
             {
                 elapsed += Time.deltaTime;
                 float t = elapsed / duration;
                 _currentGlow = Mathf.Lerp(startGlow, 0.5f + glowIntensity * 0.5f, t);
-                
-                fruitRenderer.GetPropertyBlock(_mpb);
-                if (fruitRenderer.sharedMaterial.HasProperty("_EmissionStrength"))
-                    _mpb.SetFloat("_EmissionStrength", _currentGlow);
-                else if (fruitRenderer.sharedMaterial.HasProperty("_Emission"))
-                    _mpb.SetFloat("_Emission", _currentGlow);
-                fruitRenderer.SetPropertyBlock(_mpb);
-                
+
+                if (_hasEmissionStrength || _hasEmission)
+                {
+                    fruitRenderer.GetPropertyBlock(_mpb);
+                    if (_hasEmissionStrength)
+                        _mpb.SetFloat(_emissionStrengthId, _currentGlow);
+                    else
+                        _mpb.SetFloat(_emissionId, _currentGlow);
+                    fruitRenderer.SetPropertyBlock(_mpb);
+                }
+
                 yield return null;
             }
         }
@@ -397,27 +427,24 @@ namespace ButterflyHouse.Plants
                 float scale = 1f - progress * 0.5f; // Reduce to 50% size
                 consumableVisual.transform.localScale = Vector3.one * scale;
             }
-            
+
             // Update material color/alpha
-            if (fruitRenderer != null)
+            if (fruitRenderer != null && (_hasBaseColor || _hasColor))
             {
                 fruitRenderer.GetPropertyBlock(_mpb);
-                Color baseColor = Color.white;
-                if (fruitRenderer.sharedMaterial != null)
-                {
-                    if (fruitRenderer.sharedMaterial.HasProperty("_BaseColor"))
-                        baseColor = _mpb.GetColor("_BaseColor");
-                    else if (fruitRenderer.sharedMaterial.HasProperty("_Color"))
-                        baseColor = _mpb.GetColor("_Color");
-                    
-                    baseColor.a = 1f - progress * 0.3f; // Fade slightly
-                    
-                    if (fruitRenderer.sharedMaterial.HasProperty("_BaseColor"))
-                        _mpb.SetColor("_BaseColor", baseColor);
-                    else if (fruitRenderer.sharedMaterial.HasProperty("_Color"))
-                        _mpb.SetColor("_Color", baseColor);
-                }
-                
+                Color baseColor;
+                if (_hasBaseColor)
+                    baseColor = _mpb.GetColor(_baseColorId);
+                else
+                    baseColor = _mpb.GetColor(_colorId);
+
+                baseColor.a = 1f - progress * 0.3f; // Fade slightly
+
+                if (_hasBaseColor)
+                    _mpb.SetColor(_baseColorId, baseColor);
+                else
+                    _mpb.SetColor(_colorId, baseColor);
+
                 fruitRenderer.SetPropertyBlock(_mpb);
             }
         }
@@ -426,31 +453,28 @@ namespace ButterflyHouse.Plants
         {
             _isBeingConsumed = false;
             _consumptionTimer = 0f;
-            
+
             // Disable or destroy the fruit
             if (consumableVisual != null)
             {
                 consumableVisual.SetActive(false);
             }
-            
+
             // Disable landing target
             if (landingTarget != null)
             {
                 landingTarget.gameObject.SetActive(false);
             }
-            
+
             // Disable glow
             _currentGlow = 0f;
-            if (fruitRenderer != null)
+            if (fruitRenderer != null && (_hasEmissionStrength || _hasEmission))
             {
                 fruitRenderer.GetPropertyBlock(_mpb);
-                if (fruitRenderer.sharedMaterial != null)
-                {
-                    if (fruitRenderer.sharedMaterial.HasProperty("_EmissionStrength"))
-                        _mpb.SetFloat("_EmissionStrength", 0f);
-                    else if (fruitRenderer.sharedMaterial.HasProperty("_Emission"))
-                        _mpb.SetFloat("_Emission", 0f);
-                }
+                if (_hasEmissionStrength)
+                    _mpb.SetFloat(_emissionStrengthId, 0f);
+                else
+                    _mpb.SetFloat(_emissionId, 0f);
                 fruitRenderer.SetPropertyBlock(_mpb);
             }
         }

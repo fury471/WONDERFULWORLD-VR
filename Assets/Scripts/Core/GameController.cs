@@ -26,6 +26,15 @@ namespace ButterflyHouse.Core
         
         private void Awake()
         {
+            // VR frame pacing: defer to the XR compositor — vsync/targetFrameRate must NOT compete with it.
+            // Visible black tearing / micro-judder during head rotation is almost always Unity's vsync
+            // fighting the headset compositor. Setting these on the main thread fixes the conflict.
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = -1;
+            // Physics tick smoothing — too small a fixedDeltaTime spikes CPU; too large makes hand colliders feel laggy.
+            // 90 Hz (1/90 ≈ 0.0111s) matches Quest 2 / typical PC HMD refresh; safer than the default 0.02s.
+            if (Time.fixedDeltaTime > 0.012f) Time.fixedDeltaTime = 1f / 90f;
+
             // Ensure systems are initialized
             if (butterflyManager == null)
                 butterflyManager = FindFirstObjectByType<ButterflyHouse.Butterflies.ButterflyManager>();

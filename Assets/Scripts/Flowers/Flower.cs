@@ -62,6 +62,19 @@ namespace ButterflyHouse.Flowers
         
         private int _stageProgressionPollinationCount = 0;
         private float _lastTouchTime = 0f;
+
+        // Throttle expensive per-frame work. Stage progression is event-driven (pollination calls TryAdvanceStage
+        // directly) so checking every frame is wasted work — reduce to once per second.
+        private const float STAGE_CHECK_INTERVAL = 1.0f;
+        private float _stageCheckTimer;
+
+        // Meta behaviour does Physics.OverlapSphere — only do it occasionally; the influenced objects don't
+        // need per-frame updates.
+        private const float META_CHECK_INTERVAL = 0.5f;
+        private float _metaCheckTimer;
+
+        // Reusable buffer for OverlapSphereNonAlloc in Meta behaviour.
+        private static readonly Collider[] _metaBuffer = new Collider[32];
         
         // Events
         public System.Action<FlowerStage> OnStageChanged;
@@ -100,13 +113,24 @@ namespace ButterflyHouse.Flowers
         
         private void Update()
         {
-            // Check for stage progression
-            TryAdvanceStage();
-            
-            // Update Meta stage behaviors (mini-orbits, synchronized glow)
+            // Stage check is rare; pollination/touch events also call TryAdvanceStage directly,
+            // so this is just a safety net for stages gated by ecosystem state.
+            _stageCheckTimer += Time.deltaTime;
+            if (_stageCheckTimer >= STAGE_CHECK_INTERVAL)
+            {
+                _stageCheckTimer = 0f;
+                TryAdvanceStage();
+            }
+
+            // Meta-stage influence scan is expensive (Physics.OverlapSphere). Throttle it.
             if (stage == FlowerStage.Meta)
             {
-                UpdateMetaBehaviors();
+                _metaCheckTimer += Time.deltaTime;
+                if (_metaCheckTimer >= META_CHECK_INTERVAL)
+                {
+                    _metaCheckTimer = 0f;
+                    UpdateMetaBehaviors();
+                }
             }
         }
         
@@ -334,20 +358,23 @@ namespace ButterflyHouse.Flowers
         
         private void UpdateMetaBehaviors()
         {
-            // Meta-Flowers: butterflies form mini-orbits around them
-            // Fruit and plants in vicinity glow in sync
-            
-            Collider[] nearbyObjects = Physics.OverlapSphere(transform.position, influenceRadius);
-            
-            foreach (var obj in nearbyObjects)
+            // Meta-Flowers: butterflies form mini-orbits around them.
+            // Fruit and plants in vicinity glow in sync.
+            // Use the non-alloc overload to avoid producing GC pressure on every scan.
+            int hitCount = Physics.OverlapSphereNonAlloc(transform.position, influenceRadius, _metaBuffer);
+
+            for (int i = 0; i < hitCount; i++)
             {
+                var obj = _metaBuffer[i];
+                if (obj == null) continue;
+
                 // Influence nearby fruit
                 Plants.GenerativeFruit fruit = obj.GetComponent<Plants.GenerativeFruit>();
                 if (fruit != null)
                 {
                     // Trigger subtle glow sync (could be handled by visual controller)
                 }
-                
+
                 // Influence nearby plants
                 Plants.GenerativePlant plant = obj.GetComponent<Plants.GenerativePlant>();
                 if (plant != null && plant != parentPlant)

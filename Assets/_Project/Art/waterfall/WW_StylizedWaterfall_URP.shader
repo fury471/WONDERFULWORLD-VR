@@ -40,6 +40,7 @@ Shader "WonderfulWorld/Water/Stylized Waterfall URP"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
+            #pragma multi_compile_instancing
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
@@ -63,6 +64,7 @@ Shader "WonderfulWorld/Water/Stylized Waterfall URP"
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
                 float2 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -70,6 +72,8 @@ Shader "WonderfulWorld/Water/Stylized Waterfall URP"
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 half fogFactor : TEXCOORD1;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             float Hash21(float2 p)
@@ -106,7 +110,10 @@ Shader "WonderfulWorld/Water/Stylized Waterfall URP"
 
             Varyings vert(Attributes input)
             {
-                Varyings output;
+                Varyings output = (Varyings)0;
+                UNITY_SETUP_INSTANCE_ID(input);
+                UNITY_TRANSFER_INSTANCE_ID(input, output);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
                 float3 positionOS = input.positionOS.xyz;
                 float flow = _Time.y * _FlowSpeed;
                 float wave = sin((input.uv.y * 7.0 + flow) + input.uv.x * 2.4) * 0.5 + 0.5;
@@ -123,6 +130,7 @@ Shader "WonderfulWorld/Water/Stylized Waterfall URP"
 
             half4 frag(Varyings input) : SV_Target
             {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
                 float2 uv = input.uv;
                 float time = _Time.y * _FlowSpeed;
                 float2 flowUv = float2((uv.x - 0.5) * _FlowScale, uv.y * _FlowScale + time);

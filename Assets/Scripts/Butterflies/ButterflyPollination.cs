@@ -21,7 +21,11 @@ namespace ButterflyHouse.Butterflies
         [SerializeField] private float timeSincePollenCollection = 0f;
         
         private Butterfly _butterfly;
-        
+
+        // Throttle pollen decay tick — applied as elapsed * decayRate so result is equivalent.
+        private const float DECAY_TICK_INTERVAL = 0.25f;
+        private float _decayTickTimer;
+
         // Events
         public System.Action<float> OnPollenChanged;
         public System.Action OnPollenDeposited;
@@ -39,17 +43,20 @@ namespace ButterflyHouse.Butterflies
         private void Update()
         {
             timeSincePollenCollection += Time.deltaTime;
-            
-            // Start pollen decay after delay
-            if (timeSincePollenCollection > pollenDecayStartDelay && pollenCharge > 0f)
+
+            if (timeSincePollenCollection <= pollenDecayStartDelay || pollenCharge <= 0f) return;
+
+            _decayTickTimer += Time.deltaTime;
+            if (_decayTickTimer < DECAY_TICK_INTERVAL) return;
+            float elapsed = _decayTickTimer;
+            _decayTickTimer = 0f;
+
+            float oldCharge = pollenCharge;
+            pollenCharge = Mathf.Max(0f, pollenCharge - pollenDecayRate * elapsed);
+
+            if (Mathf.Abs(pollenCharge - oldCharge) > 0.01f)
             {
-                float oldCharge = pollenCharge;
-                pollenCharge = Mathf.Max(0f, pollenCharge - pollenDecayRate * Time.deltaTime);
-                
-                if (Mathf.Abs(pollenCharge - oldCharge) > 0.01f)
-                {
-                    OnPollenChanged?.Invoke(pollenCharge);
-                }
+                OnPollenChanged?.Invoke(pollenCharge);
             }
         }
         

@@ -32,7 +32,7 @@ inline void InitializeBRDFDataToon(SurfaceDataToon surfaceData, out BRDFDataToon
     half reflectivity = 1.0 - oneMinusReflectivity;
     //outBRDFData.diffuse = surfaceData.albedo * oneMinusReflectivity;
     outBRDFData.diffuse = surfaceData.albedo;
-    outBRDFData.specular = lerp(kDieletricSpec.rgb, surfaceData.albedo, surfaceData.metallic);
+    outBRDFData.specular = lerp(kDielectricSpec.rgb, surfaceData.albedo, surfaceData.metallic);
 #endif
     outBRDFData.grazingTerm = saturate(surfaceData.smoothness + reflectivity);
     outBRDFData.perceptualRoughness = PerceptualSmoothnessToPerceptualRoughness(surfaceData.smoothness);

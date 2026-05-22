@@ -45,11 +45,19 @@ namespace ButterflyHouse.Butterflies
         private float _energy;
         private bool _hasSpawnedFirst;
         private MaterialPropertyBlock _mpb;
-        
+
+        // Cached shader IDs for the chrysalis pulse — saves per-frame string lookups across all chrysalises.
+        private static readonly int _pulseIntensityId = Shader.PropertyToID("_PulseIntensity");
+        private static readonly int _pulseScaleId = Shader.PropertyToID("_PulseScale");
+
+        // Stage and population recalcs are slow-moving — throttle to once per ~0.5s.
+        private const float SPAWN_TUNE_INTERVAL = 0.5f;
+        private float _spawnTuneTimer;
+
         private void Awake()
         {
             _mpb = new MaterialPropertyBlock();
-            
+
             if (chrysalisRenderer == null)
             {
                 chrysalisRenderer = GetComponent<Renderer>();
@@ -90,19 +98,22 @@ namespace ButterflyHouse.Butterflies
         {
             if (archetype == null || ButterflyManager.Instance == null)
                 return;
-            
-            // Update base spawn interval if stage changed
-            if (scaleSpawnIntervalWithStage)
+
+            // These tunings change based on slow ecosystem state and population counts — no need to recompute per-frame.
+            _spawnTuneTimer += Time.deltaTime;
+            if (_spawnTuneTimer >= SPAWN_TUNE_INTERVAL)
             {
-                UpdateBaseSpawnIntervalForStage();
+                _spawnTuneTimer = 0f;
+                if (scaleSpawnIntervalWithStage)
+                {
+                    UpdateBaseSpawnIntervalForStage();
+                }
+                if (adjustSpawnRateForPopulation)
+                {
+                    UpdateSpawnInterval();
+                }
             }
-            
-            // Update spawn interval based on population maintenance
-            if (adjustSpawnRateForPopulation)
-            {
-                UpdateSpawnInterval();
-            }
-            
+
             // Check if we can spawn (if at max, wait)
             if (!ButterflyManager.Instance.CanSpawn)
             {
@@ -110,12 +121,12 @@ namespace ButterflyHouse.Butterflies
                 // This allows chrysalises to be "ready" when space opens up
                 return;
             }
-            
+
             _timer += Time.deltaTime;
-            
+
             // Update energy (0 to 1 based on spawn timer)
             _energy = Mathf.Clamp01(_timer / spawnInterval);
-            
+
             // Update visual pulse
             UpdateVisuals();
             
@@ -223,13 +234,13 @@ namespace ButterflyHouse.Butterflies
         private void UpdateVisuals()
         {
             if (chrysalisRenderer == null) return;
-            
+
             // Pulse effect based on energy
             float pulse = 1f + Mathf.Sin(Time.time * pulseSpeed) * pulseAmplitude * _energy;
-            
+
             chrysalisRenderer.GetPropertyBlock(_mpb);
-            _mpb.SetFloat("_PulseIntensity", _energy);
-            _mpb.SetFloat("_PulseScale", pulse);
+            _mpb.SetFloat(_pulseIntensityId, _energy);
+            _mpb.SetFloat(_pulseScaleId, pulse);
             chrysalisRenderer.SetPropertyBlock(_mpb);
         }
         

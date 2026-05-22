@@ -21,13 +21,26 @@ namespace ButterflyHouse.Butterflies
         private MaterialPropertyBlock _mpb;
         private ButterflyArchetype _archetype;
         private float _currentEmission = 0f;
-        
+
+        // Cached shader property IDs — looked up once from the serialized names. Avoids
+        // string→hash conversion on every wing-shader write (called by butterfly Update path).
+        private int _baseColorId;
+        private int _emissionId;
+        private int _waveAmplitudeId;
+        private int _waveFrequencyId;
+        private int _flapFrequencyId;
+
         private void Awake()
         {
             if (wingRenderer == null)
                 wingRenderer = GetComponent<Renderer>();
-            
+
             _mpb = new MaterialPropertyBlock();
+            _baseColorId = Shader.PropertyToID(baseColorProperty);
+            _emissionId = Shader.PropertyToID(emissionProperty);
+            _waveAmplitudeId = Shader.PropertyToID(waveAmplitudeProperty);
+            _waveFrequencyId = Shader.PropertyToID(waveFrequencyProperty);
+            _flapFrequencyId = Shader.PropertyToID(flapFrequencyProperty);
         }
         
         /// <summary>
@@ -50,48 +63,48 @@ namespace ButterflyHouse.Butterflies
         public void SetColor(Color color)
         {
             if (wingRenderer == null) return;
-            
+
             wingRenderer.GetPropertyBlock(_mpb);
-            _mpb.SetColor(baseColorProperty, color);
+            _mpb.SetColor(_baseColorId, color);
             wingRenderer.SetPropertyBlock(_mpb);
         }
-        
+
         /// <summary>
         /// Set emission strength (0-1).
         /// </summary>
         public void SetEmission(float value)
         {
             if (wingRenderer == null) return;
-            
+
             _currentEmission = Mathf.Clamp01(value);
-            
+
             wingRenderer.GetPropertyBlock(_mpb);
-            _mpb.SetFloat(emissionProperty, _currentEmission);
+            _mpb.SetFloat(_emissionId, _currentEmission);
             wingRenderer.SetPropertyBlock(_mpb);
         }
-        
+
         /// <summary>
         /// Set waveform parameters for visual deformation (sine, saw, square, FM, pure waveform).
         /// </summary>
         public void SetWaveParams(float amplitude, float frequency)
         {
             if (wingRenderer == null) return;
-            
+
             wingRenderer.GetPropertyBlock(_mpb);
-            _mpb.SetFloat(waveAmplitudeProperty, amplitude);
-            _mpb.SetFloat(waveFrequencyProperty, frequency);
+            _mpb.SetFloat(_waveAmplitudeId, amplitude);
+            _mpb.SetFloat(_waveFrequencyId, frequency);
             wingRenderer.SetPropertyBlock(_mpb);
         }
-        
+
         /// <summary>
         /// Set wing flap frequency.
         /// </summary>
         public void SetFlapFrequency(float frequency)
         {
             if (wingRenderer == null) return;
-            
+
             wingRenderer.GetPropertyBlock(_mpb);
-            _mpb.SetFloat(flapFrequencyProperty, frequency);
+            _mpb.SetFloat(_flapFrequencyId, frequency);
             wingRenderer.SetPropertyBlock(_mpb);
         }
         
@@ -127,7 +140,7 @@ namespace ButterflyHouse.Butterflies
         public IEnumerator FadeOut(float duration)
         {
             wingRenderer.GetPropertyBlock(_mpb);
-            Color startColor = _mpb.GetColor(baseColorProperty);
+            Color startColor = _mpb.GetColor(_baseColorId);
             float startEmission = _currentEmission;
             
             float elapsed = 0f;

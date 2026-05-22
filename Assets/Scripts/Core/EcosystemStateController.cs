@@ -48,6 +48,9 @@ namespace ButterflyHouse.Core
         private Vector3 _lastPlayerPosition;
         private float _lastPlayerPositionUpdate;
         private float _serenitySustainedStartTime = -1f;
+
+        // Camera.main does a FindGameObjectsWithTag("MainCamera") under the hood — cache it.
+        private Transform _cachedCameraTransform;
         
         // Events
         public System.Action<int> OnStageChanged;
@@ -104,8 +107,14 @@ namespace ButterflyHouse.Core
         
         private Vector3 GetPlayerPosition()
         {
-            if (Camera.main != null)
-                return Camera.main.transform.position;
+            // Refresh the cached reference if the main camera has been destroyed/swapped.
+            if (_cachedCameraTransform == null)
+            {
+                var cam = Camera.main;
+                if (cam != null) _cachedCameraTransform = cam.transform;
+            }
+            if (_cachedCameraTransform != null)
+                return _cachedCameraTransform.position;
             return Vector3.zero;
         }
         

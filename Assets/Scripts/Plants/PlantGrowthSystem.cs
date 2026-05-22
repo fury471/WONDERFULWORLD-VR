@@ -42,25 +42,34 @@ namespace ButterflyHouse.Plants
         
         private GenerativePlant _generativePlant;
         private PlantVisualController _visualController;
-        
+
         // Events
         public System.Action<GrowthPhase> OnGrowthPhaseChanged;
-        
+
+        // Sentience requires sustained harmony level + total time in bloom — checking it once per second is fine.
+        private const float SENTIENCE_CHECK_INTERVAL = 1.0f;
+        private float _sentienceCheckTimer;
+
         private void Awake()
         {
             _generativePlant = GetComponent<GenerativePlant>();
             _visualController = GetComponent<PlantVisualController>();
         }
-        
+
         private void Update()
         {
             if (currentPhase == GrowthPhase.FractalBloom)
             {
                 timeInBloomPhase += Time.deltaTime;
-                CheckForSentience();
+                _sentienceCheckTimer += Time.deltaTime;
+                if (_sentienceCheckTimer >= SENTIENCE_CHECK_INTERVAL)
+                {
+                    _sentienceCheckTimer = 0f;
+                    CheckForSentience();
+                }
             }
-            
-            // Update phase-specific behaviors
+
+            // Update phase-specific behaviors (currently mostly empty stubs — keep as-is in case of future logic)
             UpdatePhaseBehaviors();
         }
         

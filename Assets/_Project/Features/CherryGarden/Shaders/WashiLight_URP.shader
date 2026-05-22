@@ -41,6 +41,7 @@ Shader "Wonderland/CherryGarden/WashiLight_URP"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
+            #pragma multi_compile_instancing
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
@@ -70,6 +71,7 @@ Shader "Wonderland/CherryGarden/WashiLight_URP"
                 float4 positionOS : POSITION;
                 float2 uv : TEXCOORD0;
                 half3 normalOS : NORMAL;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -79,11 +81,17 @@ Shader "Wonderland/CherryGarden/WashiLight_URP"
                 float3 positionWS : TEXCOORD1;
                 half3 normalWS : TEXCOORD2;
                 half fogFactor : TEXCOORD3;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             Varyings vert(Attributes input)
             {
-                Varyings output;
+                Varyings output = (Varyings)0;
+                UNITY_SETUP_INSTANCE_ID(input);
+                UNITY_TRANSFER_INSTANCE_ID(input, output);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
+
                 VertexPositionInputs positionInputs = GetVertexPositionInputs(input.positionOS.xyz);
                 VertexNormalInputs normalInputs = GetVertexNormalInputs(input.normalOS);
 
@@ -105,6 +113,7 @@ Shader "Wonderland/CherryGarden/WashiLight_URP"
 
             half4 frag(Varyings input) : SV_Target
             {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
                 float2 worldUV;
                 worldUV.x = dot(input.positionWS, _World_U.xyz) * _TilingOffset.x + _TilingOffset.z;
                 worldUV.y = dot(input.positionWS, _World_V.xyz) * _TilingOffset.y + _TilingOffset.w;

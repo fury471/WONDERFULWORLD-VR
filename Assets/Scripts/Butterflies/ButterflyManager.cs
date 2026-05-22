@@ -132,10 +132,12 @@ namespace ButterflyHouse.Butterflies
         
         /// <summary>
         /// Get all currently active butterflies.
+        /// Returns the internal list directly to avoid per-frame allocations.
+        /// Callers must not modify the returned list.
         /// </summary>
-        public List<Butterfly> GetActiveButterflies()
+        public IReadOnlyList<Butterfly> GetActiveButterflies()
         {
-            return new List<Butterfly>(_activeButterflies);
+            return _activeButterflies;
         }
         
         /// <summary>
