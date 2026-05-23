@@ -914,18 +914,16 @@ public class CatRideControllerV2 : MonoBehaviour
             return;
         }
 
-        if (trackedHeadTransform == null)
-        {
-            CacheRigReferences();
-        }
+        // Align the rig's body forward with the seat forward — NOT the player's current head
+        // forward. If we anchored to the head, then whenever the player happened to be looking
+        // sideways at the moment of mounting, "straightening the neck" afterwards would point
+        // them off-axis from the mount's heading. Using rig.forward means HMD-neutral = mount-forward.
+        Vector3 currentRigForward = rig.forward;
+        currentRigForward.y = 0f;
 
-        Vector3 currentHeadForward = trackedHeadTransform != null ? trackedHeadTransform.forward : rig.forward;
-        currentHeadForward.y = 0f;
-
-        if (currentHeadForward.sqrMagnitude < 0.0001f)
+        if (currentRigForward.sqrMagnitude < 0.0001f)
         {
-            currentHeadForward = rig.forward;
-            currentHeadForward.y = 0f;
+            currentRigForward = Vector3.forward;
         }
 
         Vector3 targetForward = seatAnchor.forward;
@@ -937,10 +935,10 @@ public class CatRideControllerV2 : MonoBehaviour
             targetForward.y = 0f;
         }
 
-        currentHeadForward.Normalize();
+        currentRigForward.Normalize();
         targetForward.Normalize();
 
-        Quaternion yawDelta = Quaternion.FromToRotation(currentHeadForward, targetForward);
+        Quaternion yawDelta = Quaternion.FromToRotation(currentRigForward, targetForward);
         rig.rotation = yawDelta * rig.rotation;
     }
 
@@ -964,6 +962,30 @@ public class CatRideControllerV2 : MonoBehaviour
 
         Vector3 worldDelta = targetAnchor.position - trackedHeadTransform.position;
         rig.position += worldDelta;
+    }
+
+    /// <summary>
+    /// Re-aligns the rider's view to face along the seat forward and re-snaps the head to the
+    /// mounted view anchor. Safe to call only while a ride is active; no-op otherwise.
+    /// Intended for the B-button "recenter" affordance during a ride.
+    /// </summary>
+    public bool RecenterMountedView()
+    {
+        if (!IsRideActive || playerRigRoot == null)
+        {
+            return false;
+        }
+
+        Transform rig = playerRigRoot.transform;
+        AlignMountedViewToSeatForward(rig);
+        SnapHeadToMountedViewAnchor(rig);
+
+        if (debugLogs)
+        {
+            Debug.Log("[CatRideControllerV2] Mounted view recentered.");
+        }
+
+        return true;
     }
 
     private void StartDismount()

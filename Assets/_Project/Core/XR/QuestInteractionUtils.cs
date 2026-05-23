@@ -145,6 +145,18 @@ public static class QuestInteractionUtils
         return false;
     }
 
+    public static bool TryReadSecondaryButton(bool rightHand, out bool pressed)
+    {
+        XRInputDevice device = InputDevices.GetDeviceAtXRNode(rightHand ? XRNode.RightHand : XRNode.LeftHand);
+        if (device.isValid && device.TryGetFeatureValue(XRCommonUsages.secondaryButton, out pressed))
+        {
+            return true;
+        }
+
+        pressed = false;
+        return false;
+    }
+
     public static bool TryReadPrimary2DAxis(bool rightHand, out Vector2 axis)
     {
         XRInputDevice device = InputDevices.GetDeviceAtXRNode(rightHand ? XRNode.RightHand : XRNode.LeftHand);
