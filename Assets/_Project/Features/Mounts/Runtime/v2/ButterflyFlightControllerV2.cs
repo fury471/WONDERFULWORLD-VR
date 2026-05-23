@@ -12,6 +12,10 @@ public class ButterflyFlightControllerV2 : MonoBehaviour
     }
 
     [Header("Path")]
+    [Tooltip("If true, flight follows the assigned CatRideControllerV2's autoRoutePoints (with height offset) so cat and butterfly share one authored path. If false, uses the local flightPoints list.")]
+    [SerializeField] private bool useCatAutoRoutePoints = false;
+    [Tooltip("World-space Y offset applied to each cat route point when useCatAutoRoutePoints is enabled, so the butterfly flies above the cat's ground path.")]
+    [SerializeField] private float catRoutePointHeightOffset = 1.1f;
     [SerializeField] private List<Transform> flightPoints = new List<Transform>();
 
     [Header("Motion")]
@@ -90,8 +94,7 @@ public class ButterflyFlightControllerV2 : MonoBehaviour
 
     private void UpdateFlight()
     {
-        Transform targetPoint = GetCurrentPoint();
-        if (targetPoint == null)
+        if (!TryGetCurrentTargetPosition(out Vector3 targetPosition))
         {
             state = FlightState.WaitingForCat;
 
@@ -105,10 +108,10 @@ public class ButterflyFlightControllerV2 : MonoBehaviour
 
         transform.position = Vector3.MoveTowards(
             transform.position,
-            targetPoint.position,
+            targetPosition,
             flightSpeed * Time.deltaTime);
 
-        Vector3 direction = targetPoint.position - transform.position;
+        Vector3 direction = targetPosition - transform.position;
         direction.y = 0f;
 
         if (direction.sqrMagnitude > 0.0001f)
@@ -120,7 +123,7 @@ public class ButterflyFlightControllerV2 : MonoBehaviour
                 rotateSpeed * Time.deltaTime);
         }
 
-        if (Vector3.Distance(transform.position, targetPoint.position) <= reachDistance)
+        if (Vector3.Distance(transform.position, targetPosition) <= reachDistance)
         {
             currentPointIndex++;
         }
@@ -229,20 +232,54 @@ public class ButterflyFlightControllerV2 : MonoBehaviour
         }
     }
 
-    private Transform GetCurrentPoint()
+    private bool TryGetCurrentTargetPosition(out Vector3 position)
     {
+        if (useCatAutoRoutePoints)
+        {
+            IReadOnlyList<Transform> routePoints = ResolveCatRoutePoints();
+            if (routePoints != null)
+            {
+                while (currentPointIndex < routePoints.Count)
+                {
+                    Transform point = routePoints[currentPointIndex];
+                    if (point != null)
+                    {
+                        position = point.position + Vector3.up * catRoutePointHeightOffset;
+                        return true;
+                    }
+
+                    currentPointIndex++;
+                }
+            }
+
+            position = default;
+            return false;
+        }
+
         while (currentPointIndex < flightPoints.Count)
         {
             Transform point = flightPoints[currentPointIndex];
             if (point != null)
             {
-                return point;
+                position = point.position;
+                return true;
             }
 
             currentPointIndex++;
         }
 
-        return null;
+        position = default;
+        return false;
+    }
+
+    private IReadOnlyList<Transform> ResolveCatRoutePoints()
+    {
+        if (ResolveCatTransform() == null)
+        {
+            return null;
+        }
+
+        return catController.AutoRoutePoints;
     }
 
     private void CacheInitialPose()

@@ -157,6 +157,8 @@ public class CatRideControllerV2 : MonoBehaviour
 
     public bool IsRideActive => currentState != RideState.Idle;
 
+    public IReadOnlyList<Transform> AutoRoutePoints => autoRoutePoints;
+
 
     private int currentAutoIndex = 0;
     private Coroutine stateRoutine;
