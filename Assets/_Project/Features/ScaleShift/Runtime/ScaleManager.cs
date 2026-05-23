@@ -698,7 +698,7 @@ public class ScaleManager : MonoBehaviour
         characterController.height = localHeight;
         characterController.radius = localRadius;
 
-        float targetStepOffset = baseControllerStepOffset * heightMultiplier;
+        float targetStepOffset = baseControllerStepOffset * localHeightMultiplier;
         float maxAllowedStepOffset = GetMaxAllowedStepOffset(localHeight, localRadius, currentLossyScale);
         characterController.stepOffset = Mathf.Min(targetStepOffset, maxAllowedStepOffset);
 
@@ -853,9 +853,7 @@ public class ScaleManager : MonoBehaviour
 
     private static float GetMaxAllowedStepOffset(float controllerHeight, float controllerRadius, Vector3 controllerLossyScale)
     {
-        float scaledHeight = controllerHeight * Mathf.Max(0.0001f, Mathf.Abs(controllerLossyScale.y));
-        float scaledRadius = controllerRadius * GetHorizontalScale(controllerLossyScale);
-        return Mathf.Max(0f, scaledHeight + scaledRadius * 2f - 0.001f);
+        return Mathf.Max(0f, controllerHeight - 0.001f);
     }
 
     private Transform ResolveXrCameraOffsetTransform()
