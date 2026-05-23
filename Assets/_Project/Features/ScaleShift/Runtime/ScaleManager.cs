@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.XR.Interaction.Toolkit.Locomotion.Gravity;
 using Unity.XR.CoreUtils;
+using UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -44,6 +45,11 @@ public class ScaleManager : MonoBehaviour
     [SerializeField, Min(0f)] private float thumbstickLocomotionSuppressSeconds = 0.15f;
     [SerializeField] private QuestLocomotionComfortProfile locomotionProfile;
 
+    [Header("Scale Feedback")]
+    [SerializeField] private bool useScaleShiftHaptics = true;
+    [SerializeField, Range(0f, 1f)] private float scaleShiftHapticAmplitude = 0.45f;
+    [SerializeField, Min(0f)] private float scaleShiftHapticDuration = 0.08f;
+
     [SerializeField] private ScaleState currentState = ScaleState.Normal;
 
     private bool isTransitioning;
@@ -75,6 +81,8 @@ public class ScaleManager : MonoBehaviour
     private float lastThumbstickEventTime = -999f;
     private string lastThumbstickEventLabel = "none";
     private int driftStreakFrames;
+    private HapticImpulsePlayer leftHaptics;
+    private HapticImpulsePlayer rightHaptics;
     public ScaleState CurrentState => currentState;
     public bool IsSmallScale => currentState == ScaleState.Small;
     public bool IsTransitioning => isTransitioning;
@@ -437,6 +445,8 @@ public class ScaleManager : MonoBehaviour
         {
             locomotionProfile = GetComponent<QuestLocomotionComfortProfile>();
         }
+
+        CacheHapticPlayers();
     }
 
     public void SetScale(ScaleState newState)
@@ -471,6 +481,7 @@ public class ScaleManager : MonoBehaviour
     private IEnumerator SetScaleRoutine(ScaleState newState)
     {
         isTransitioning = true;
+        PlayScaleShiftHaptics();
 
         if (transitionController != null)
         {
@@ -487,6 +498,33 @@ public class ScaleManager : MonoBehaviour
         driftSamplingInitialized = false;
 
         isTransitioning = false;
+    }
+
+    private void CacheHapticPlayers()
+    {
+        if (leftHaptics == null)
+        {
+            Transform leftOrigin = QuestInteractionUtils.FindControllerRayOrigin(false);
+            leftHaptics = QuestInteractionUtils.FindHapticPlayer(false, leftOrigin);
+        }
+
+        if (rightHaptics == null)
+        {
+            Transform rightOrigin = QuestInteractionUtils.FindControllerRayOrigin(true);
+            rightHaptics = QuestInteractionUtils.FindHapticPlayer(true, rightOrigin);
+        }
+    }
+
+    private void PlayScaleShiftHaptics()
+    {
+        if (!useScaleShiftHaptics)
+        {
+            return;
+        }
+
+        CacheHapticPlayers();
+        QuestInteractionUtils.SendHaptic(leftHaptics, scaleShiftHapticAmplitude, scaleShiftHapticDuration);
+        QuestInteractionUtils.SendHaptic(rightHaptics, scaleShiftHapticAmplitude, scaleShiftHapticDuration);
     }
 
     private void ApplyScaleImmediate(ScaleState state)
