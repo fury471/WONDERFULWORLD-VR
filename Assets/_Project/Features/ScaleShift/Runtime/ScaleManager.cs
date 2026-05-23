@@ -77,6 +77,7 @@ public class ScaleManager : MonoBehaviour
     private int driftStreakFrames;
     public ScaleState CurrentState => currentState;
     public bool IsSmallScale => currentState == ScaleState.Small;
+    public bool IsTransitioning => isTransitioning;
 
 
 

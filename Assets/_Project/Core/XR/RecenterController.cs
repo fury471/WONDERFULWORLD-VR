@@ -3,6 +3,7 @@ using Unity.XR.CoreUtils;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion.Gravity;
 
 [DefaultExecutionOrder(-50)]
 [DisallowMultipleComponent]
@@ -12,6 +13,8 @@ public sealed class RecenterController : MonoBehaviour
     [SerializeField] private XROrigin xrOrigin;
     [SerializeField] private Camera targetCamera;
     [SerializeField] private ScaleTransitionController transitionController;
+    [SerializeField] private CharacterController characterController;
+    [SerializeField] private GravityProvider gravityProvider;
 
     [Header("Recenter Reference (optional)")]
     [Tooltip("If set, use this transform's forward as the desired view direction. Leave null to fall back to world Z+.")]
@@ -23,6 +26,14 @@ public sealed class RecenterController : MonoBehaviour
     [SerializeField] private InputActionReference recenterAction;
     [SerializeField] private bool useRightSecondaryButton = true;
     [SerializeField, Min(0f)] private float holdSecondsToConfirm = 0.4f;
+
+    [Header("Ground Recovery")]
+    [Tooltip("Non-riding recenter is orientation-only. This recovery only lifts the rig if the player capsule is already below the ground after recenter.")]
+    [SerializeField] private bool recoverIfBelowGroundAfterRecenter = true;
+    [SerializeField] private LayerMask groundMask = ~0;
+    [SerializeField, Min(0.1f)] private float groundProbeHeight = 6f;
+    [SerializeField, Min(0.1f)] private float groundProbeDistance = 30f;
+    [SerializeField, Min(0f)] private float groundLift = 0.04f;
 
     [Header("Debug Fallback")]
     [SerializeField] private bool enableKeyboardDebug = true;
@@ -55,6 +66,7 @@ public sealed class RecenterController : MonoBehaviour
     private bool confirmFired;
     private bool isRecentering;
     private bool requireReleaseBeforeNextPress;
+    private readonly RaycastHit[] groundHits = new RaycastHit[12];
 
     private void Awake()
     {
@@ -133,12 +145,13 @@ public sealed class RecenterController : MonoBehaviour
 
     public void RequestRecenter()
     {
+        CacheReferences();
+
         if (isRecentering || !CanRecenterNow())
         {
             return;
         }
 
-        CacheReferences();
         confirmFired = true;
         StartCoroutine(RecenterRoutine());
     }
@@ -205,39 +218,242 @@ public sealed class RecenterController : MonoBehaviour
             return;
         }
 
-        Vector3 desiredForward;
-        if (recenterAnchor != null)
-        {
-            desiredForward = recenterAnchor.forward;
-        }
-        else
-        {
-            desiredForward = Vector3.forward;
-        }
-
-        desiredForward.y = 0f;
-        if (desiredForward.sqrMagnitude < 0.0001f)
-        {
-            desiredForward = Vector3.forward;
-        }
-        desiredForward.Normalize();
-
-        Vector3 desiredCameraPosition = targetCamera.transform.position;
+        Vector3 desiredForward = ResolveDesiredNeutralForward();
+        Vector3 cameraWorldPosition = targetCamera.transform.position;
+        Vector3 targetCameraPosition = cameraWorldPosition;
         if (snapToAnchorPosition && recenterAnchor != null)
         {
-            desiredCameraPosition = recenterAnchor.position;
+            targetCameraPosition = recenterAnchor.position;
         }
 
-        xrOrigin.MatchOriginUpCameraForward(Vector3.up, desiredForward);
-        xrOrigin.MoveCameraToWorldLocation(desiredCameraPosition);
+        Vector3 currentNeutralForward = ResolveCurrentNeutralForward();
+        Quaternion yawDelta = Quaternion.FromToRotation(currentNeutralForward, desiredForward);
+        bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
+
+        Transform originTransform = xrOrigin.transform;
+        originTransform.SetPositionAndRotation(
+            cameraWorldPosition + yawDelta * (originTransform.position - cameraWorldPosition),
+            yawDelta * originTransform.rotation);
+
+        xrOrigin.MoveCameraToWorldLocation(targetCameraPosition);
+        Physics.SyncTransforms();
+
+        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
+        RecoverOriginIfBelowGround();
+
+        if (gravityProvider != null)
+        {
+            gravityProvider.ResetFallForce();
+        }
+
+        if (characterController != null && characterController.enabled)
+        {
+            characterController.Move(Vector3.zero);
+        }
 
         if (logDebug)
         {
             Debug.Log(
                 $"[Recenter] Applied. anchor={(recenterAnchor != null ? recenterAnchor.name : "<world Z+>")} " +
-                $"snapPos={snapToAnchorPosition} camPos={targetCamera.transform.position} camFwd={targetCamera.transform.forward}",
+                $"snapPos={snapToAnchorPosition} camBefore={cameraWorldPosition} camAfter={targetCamera.transform.position} camFwd={targetCamera.transform.forward}",
                 this);
         }
+    }
+
+    private Vector3 ResolveDesiredNeutralForward()
+    {
+        Vector3 desiredForward = recenterAnchor != null ? recenterAnchor.forward : targetCamera.transform.forward;
+        desiredForward.y = 0f;
+
+        if (desiredForward.sqrMagnitude < 0.0001f)
+        {
+            desiredForward = ResolveCurrentNeutralForward();
+        }
+
+        return desiredForward.normalized;
+    }
+
+    private Vector3 ResolveCurrentNeutralForward()
+    {
+        Vector3 forward = xrOrigin != null ? xrOrigin.transform.forward : transform.forward;
+        forward.y = 0f;
+
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = Vector3.forward;
+        }
+
+        return forward.normalized;
+    }
+
+    private bool SetCharacterControllerEnabled(bool enabled)
+    {
+        if (characterController == null)
+        {
+            return false;
+        }
+
+        bool wasEnabled = characterController.enabled;
+        characterController.enabled = enabled;
+        return wasEnabled;
+    }
+
+    private void RestoreCharacterControllerEnabled(bool wasEnabled)
+    {
+        if (characterController != null)
+        {
+            characterController.enabled = wasEnabled;
+        }
+    }
+
+    private bool RecoverOriginIfBelowGround()
+    {
+        if (!recoverIfBelowGroundAfterRecenter || xrOrigin == null)
+        {
+            return false;
+        }
+
+        Vector3 probePosition = ResolveGroundProbePosition();
+        if (!TryProjectToGround(probePosition, out Vector3 groundPoint))
+        {
+            return false;
+        }
+
+        float bottomY = ResolvePlayerBottomY();
+        float liftAmount = groundPoint.y + groundLift - bottomY;
+        if (liftAmount <= 0f)
+        {
+            return false;
+        }
+
+        bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
+        xrOrigin.transform.position += Vector3.up * liftAmount;
+        Physics.SyncTransforms();
+        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
+        return true;
+    }
+
+    private Vector3 ResolveGroundProbePosition()
+    {
+        if (targetCamera != null)
+        {
+            return targetCamera.transform.position;
+        }
+
+        if (characterController != null)
+        {
+            return characterController.bounds.center;
+        }
+
+        return xrOrigin != null ? xrOrigin.transform.position : transform.position;
+    }
+
+    private float ResolvePlayerBottomY()
+    {
+        if (characterController != null)
+        {
+            return ResolveCharacterControllerBottomY();
+        }
+
+        if (targetCamera != null)
+        {
+            return targetCamera.transform.position.y - ResolveCameraHeightAboveGround();
+        }
+
+        return xrOrigin != null ? xrOrigin.transform.position.y : transform.position.y;
+    }
+
+    private bool TryProjectToGround(Vector3 probePosition, out Vector3 groundPoint)
+    {
+        Vector3 origin = probePosition + Vector3.up * groundProbeHeight;
+        int hitCount = Physics.RaycastNonAlloc(
+            origin,
+            Vector3.down,
+            groundHits,
+            groundProbeHeight + groundProbeDistance,
+            groundMask,
+            QueryTriggerInteraction.Ignore);
+
+        float bestDistance = float.PositiveInfinity;
+        bool foundGround = false;
+        groundPoint = probePosition;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit hit = groundHits[i];
+            Collider hitCollider = hit.collider;
+            if (hitCollider == null || IsSelfCollider(hitCollider))
+            {
+                continue;
+            }
+
+            if (hit.distance < bestDistance)
+            {
+                bestDistance = hit.distance;
+                groundPoint = hit.point;
+                foundGround = true;
+            }
+        }
+
+        return foundGround;
+    }
+
+    private float ResolveCameraHeightAboveGround()
+    {
+        if (targetCamera == null)
+        {
+            return 1.4f;
+        }
+
+        if (characterController != null)
+        {
+            float bottomY = ResolveCharacterControllerBottomY();
+            float height = targetCamera.transform.position.y - bottomY;
+            if (height > 0.05f)
+            {
+                return height;
+            }
+        }
+
+        if (xrOrigin != null && xrOrigin.CameraInOriginSpaceHeight > 0.05f)
+        {
+            float verticalScale = Mathf.Abs(xrOrigin.transform.lossyScale.y);
+            return Mathf.Max(0.05f, xrOrigin.CameraInOriginSpaceHeight * Mathf.Max(0.0001f, verticalScale));
+        }
+
+        return 1.4f;
+    }
+
+    private float ResolveCharacterControllerBottomY()
+    {
+        if (characterController == null)
+        {
+            return targetCamera != null ? targetCamera.transform.position.y - 1.4f : transform.position.y;
+        }
+
+        if (characterController.enabled)
+        {
+            return characterController.bounds.min.y;
+        }
+
+        Vector3 worldCenter = characterController.transform.TransformPoint(characterController.center);
+        float verticalScale = Mathf.Max(0.0001f, Mathf.Abs(characterController.transform.lossyScale.y));
+        return worldCenter.y - characterController.height * verticalScale * 0.5f;
+    }
+
+    private bool IsSelfCollider(Collider candidate)
+    {
+        if (candidate == null)
+        {
+            return true;
+        }
+
+        if (characterController != null && candidate == characterController)
+        {
+            return true;
+        }
+
+        return xrOrigin != null && candidate.transform.IsChildOf(xrOrigin.transform);
     }
 
     private bool ReadPressed()
@@ -311,12 +527,7 @@ public sealed class RecenterController : MonoBehaviour
 
     private bool IsScaleTransitionActive()
     {
-        // ScaleManager doesn't expose its private isTransitioning flag, but it owns the
-        // ScaleTransitionController. While a blink is playing the controller is mid-fade;
-        // the simplest conservative check is whether the cached scale manager exists and
-        // the transition controller is the one currently playing for it. We don't get a
-        // public hook from ScaleManager today, so for now we only gate on our own routine.
-        return false;
+        return cachedScaleManager != null && cachedScaleManager.IsTransitioning;
     }
 
     private void CacheReferences()
@@ -365,6 +576,42 @@ public sealed class RecenterController : MonoBehaviour
 #endif
         }
 
+        if (characterController == null)
+        {
+            if (xrOrigin != null)
+            {
+                characterController = xrOrigin.GetComponent<CharacterController>();
+                if (characterController == null)
+                {
+                    characterController = xrOrigin.GetComponentInChildren<CharacterController>(true);
+                }
+            }
+
+            if (characterController == null && targetCamera != null)
+            {
+                characterController = targetCamera.GetComponentInParent<CharacterController>();
+            }
+        }
+
+        if (gravityProvider == null)
+        {
+            if (xrOrigin != null)
+            {
+                gravityProvider = xrOrigin.GetComponentInChildren<GravityProvider>(true);
+            }
+
+            if (gravityProvider == null)
+            {
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+                gravityProvider = FindAnyObjectByType<GravityProvider>(FindObjectsInactive.Include);
+#else
+#pragma warning disable CS0618
+                gravityProvider = FindObjectOfType<GravityProvider>(true);
+#pragma warning restore CS0618
+#endif
+            }
+        }
+
         if (rightControllerOrigin == null)
         {
             rightControllerOrigin = QuestInteractionUtils.FindControllerRayOrigin(true);
@@ -408,6 +655,15 @@ public sealed class RecenterController : MonoBehaviour
         if (targetCamera == null && xrOrigin != null)
         {
             targetCamera = xrOrigin.Camera;
+        }
+
+        if (characterController == null && xrOrigin != null)
+        {
+            characterController = xrOrigin.GetComponent<CharacterController>();
+            if (characterController == null)
+            {
+                characterController = xrOrigin.GetComponentInChildren<CharacterController>(true);
+            }
         }
     }
 }
