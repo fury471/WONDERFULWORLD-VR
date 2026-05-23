@@ -505,8 +505,10 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
             return false;
         }
 
-        var parentInteractable = surfaceCollider.GetComponentInParent<XRBaseInteractable>();
-        if (parentInteractable != null && parentInteractable.gameObject != surfaceCollider.gameObject)
+        // GetComponentInParent walks self -> parents, so this also catches an interactable
+        // sitting on the same GameObject as the collider, which would otherwise end up
+        // sharing the collider with the TeleportationArea we are about to add.
+        if (surfaceCollider.GetComponentInParent<XRBaseInteractable>() != null)
         {
             return true;
         }
