@@ -240,7 +240,17 @@ public class GrowthDriver : MonoBehaviour
 
     private static Transform FindInScene(string targetName)
     {
+        if (string.IsNullOrWhiteSpace(targetName))
+        {
+            return null;
+        }
+
         Scene activeScene = SceneManager.GetActiveScene();
+        if (!activeScene.IsValid() || !activeScene.isLoaded)
+        {
+            return null;
+        }
+
         GameObject[] roots = activeScene.GetRootGameObjects();
 
         for (int i = 0; i < roots.Length; i++)

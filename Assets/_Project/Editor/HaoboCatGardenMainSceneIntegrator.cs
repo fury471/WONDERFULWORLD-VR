@@ -235,6 +235,11 @@ public static class HaoboCatGardenMainSceneIntegrator
 
     private static GameObject FindInScene(Scene scene, string targetName)
     {
+        if (!scene.IsValid() || !scene.isLoaded || string.IsNullOrWhiteSpace(targetName))
+        {
+            return null;
+        }
+
         GameObject[] roots = scene.GetRootGameObjects();
         for (int i = 0; i < roots.Length; i++)
         {
