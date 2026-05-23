@@ -20,6 +20,9 @@ namespace Wonderland.UI
         [SerializeField] private TMP_Text targetText;
         [SerializeField] private string fallbackText;
         [SerializeField] private LocalizedTextEntry[] localizedTexts;
+        [SerializeField] private bool useLocalizedFontFallback = true;
+
+        private TMP_FontAsset originalFont;
 
         private void Reset()
         {
@@ -37,6 +40,11 @@ namespace Wonderland.UI
             if (string.IsNullOrEmpty(fallbackText) && targetText != null)
             {
                 fallbackText = targetText.text;
+            }
+
+            if (targetText != null)
+            {
+                originalFont = targetText.font;
             }
         }
 
@@ -71,6 +79,8 @@ namespace Wonderland.UI
                 return;
             }
 
+            ApplyFont();
+
             if (localizedTexts != null)
             {
                 for (int i = 0; i < localizedTexts.Length; i++)
@@ -85,6 +95,24 @@ namespace Wonderland.UI
             }
 
             targetText.text = fallbackText;
+        }
+
+        private void ApplyFont()
+        {
+            if (!useLocalizedFontFallback)
+            {
+                return;
+            }
+
+            TMP_FontAsset localizedFont = LocalizedUIFontProvider.GetBestLocalizedFont();
+            if (localizedFont != null)
+            {
+                targetText.font = localizedFont;
+            }
+            else if (originalFont != null)
+            {
+                targetText.font = originalFont;
+            }
         }
     }
 }

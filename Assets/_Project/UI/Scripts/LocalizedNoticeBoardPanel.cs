@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -49,6 +50,7 @@ namespace Wonderland.UI
         private void Awake()
         {
             ResolveReferences();
+            ApplyLocalizedFontToChildren();
             targetScale = defaultWorldScale;
 
             if (backdropButton != null)
@@ -165,6 +167,21 @@ namespace Wonderland.UI
             if (followCamera == null && Camera.main != null)
             {
                 followCamera = Camera.main.transform;
+            }
+        }
+
+        private void ApplyLocalizedFontToChildren()
+        {
+            TMP_FontAsset localizedFont = LocalizedUIFontProvider.GetBestLocalizedFont();
+            if (localizedFont == null)
+            {
+                return;
+            }
+
+            TMP_Text[] texts = GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                texts[i].font = localizedFont;
             }
         }
 
