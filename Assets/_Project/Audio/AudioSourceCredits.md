@@ -5,6 +5,8 @@ All newly imported production audio below is free for commercial game use. CC0/p
 | File | Use | Source | License |
 | --- | --- | --- | --- |
 | `Ambience/NightForest_AfterRain_BigSoundBank_0555.ogg` | Global night forest ambience | BigSoundBank, "Forest at Night After Rain" | CC0 / public domain |
+| `Ambience/NightBirds_BigSoundBank_0315.ogg` | Quiet intermittent night birds ambience accent | BigSoundBank, "Birds at Night" | CC0 / public domain |
+| `Ambience/FieldCricket_BigSoundBank_1020.ogg` | Quiet intermittent night insect ambience accent | BigSoundBank, "Field Cricket" | CC0 / public domain |
 | `SFX/Water/SmallWaterfall_02_BigSoundBank_0219.ogg` | Waterfall detail layer | BigSoundBank, "Small waterfall #2" | CC0 / public domain |
 | `SFX/Water/Watercourse_5_2_BigSoundBank_3137.ogg` | Waterfall continuous loop | BigSoundBank, "Watercourse 5.2" | CC0 / public domain |
 | `SFX/Mounts/AnimalFootsteps_CC0_Freesound_658429.mp3` | Cat and light animal footstep layer | SoundSpool/Freesound, "Animal Footsteps" by IENBA | CC0 |
@@ -21,6 +23,8 @@ All newly imported production audio below is free for commercial game use. CC0/p
 Source pages:
 
 - https://bigsoundbank.com/forest-at-night-after-rain-s0555.html
+- https://bigsoundbank.com/oiseaux-de-nuit-s0315.html
+- https://bigsoundbank.com/field-cricket-s1020.html
 - https://bigsoundbank.com/small-waterfall-2-s0219.html
 - https://bigsoundbank.com/sound-3137-cours-d-eau-5-2.html
 - https://soundspool.com/sounds/animal-footsteps

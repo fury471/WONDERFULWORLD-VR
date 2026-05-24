@@ -7,6 +7,7 @@ namespace WonderfulWorld.Audio
     {
         private const string CueResourceRoot = "AudioCues/";
         private const string GlobalAmbienceName = "WW_Audio_NightForestAmbience";
+        private const string GlobalAmbienceAccentName = "WW_Audio_NightForestAccents";
 
         private static bool sceneHookRegistered;
 
@@ -55,6 +56,44 @@ namespace WonderfulWorld.Audio
 
             loop.Configure(cue, playOnEnable: true, volumeScale: 1f, fadeInSeconds: 2.5f, fadeOutSeconds: 0.75f);
             loop.Play();
+
+            EnsureGlobalNightForestAccents(ambience.transform);
+        }
+
+        private static void EnsureGlobalNightForestAccents(Transform ambienceRoot)
+        {
+            WonderlandAudioCue cue = LoadCue("WW_Ambience_NightAccents");
+            if (cue == null || ambienceRoot == null)
+            {
+                return;
+            }
+
+            Transform accentRoot = ambienceRoot.Find(GlobalAmbienceAccentName);
+            if (accentRoot == null)
+            {
+                GameObject accentObject = new GameObject(GlobalAmbienceAccentName);
+                accentObject.transform.SetParent(ambienceRoot, false);
+                accentRoot = accentObject.transform;
+            }
+
+            WonderlandAmbientAccentPlayer accentPlayer = accentRoot.GetComponent<WonderlandAmbientAccentPlayer>();
+            if (accentPlayer == null)
+            {
+                accentPlayer = accentRoot.gameObject.AddComponent<WonderlandAmbientAccentPlayer>();
+            }
+
+            accentPlayer.Configure(
+                cue,
+                playOnEnable: true,
+                volumeScale: 1f,
+                minDelaySeconds: 20f,
+                maxDelaySeconds: 46f,
+                minWindowSeconds: 5.5f,
+                maxWindowSeconds: 12f,
+                fadeInSeconds: 1.8f,
+                fadeOutSeconds: 2.8f,
+                randomizeClipStart: true);
+            accentPlayer.Play();
         }
 
         public static WonderlandAudioCue ResolveMountFootstepCue(Transform root)

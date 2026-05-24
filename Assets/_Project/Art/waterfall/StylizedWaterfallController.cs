@@ -210,8 +210,12 @@ public sealed class StylizedWaterfallController : MonoBehaviour
             waterfallDetailCue = WonderlandRuntimeAudioLibrary.LoadCue("WW_Spatial_WaterfallDetail");
         }
 
-        ConfigureAudioLoop(ResolveAudioChild(AudioMainName, Vector3.zero), waterfallLoopCue, 0.8f, 0.3f);
-        ConfigureAudioLoop(ResolveAudioChild(AudioDetailName, new Vector3(0f, -2.2f, 2.1f)), waterfallDetailCue, 0.8f, 0.3f);
+        Vector3 surfaceLocalPosition = surfaceRoot != null ? surfaceRoot.localPosition : new Vector3(0f, -1.35f, 1.7f);
+        Vector3 mainAudioPosition = surfaceLocalPosition + new Vector3(0f, 0f, forwardCurve * 0.45f);
+        Vector3 splashAudioPosition = surfaceLocalPosition + new Vector3(0f, -height * 0.5f - 0.08f, forwardCurve + 0.42f);
+
+        ConfigureAudioLoop(ResolveAudioChild(AudioMainName, mainAudioPosition), waterfallLoopCue, 0.8f, 0.3f);
+        ConfigureAudioLoop(ResolveAudioChild(AudioDetailName, splashAudioPosition), waterfallDetailCue, 0.8f, 0.3f);
     }
 
     private void QueueAudioInstall()
