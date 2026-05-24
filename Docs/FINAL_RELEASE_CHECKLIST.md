@@ -22,12 +22,13 @@ Use this checklist for the last Unity and Quest 3 Link pass. Items marked "local
 4. Run `Wonderful World > Production > Generate Production Audit`.
 5. Run `Wonderful World > Production > Generate Asset Reference Audit`.
 6. Run `Wonderful World > Production > Normalize Main Scene Hierarchy`.
-7. Inspect the hierarchy before committing:
+7. If `_TempArt` is still referenced, run `Wonderful World > Production > Internalize Referenced Temp Art`.
+8. Re-run both audits after hierarchy and asset moves.
+9. Inspect the hierarchy before committing:
    - `WW_UI_System` should be under `UI`.
    - decorative orphan roots such as `TFF_*` should be under `Decorations`.
    - production roots should follow the standard order.
-8. Resolve the one `_TempArt` dependency shown in `Docs/Asset_Reference_Audit.md` before deleting temporary art.
-9. Move or rename assets only in Unity, then re-run both audits.
+10. Delete temporary or recovery folders only after `Docs/Asset_Reference_Audit.md` shows zero production references and the team confirms they are obsolete.
 
 ## Play Mode Smoke Test
 

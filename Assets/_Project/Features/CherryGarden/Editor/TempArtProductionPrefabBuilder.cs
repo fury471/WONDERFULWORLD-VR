@@ -12,6 +12,7 @@ public static class TempArtProductionPrefabBuilder
     private const string AutoRunFlagPath = "Temp/RunTempArtProductionBuild.flag";
     private const string OutputRoot = "Assets/_Project/Features/CherryGarden/Art/ImportedInazuma";
     private const string ModelRoot = OutputRoot + "/Models";
+    private const string InternalizedUkiyoSakuraSource = ModelRoot + "/UkiyoSakura_Source";
     private const string MaterialRoot = OutputRoot + "/Materials";
     private const string GeneratedTextureRoot = OutputRoot + "/Textures/ToonGenerated";
     private const string PrefabRoot = OutputRoot + "/Prefabs";
@@ -46,10 +47,10 @@ public static class TempArtProductionPrefabBuilder
         new(
             "UkiyoSakuraSet",
             "WW_Inazuma_UkiyoSakuraSet",
-            "Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/scene.gltf",
+            InternalizedUkiyoSakuraSource + "/scene.gltf",
             "UkiyoSakuraSet/scene.gltf",
-            new[] { "Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura" },
-            new[] { "Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/license.txt" },
+            new[] { InternalizedUkiyoSakuraSource },
+            new[] { InternalizedUkiyoSakuraSource + "/license.txt" },
             treeLike: false,
             maxOutlineRenderers: 256),
         new(

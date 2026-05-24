@@ -61,6 +61,7 @@ The menu `Wonderful World > Production` contains editor tools for safe closeout 
 - `Create Standard Project Folders`
 - `Generate Production Audit`, including a scan for enabled production debug logging flags
 - `Generate Asset Reference Audit`
+- `Internalize Referenced Temp Art`
 - `Normalize Main Scene Hierarchy`
 
 These tools run inside Unity, so folder creation, hierarchy edits, and scene saving happen through Unity APIs.

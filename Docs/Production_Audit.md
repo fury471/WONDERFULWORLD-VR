@@ -7,7 +7,7 @@
 
 ## Scene Hierarchy
 
-- Root objects: 10
+- Root objects: 8
 
 | Root | Active | Direct children | Total objects | Missing scripts |
 | --- | --- | ---: | ---: | ---: |
@@ -16,11 +16,9 @@
 | `Lighting` | True | 1 | 2 | 0 |
 | `Terrain` | True | 10 | 11 | 0 |
 | `World_Regions` | True | 6 | 792 | 0 |
-| `Decorations` | True | 9 | 1028 | 0 |
+| `Decorations` | True | 11 | 1034 | 0 |
 | `UI` | True | 8 | 265 | 0 |
 | `Debug` | False | 1 | 2 | 0 |
-| `TFF_Fire_01A` | True | 4 | 5 | 0 |
-| `TFF_Rock_Large_01A` | True | 0 | 1 | 0 |
 
 Recommended root grouping:
 
@@ -39,19 +37,19 @@ Production-owned assets should live under `Assets/_Project`. Third-party package
 
 | Top-level folder | Asset count | Classification |
 | --- | ---: | --- |
-| `Assets/_Project` | 889 | Production-owned |
+| `Assets/_Project` | 918 | Production-owned |
 | `Assets/Toon Fantasy Nature` | 552 | Third-party, package, or Unity template support |
 | `Assets/Samples` | 314 | Third-party, package, or Unity template support |
 | `Assets/VRTemplateAssets` | 208 | Third-party, package, or Unity template support |
 | `Assets/ithappy` | 63 | Third-party, package, or Unity template support |
-| `Assets/_TempArt` | 59 | Cleanup candidate; verify references before deleting |
 | `Assets/NamuFX` | 57 | Third-party, package, or Unity template support |
 | `Assets/Scripts` | 34 | Legacy/template candidate; should not be referenced by production |
 | `Assets/TextMesh Pro` | 33 | Third-party, package, or Unity template support |
+| `Assets/_TempArt` | 30 | Cleanup candidate; verify references before deleting |
 | `Assets/Scenes` | 10 | Legacy/template candidate; should not be referenced by production |
 | `Assets/XR` | 10 | Third-party, package, or Unity template support |
 | `Assets/Settings` | 7 | Third-party, package, or Unity template support |
-| `Assets/_Recovery` | 5 | Cleanup candidate; verify references before deleting |
+| `Assets/_Recovery` | 6 | Cleanup candidate; verify references before deleting |
 | `Assets/BlobShadows` | 4 | Review and either move through AssetDatabase or document as vendor content |
 | `Assets/butterfly` | 4 | Review and either move through AssetDatabase or document as vendor content |
 | `Assets/Editor` | 4 | Review and either move through AssetDatabase or document as vendor content |
@@ -78,42 +76,16 @@ Naming conventions:
 
 | Top-level folder | Referenced assets | Classification |
 | --- | ---: | --- |
-| `Assets/_Project` | 304 | Production-owned |
+| `Assets/_Project` | 329 | Production-owned |
 | `Assets/Toon Fantasy Nature` | 267 | Third-party, package, or Unity template support |
 | `Assets/Samples` | 89 | Third-party, package, or Unity template support |
 | `Assets/NamuFX` | 26 | Third-party, package, or Unity template support |
-| `Assets/_TempArt` | 25 | Cleanup candidate; verify references before deleting |
 | `Assets/ithappy` | 10 | Third-party, package, or Unity template support |
 | `Assets/TextMesh Pro` | 4 | Third-party, package, or Unity template support |
 | `Assets/butterfly` | 3 | Review and either move through AssetDatabase or document as vendor content |
 
 Referenced assets outside `Assets/_Project`:
 
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/scene.gltf`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Dragon_HA_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Dragon_HA_emissive.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Dragon_HA_normal.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Dragon_Tail_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Dragon_Tail_normal.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/JP_Lantern_Stone_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/JP_Lantern_Stone_normal.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/khan_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/khan_normal.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/material_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Oni_Horns__Teeths_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Oni_Horns__Teeths_normal.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Oni_Mask_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Oni_Mask_normal.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/quan_ao_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/quan_ao_normal.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/skin_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/skin_normal.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Stone_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Stone_normal.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Umbrella_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Umbrella_normal.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Wood_baseColor.png`
-- `Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura/textures/Wood_normal.png`
 - `Assets/butterfly/AC_Butterfly.controller`
 - `Assets/butterfly/scene.gltf`
 - `Assets/butterfly/textures/UlyssesButterfly_mat_baseColor.png`
@@ -239,7 +211,32 @@ Referenced assets outside `Assets/_Project`:
 - `Assets/Samples/XR Interaction Toolkit/3.3.1/XR Device Simulator/UI/Mouse/MouseR_d.png`
 - `Assets/Samples/XR Interaction Toolkit/3.3.1/XR Device Simulator/UI/XR Device Simulator UI.prefab`
 - `Assets/Samples/XR Interaction Toolkit/3.3.1/XR Device Simulator/XR Device Controller Controls.inputactions`
-- ...and 274 more.
+- `Assets/Samples/XR Interaction Toolkit/3.3.1/XR Device Simulator/XR Device Hand Controls.inputactions`
+- `Assets/Samples/XR Interaction Toolkit/3.3.1/XR Device Simulator/XR Device Simulator Controls.inputactions`
+- `Assets/Samples/XR Interaction Toolkit/3.3.1/XR Device Simulator/XR Device Simulator.prefab`
+- `Assets/TextMesh Pro/Fonts/LiberationSans.ttf`
+- `Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF - Fallback.asset`
+- `Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset`
+- `Assets/TextMesh Pro/Shaders/TMP_SDF-Mobile.shader`
+- `Assets/Toon Fantasy Nature/Animations/TFF_Fire_01.controller`
+- `Assets/Toon Fantasy Nature/Animations/TFF_Fire_Idle_01.anim`
+- `Assets/Toon Fantasy Nature/Animations/TFF_Wooden_Swing_01A.controller`
+- `Assets/Toon Fantasy Nature/Animations/TFF_Wooden_Swing_01A_Idle.anim`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Birch_Tree_01A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Birch_Tree_02A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Rock_Large_01A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Rock_Large_02A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Rock_Large_03A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Rock_Large_05A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Rock_Large_06A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Rock_Medium_01A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Rock_Medium_02A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Tree_Broken_01A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Tree_Fallen_01A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Tree_Log_03A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Wooden_Pavilion_01A_MeshCollider.fbx`
+- `Assets/Toon Fantasy Nature/Models/Colliders/TFF_Wooden_Swing_01A_MeshCollider.fbx`
+- ...and 249 more.
 
 Unresolved scene GUIDs:
 

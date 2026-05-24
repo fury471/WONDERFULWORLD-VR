@@ -12,6 +12,8 @@ public static class ProductionCleanupTools
     private const string MainScenePath = "Assets/_Project/World/Persistent/World_WonderlandPark.unity";
     private const string AuditReportPath = "Docs/Production_Audit.md";
     private const string AssetReferenceReportPath = "Docs/Asset_Reference_Audit.md";
+    private const string ReferencedTempArtSource = "Assets/_TempArt/Inazuma_Style_Candidates/ukiyo_sakura";
+    private const string ReferencedTempArtDestination = "Assets/_Project/Features/CherryGarden/Art/ImportedInazuma/Models/UkiyoSakura_Source";
 
     private static readonly string[] StandardProjectFolders =
     {
@@ -151,6 +153,50 @@ public static class ProductionCleanupTools
         AssetDatabase.Refresh();
 
         Debug.Log($"[ProductionCleanup] Wrote {AssetReferenceReportPath}.");
+    }
+
+    [MenuItem("Wonderful World/Production/Internalize Referenced Temp Art")]
+    public static void InternalizeReferencedTempArt()
+    {
+        if (!AssetDatabase.IsValidFolder(ReferencedTempArtSource))
+        {
+            Debug.Log($"[ProductionCleanup] Temp art source is already absent: {ReferencedTempArtSource}");
+            GenerateAssetReferenceAudit();
+            return;
+        }
+
+        if (AssetDatabase.IsValidFolder(ReferencedTempArtDestination))
+        {
+            Debug.LogWarning($"[ProductionCleanup] Destination already exists: {ReferencedTempArtDestination}. No assets were moved.");
+            GenerateAssetReferenceAudit();
+            return;
+        }
+
+        bool confirmed = EditorUtility.DisplayDialog(
+            "Internalize Referenced Temp Art",
+            $"Move '{ReferencedTempArtSource}' to '{ReferencedTempArtDestination}' through AssetDatabase.MoveAsset?",
+            "Move",
+            "Cancel");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        string destinationParent = Path.GetDirectoryName(ReferencedTempArtDestination).Replace('\\', '/');
+        EnsureFolder(destinationParent);
+
+        string moveError = AssetDatabase.MoveAsset(ReferencedTempArtSource, ReferencedTempArtDestination);
+        if (!string.IsNullOrEmpty(moveError))
+        {
+            Debug.LogError($"[ProductionCleanup] Temp art move failed: {moveError}");
+            return;
+        }
+
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        GenerateAssetReferenceAudit();
+        Debug.Log($"[ProductionCleanup] Moved referenced temp art to {ReferencedTempArtDestination}.");
     }
 
     [MenuItem("Wonderful World/Production/Normalize Main Scene Hierarchy")]

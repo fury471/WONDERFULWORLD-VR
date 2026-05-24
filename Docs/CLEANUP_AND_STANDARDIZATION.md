@@ -51,9 +51,10 @@ Existing feature prefixes such as `Lotus`, `Growth`, `CatRide`, `CherryGarden`, 
 2. Run `Wonderful World > Production > Generate Production Audit`.
 3. Run `Wonderful World > Production > Generate Asset Reference Audit`.
 4. Fix missing scripts, empty inactive roots, duplicate root UI grouping, and decorative orphan roots first.
-5. Move assets only in Unity, preferably in small batches.
-6. After each batch, open the production scene and enter Play Mode.
-7. Commit hierarchy, asset organization, documentation, and performance work separately.
+5. If `_TempArt` is still referenced, run `Wonderful World > Production > Internalize Referenced Temp Art`.
+6. Move any remaining assets only in Unity, preferably in small batches.
+7. After each batch, open the production scene and enter Play Mode.
+8. Commit hierarchy, asset organization, documentation, and performance work separately.
 
 ## Deletion Rules
 
