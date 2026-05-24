@@ -14,6 +14,8 @@ public class ScaleManager : MonoBehaviour
 {
     private const float MinCharacterControllerHeight = 0.01f;
     private const float CharacterControllerStepOffsetEpsilon = 0.001f;
+    private const float CharacterControllerRadiusEpsilon = 0.001f;
+    private const float MaxStepOffsetScaledHeightFraction = 0.45f;
 
     [Header("Core References")]
     [SerializeField] private Transform scaleRoot;
@@ -534,7 +536,7 @@ public class ScaleManager : MonoBehaviour
     private void ApplyScaleImmediate(ScaleState state)
     {
         ScalePoseAnchor preScaleAnchor = CaptureScalePoseAnchor();
-        bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
+        CharacterControllerMutation characterControllerMutation = BeginCharacterControllerMutation();
 
         ScaleSettings.ScaleProfile profile = GetProfile(state);
 
@@ -551,13 +553,11 @@ public class ScaleManager : MonoBehaviour
         ApplyEyeHeight(eyeHeightMultiplier);
         ApplyMoveSpeed(profile.moveSpeedMultiplier);
         ApplyInteractionDistance(profile.interactionDistanceMultiplier);
-        ApplyCharacterController(controllerHeightMultiplier, controllerRadiusMultiplier);
-        // Sync transforms BEFORE re-enabling the CC. set_enabled validates stepOffset
-        // against scaled extents, and we want PhysX to see the new lossyScale already
-        // applied to avoid validation against stale (pre-scale-change) state.
+        float targetStepOffset = ApplyCharacterController(controllerHeightMultiplier, controllerRadiusMultiplier);
         Physics.SyncTransforms();
-        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
-        RestoreScalePoseAnchor(preScaleAnchor);
+        RestoreScalePoseAnchorWhileControllerDisabled(preScaleAnchor);
+        Physics.SyncTransforms();
+        CompleteCharacterControllerMutation(characterControllerMutation, targetStepOffset);
 
         if (logDebug)
         {
@@ -686,10 +686,10 @@ public class ScaleManager : MonoBehaviour
         }
     }
 
-    private void ApplyCharacterController(float heightMultiplier, float radiusMultiplier)
+    private float ApplyCharacterController(float heightMultiplier, float radiusMultiplier)
     {
         if (!baseControllerCaptured || characterController == null)
-            return;
+            return 0f;
 
         Vector3 currentLossyScale = characterController.transform.lossyScale;
         float verticalScaleRatio = GetSafeAxisScaleRatio(currentLossyScale.y, baseControllerLossyScale.y);
@@ -700,27 +700,24 @@ public class ScaleManager : MonoBehaviour
         float localRadiusMultiplier = radiusMultiplier / radiusScaleRatio;
         float localHeight = Mathf.Max(MinCharacterControllerHeight, baseControllerHeight * localHeightMultiplier);
         float localRadius = Mathf.Max(0f, baseControllerRadius * localRadiusMultiplier);
+        localHeight = Mathf.Max(localHeight, localRadius * 2f + CharacterControllerRadiusEpsilon);
+        localRadius = Mathf.Clamp(localRadius, 0f, Mathf.Max(0f, localHeight * 0.5f - CharacterControllerRadiusEpsilon));
 
-        // Zero stepOffset before resizing. 0 is unconditionally valid against any
-        // positive height/radius/lossy, so neither set_height nor set_radius can trip
-        // Unity's "stepOffset > height" or "stepOffset > scaled extent" checks.
-        characterController.stepOffset = 0f;
-        characterController.height = localHeight;
+        ForceCharacterControllerStepOffsetZero();
+
+        if (characterController.height < localHeight)
+        {
+            characterController.height = localHeight;
+        }
+
         characterController.radius = localRadius;
-
-        // Scale stepOffset by the WORLD-space size change (heightMultiplier), not the
-        // local one. The local height stays constant in unified-rig mode while lossy
-        // shrinks, so localHeightMultiplier would leave stepOffset pinned at its base
-        // value (0.5) while the scaled extent shrinks toward it, putting us right at
-        // Unity's validation threshold. heightMultiplier keeps the ratio of stepOffset
-        // to scaled capsule extent constant across all scales.
-        float targetStepOffset = baseControllerStepOffset * Mathf.Max(0f, heightMultiplier);
-        float maxAllowedStepOffset = GetMaxAllowedStepOffset(localHeight, localRadius, currentLossyScale);
-        characterController.stepOffset = Mathf.Clamp(targetStepOffset, 0f, maxAllowedStepOffset);
+        characterController.height = localHeight;
 
         Vector3 center = baseControllerCenter;
         center.y = baseControllerCenter.y * localHeightMultiplier;
         characterController.center = center;
+
+        return baseControllerStepOffset * Mathf.Max(0f, heightMultiplier);
     }
 
     private void ApplyScaleRoot(float playerScale)
@@ -802,7 +799,7 @@ public class ScaleManager : MonoBehaviour
         return transform.position.y;
     }
 
-    private void RestoreScalePoseAnchor(ScalePoseAnchor anchor)
+    private void RestoreScalePoseAnchorWhileControllerDisabled(ScalePoseAnchor anchor)
     {
         if (scaleRoot == null)
         {
@@ -823,41 +820,62 @@ public class ScaleManager : MonoBehaviour
             delta.y = anchor.groundY - ResolveGroundY();
         }
 
-        bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
         scaleRoot.position += delta;
-        // Same ordering rule as ApplyScaleImmediate: sync before re-enable so PhysX
-        // validates set_enabled against the moved position, not the pre-move one.
-        Physics.SyncTransforms();
-        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
     }
 
-    private bool SetCharacterControllerEnabled(bool enabled)
+    private CharacterControllerMutation BeginCharacterControllerMutation()
     {
         if (characterController == null)
         {
-            return false;
+            return default;
         }
 
-        bool wasEnabled = characterController.enabled;
-        if (enabled)
+        CharacterControllerMutation mutation = new CharacterControllerMutation
         {
-            ClampCharacterControllerStepOffset();
+            hasController = true,
+            wasEnabled = characterController.enabled
+        };
+
+        ForceCharacterControllerStepOffsetZero();
+        if (characterController.enabled)
+        {
+            characterController.enabled = false;
         }
 
-        characterController.enabled = enabled;
-        return wasEnabled;
+        return mutation;
     }
 
-    private void RestoreCharacterControllerEnabled(bool wasEnabled)
+    private void CompleteCharacterControllerMutation(CharacterControllerMutation mutation, float targetStepOffset)
     {
-        if (characterController != null)
+        if (!mutation.hasController || characterController == null)
         {
-            ClampCharacterControllerStepOffset();
-            characterController.enabled = wasEnabled;
+            return;
+        }
+
+        ForceCharacterControllerStepOffsetZero();
+
+        if (mutation.wasEnabled)
+        {
+            characterController.enabled = true;
+            Physics.SyncTransforms();
+            ApplySafeCharacterControllerStepOffset(targetStepOffset);
         }
     }
 
-    private void ClampCharacterControllerStepOffset()
+    private void ForceCharacterControllerStepOffsetZero()
+    {
+        if (characterController == null)
+        {
+            return;
+        }
+
+        if (characterController.stepOffset != 0f)
+        {
+            characterController.stepOffset = 0f;
+        }
+    }
+
+    private void ApplySafeCharacterControllerStepOffset(float targetStepOffset)
     {
         if (characterController == null)
         {
@@ -868,26 +886,23 @@ public class ScaleManager : MonoBehaviour
             characterController.height,
             characterController.radius,
             characterController.transform.lossyScale);
-        if (characterController.stepOffset > maxAllowedStepOffset)
+        float safeStepOffset = Mathf.Clamp(targetStepOffset, 0f, maxAllowedStepOffset);
+        if (safeStepOffset > CharacterControllerStepOffsetEpsilon)
         {
-            characterController.stepOffset = maxAllowedStepOffset;
+            characterController.stepOffset = safeStepOffset;
         }
     }
 
     private static float GetMaxAllowedStepOffset(float controllerHeight, float controllerRadius, Vector3 controllerLossyScale)
     {
-        // Unity validates stepOffset at multiple sites (set_stepOffset, set_height,
-        // set_enabled) and empirically uses a stricter bound than the documented
-        // "scaledHeight + 2*scaledRadius", likely accounting for skinWidth and
-        // floating-point slack. Use a 15% relative margin on the world-scaled extent
-        // to stay clear of all checks. Also satisfy the raw local check
-        // (stepOffset <= height) since both bounds apply to the same stored value.
         float scaleY = Mathf.Max(0.0001f, Mathf.Abs(controllerLossyScale.y));
         float scaleH = GetHorizontalScale(controllerLossyScale);
-        float scaledExtent = controllerHeight * scaleY + 2f * controllerRadius * scaleH;
-        float safeScaledLimit = scaledExtent * 0.85f;
+        float scaledHeight = controllerHeight * scaleY;
+        float scaledRadius = controllerRadius * scaleH;
+        float scaledExtentLimit = Mathf.Max(0f, scaledHeight + 2f * scaledRadius - CharacterControllerStepOffsetEpsilon);
+        float scaledComfortLimit = Mathf.Max(0f, scaledHeight * MaxStepOffsetScaledHeightFraction);
         float safeLocalLimit = Mathf.Max(0f, controllerHeight - CharacterControllerStepOffsetEpsilon);
-        return Mathf.Max(0f, Mathf.Min(safeScaledLimit, safeLocalLimit));
+        return Mathf.Max(0f, Mathf.Min(scaledExtentLimit, scaledComfortLimit, safeLocalLimit));
     }
 
     private Transform ResolveXrCameraOffsetTransform()
@@ -1008,5 +1023,11 @@ public class ScaleManager : MonoBehaviour
         public float groundY;
         public bool hasCamera;
         public bool hasRoot;
+    }
+
+    private struct CharacterControllerMutation
+    {
+        public bool hasController;
+        public bool wasEnabled;
     }
 }
