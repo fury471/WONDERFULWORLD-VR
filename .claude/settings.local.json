@@ -5,7 +5,10 @@
       "Read(//c/Program Files/Unity/Hub/Editor//**)",
       "Read(//c/Program Files/Unity Hub/**)",
       "Bash(xargs grep -l \"UniversalRenderPipelineAsset\\\\|m_RendererList\")",
-      "Bash(xargs grep -l \"UniversalRendererData\\\\|UniversalAdditionalCameraData\\\\|RenderFeature\\\\|m_RendererFeatures\\\\|ScriptableRendererData\")"
+      "Bash(xargs grep -l \"UniversalRendererData\\\\|UniversalAdditionalCameraData\\\\|RenderFeature\\\\|m_RendererFeatures\\\\|ScriptableRendererData\")",
+      "Bash(git -C E:/Projects/WONDERFULWORLD remote -v)",
+      "Bash(git -C E:/Projects/WONDERFULWORLD tag --sort=-creatordate)",
+      "Bash(git -C E:/Projects/WONDERFULWORLD show --stat f4b24c3)"
     ]
   }
 }
