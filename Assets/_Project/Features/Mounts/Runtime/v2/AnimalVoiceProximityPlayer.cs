@@ -10,6 +10,8 @@ public sealed class AnimalVoiceProximityPlayer : MonoBehaviour
     [Header("Audio")]
     [SerializeField] private WonderlandAudioCue cue;
     [SerializeField, FormerlySerializedAs("targetAudioSource")] private AudioSource audioSource;
+    [SerializeField] private bool useProfileOverride;
+    [SerializeField] private MountFootstepProfile profileOverride = MountFootstepProfile.Cat;
 
     [Header("Trigger")]
     [SerializeField] private bool requireCharacterController = true;
@@ -117,7 +119,9 @@ public sealed class AnimalVoiceProximityPlayer : MonoBehaviour
 
         if (cue == null)
         {
-            cue = WonderlandRuntimeAudioLibrary.ResolveVoiceCue(transform, audioSource);
+            cue = useProfileOverride
+                ? WonderlandRuntimeAudioLibrary.ResolveVoiceCue(profileOverride)
+                : WonderlandRuntimeAudioLibrary.ResolveVoiceCue(transform, audioSource);
         }
 
         if (cue != null)

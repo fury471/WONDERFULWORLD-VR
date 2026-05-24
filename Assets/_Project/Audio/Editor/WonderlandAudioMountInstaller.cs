@@ -146,7 +146,7 @@ namespace WonderfulWorld.Audio.Editor
                 CatFootsteps = CreateCue(
                     $"{CueRoot}/WW_Footsteps_Cat.asset",
                     new[] { LoadClip(AnimalFootstepsClip) },
-                    volume: 0.22f,
+                    volume: 0.24f,
                     loop: false,
                     spatialBlend: 1f,
                     minDistance: 0.75f,
@@ -156,8 +156,8 @@ namespace WonderfulWorld.Audio.Editor
                     priority: 190),
                 DogFootsteps = CreateCue(
                     $"{CueRoot}/WW_Footsteps_Dog.asset",
-                    new[] { LoadClip(AnimalFootstepsClip), LoadClip(DogRunClip) },
-                    volume: 0.26f,
+                    new[] { LoadClip(AnimalFootstepsClip) },
+                    volume: 0.28f,
                     loop: false,
                     spatialBlend: 1f,
                     minDistance: 0.9f,
@@ -168,7 +168,7 @@ namespace WonderfulWorld.Audio.Editor
                 HorseFootsteps = CreateCue(
                     $"{CueRoot}/WW_Footsteps_Horse.asset",
                     new[] { LoadClip(HorseWalkClip), LoadClip(HorseConcreteClip) },
-                    volume: 0.24f,
+                    volume: 0.25f,
                     loop: false,
                     spatialBlend: 1f,
                     minDistance: 1.6f,
@@ -179,7 +179,7 @@ namespace WonderfulWorld.Audio.Editor
                 CatVoice = CreateCue(
                     $"{CueRoot}/WW_Voice_Cat.asset",
                     new[] { LoadClip(CatVoiceClip) },
-                    volume: 0.82f,
+                    volume: 0.9f,
                     loop: false,
                     spatialBlend: 1f,
                     minDistance: 1f,
@@ -190,7 +190,7 @@ namespace WonderfulWorld.Audio.Editor
                 DogVoice = CreateCue(
                     $"{CueRoot}/WW_Voice_Dog.asset",
                     new[] { LoadClip(DogVoiceClip) },
-                    volume: 0.82f,
+                    volume: 0.9f,
                     loop: false,
                     spatialBlend: 1f,
                     minDistance: 1f,
@@ -201,7 +201,7 @@ namespace WonderfulWorld.Audio.Editor
                 HorseVoice = CreateCue(
                     $"{CueRoot}/WW_Voice_Horse.asset",
                     new[] { LoadClip(HorseVoiceClip) },
-                    volume: 0.86f,
+                    volume: 0.9f,
                     loop: false,
                     spatialBlend: 1f,
                     minDistance: 1f,
@@ -650,25 +650,28 @@ namespace WonderfulWorld.Audio.Editor
             switch (profile)
             {
                 case MountProfile.Horse:
-                    serializedFootstep.FindProperty("minimumSpeed").floatValue = 0.16f;
-                    serializedFootstep.FindProperty("walkStepInterval").floatValue = 0.42f;
-                    serializedFootstep.FindProperty("runStepInterval").floatValue = 0.18f;
-                    serializedFootstep.FindProperty("speedForRunInterval").floatValue = 5.6f;
-                    serializedFootstep.FindProperty("volumeScale").floatValue = 0.62f;
+                    serializedFootstep.FindProperty("minimumSpeed").floatValue = 0.12f;
+                    serializedFootstep.FindProperty("walkStepInterval").floatValue = 0.46f;
+                    serializedFootstep.FindProperty("runStepInterval").floatValue = 0.28f;
+                    serializedFootstep.FindProperty("speedForRunInterval").floatValue = 4.8f;
+                    serializedFootstep.FindProperty("volumeScale").floatValue = 0.78f;
+                    serializedFootstep.FindProperty("footstepClipWindowSeconds").floatValue = 0.28f;
                     break;
                 case MountProfile.Dog:
-                    serializedFootstep.FindProperty("minimumSpeed").floatValue = 0.15f;
+                    serializedFootstep.FindProperty("minimumSpeed").floatValue = 0.1f;
                     serializedFootstep.FindProperty("walkStepInterval").floatValue = 0.34f;
-                    serializedFootstep.FindProperty("runStepInterval").floatValue = 0.16f;
-                    serializedFootstep.FindProperty("speedForRunInterval").floatValue = 4.8f;
-                    serializedFootstep.FindProperty("volumeScale").floatValue = 0.58f;
+                    serializedFootstep.FindProperty("runStepInterval").floatValue = 0.19f;
+                    serializedFootstep.FindProperty("speedForRunInterval").floatValue = 3.2f;
+                    serializedFootstep.FindProperty("volumeScale").floatValue = 0.68f;
+                    serializedFootstep.FindProperty("footstepClipWindowSeconds").floatValue = 0.16f;
                     break;
                 default:
-                    serializedFootstep.FindProperty("minimumSpeed").floatValue = 0.12f;
-                    serializedFootstep.FindProperty("walkStepInterval").floatValue = 0.38f;
-                    serializedFootstep.FindProperty("runStepInterval").floatValue = 0.18f;
-                    serializedFootstep.FindProperty("speedForRunInterval").floatValue = 4.5f;
-                    serializedFootstep.FindProperty("volumeScale").floatValue = 0.5f;
+                    serializedFootstep.FindProperty("minimumSpeed").floatValue = 0.08f;
+                    serializedFootstep.FindProperty("walkStepInterval").floatValue = 0.3f;
+                    serializedFootstep.FindProperty("runStepInterval").floatValue = 0.17f;
+                    serializedFootstep.FindProperty("speedForRunInterval").floatValue = 2.4f;
+                    serializedFootstep.FindProperty("volumeScale").floatValue = 0.62f;
+                    serializedFootstep.FindProperty("footstepClipWindowSeconds").floatValue = 0.12f;
                     break;
             }
 

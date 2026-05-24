@@ -23,11 +23,13 @@ namespace WonderfulWorld.Audio
         [SerializeField, Range(0f, 1f)] private float volumeScale = 1f;
         [SerializeField, Min(0f)] private float startupRandomDelay = 0.2f;
         [SerializeField, Min(0f)] private float activationGraceSeconds = 0.25f;
+        [SerializeField, Min(0.03f)] private float footstepClipWindowSeconds = 0.16f;
 
         private Vector3 lastPosition;
         private float stepTimer;
         private float activatedAtTime;
         private float nextAllowedPlayTime;
+        private float activeClipStopTime;
         private bool hasLastPosition;
         private MonoBehaviour rideStateProvider;
         private PropertyInfo rideActiveProperty;
@@ -70,25 +72,28 @@ namespace WonderfulWorld.Audio
             switch (profile)
             {
                 case MountFootstepProfile.Horse:
-                    minimumSpeed = 0.16f;
-                    walkStepInterval = 0.42f;
-                    runStepInterval = 0.18f;
-                    speedForRunInterval = 5.6f;
-                    volumeScale = 0.62f;
+                    minimumSpeed = 0.12f;
+                    walkStepInterval = 0.46f;
+                    runStepInterval = 0.28f;
+                    speedForRunInterval = 4.8f;
+                    volumeScale = 0.78f;
+                    footstepClipWindowSeconds = 0.28f;
                     break;
                 case MountFootstepProfile.Dog:
-                    minimumSpeed = 0.15f;
+                    minimumSpeed = 0.1f;
                     walkStepInterval = 0.34f;
-                    runStepInterval = 0.16f;
-                    speedForRunInterval = 4.8f;
-                    volumeScale = 0.58f;
+                    runStepInterval = 0.19f;
+                    speedForRunInterval = 3.2f;
+                    volumeScale = 0.68f;
+                    footstepClipWindowSeconds = 0.16f;
                     break;
                 default:
-                    minimumSpeed = 0.12f;
-                    walkStepInterval = 0.38f;
-                    runStepInterval = 0.18f;
-                    speedForRunInterval = 4.5f;
-                    volumeScale = 0.5f;
+                    minimumSpeed = 0.08f;
+                    walkStepInterval = 0.3f;
+                    runStepInterval = 0.17f;
+                    speedForRunInterval = 2.4f;
+                    volumeScale = 0.62f;
+                    footstepClipWindowSeconds = 0.12f;
                     break;
             }
 
@@ -103,6 +108,8 @@ namespace WonderfulWorld.Audio
 
         private void Update()
         {
+            StopExpiredClipWindow();
+
             Transform root = movementRoot != null ? movementRoot : transform;
             if (!CanPlayForCurrentRideState())
             {
@@ -218,11 +225,39 @@ namespace WonderfulWorld.Audio
 
             audioSource.pitch = cue.ResolvePitch();
             float speedScale = Mathf.Lerp(0.82f, 1f, Mathf.InverseLerp(minimumSpeed, speedForRunInterval, speed));
-            audioSource.PlayOneShot(clip, cue.ResolveVolume(volumeScale * speedScale));
+            float windowSeconds = ResolveClipWindow(clip);
+            audioSource.clip = clip;
+            audioSource.volume = cue.ResolveVolume(volumeScale * speedScale);
+            audioSource.timeSamples = ResolveStartSample(clip, windowSeconds);
+            audioSource.Play();
+            activeClipStopTime = Time.time + windowSeconds;
+
             if (!allowOverlap)
             {
-                nextAllowedPlayTime = Time.time + Mathf.Max(0.05f, clip.length * 0.9f);
+                nextAllowedPlayTime = Time.time + Mathf.Max(0.05f, windowSeconds * 0.85f);
             }
+        }
+
+        private float ResolveClipWindow(AudioClip clip)
+        {
+            if (clip == null)
+            {
+                return footstepClipWindowSeconds;
+            }
+
+            return Mathf.Clamp(footstepClipWindowSeconds, 0.03f, Mathf.Max(0.03f, clip.length));
+        }
+
+        private int ResolveStartSample(AudioClip clip, float windowSeconds)
+        {
+            if (clip == null || clip.samples <= 1 || clip.length <= windowSeconds + 0.03f)
+            {
+                return 0;
+            }
+
+            float maxStartSeconds = Mathf.Max(0f, clip.length - windowSeconds);
+            float startSeconds = Random.Range(0f, maxStartSeconds);
+            return Mathf.Clamp(Mathf.RoundToInt(startSeconds * clip.frequency), 0, clip.samples - 1);
         }
 
         private float ResolveInterval(float speed)
@@ -303,7 +338,23 @@ namespace WonderfulWorld.Audio
                 audioSource.Stop();
             }
 
+            activeClipStopTime = 0f;
             nextAllowedPlayTime = 0f;
+        }
+
+        private void StopExpiredClipWindow()
+        {
+            if (audioSource == null || activeClipStopTime <= 0f || Time.time < activeClipStopTime)
+            {
+                return;
+            }
+
+            if (audioSource.isPlaying)
+            {
+                audioSource.Stop();
+            }
+
+            activeClipStopTime = 0f;
         }
     }
 }

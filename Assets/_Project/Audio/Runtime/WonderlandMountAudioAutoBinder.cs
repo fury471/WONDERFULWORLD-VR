@@ -34,6 +34,25 @@ namespace WonderfulWorld.Audio
             footstepAudio.Configure(cue, mountRoot.transform, ResolveEmitter(mountRoot.transform), profile);
         }
 
+        public static void PlayVoice(GameObject mountRoot, float volumeScale = 0.9f, int maxVoices = 2)
+        {
+            if (mountRoot == null)
+            {
+                return;
+            }
+
+            MountFootstepProfile profile = ResolveProfile(mountRoot.transform);
+            WonderlandAudioCue cue = WonderlandRuntimeAudioLibrary.ResolveVoiceCue(profile);
+            if (cue == null)
+            {
+                return;
+            }
+
+            Transform emitter = ResolveEmitter(mountRoot.transform);
+            Vector3 position = emitter != null ? emitter.position : mountRoot.transform.position;
+            WonderlandAudioOneShotPlayer.Play(cue, position, force2D: false, volumeScale: volumeScale, maxVoices: maxVoices);
+        }
+
         private static MountFootstepProfile ResolveProfile(Transform root)
         {
             if (root != null && root.TryGetComponent(out WonderlandMountAudioProfile explicitProfile))

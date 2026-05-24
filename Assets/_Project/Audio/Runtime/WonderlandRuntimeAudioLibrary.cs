@@ -113,6 +113,19 @@ namespace WonderfulWorld.Audio
             return null;
         }
 
+        public static WonderlandAudioCue ResolveVoiceCue(MountFootstepProfile profile)
+        {
+            switch (profile)
+            {
+                case MountFootstepProfile.Horse:
+                    return LoadCue("WW_Voice_Horse");
+                case MountFootstepProfile.Dog:
+                    return LoadCue("WW_Voice_Dog");
+                default:
+                    return LoadCue("WW_Voice_Cat");
+            }
+        }
+
         public static string GetHierarchyPath(Transform transform)
         {
             if (transform == null)

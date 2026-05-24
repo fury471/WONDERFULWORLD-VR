@@ -2,6 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UnityEngine.XR;
 using XRCommonUsages = UnityEngine.XR.CommonUsages;
@@ -24,6 +25,7 @@ namespace Wonderland.UI
         [SerializeField] private Button cancelButton;
         [SerializeField] private Button exitButton;
         [SerializeField] private Button backButton;
+        [SerializeField] private Button restartButton;
 
         [Header("Input")]
         [SerializeField] private InputActionReference toggleMenuAction;
@@ -33,10 +35,10 @@ namespace Wonderland.UI
 
         [Header("Placement")]
         [SerializeField] private Transform followCamera;
-        [SerializeField] private float distanceFromCamera = 1.35f;
-        [SerializeField] private Vector3 cameraLocalOffset = new Vector3(-0.35f, -0.18f, 0f);
+        [SerializeField] private float distanceFromCamera = 1.3f;
+        [SerializeField] private Vector3 cameraLocalOffset = new Vector3(0f, -0.12f, 0f);
         [SerializeField] private float followSharpness = 18f;
-        [SerializeField] private Vector3 worldScale = new Vector3(0.0014f, 0.0014f, 0.0014f);
+        [SerializeField] private Vector3 worldScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
 
         [Header("Events")]
         public UnityEvent opened;
@@ -149,6 +151,27 @@ namespace Wonderland.UI
 #endif
         }
 
+        public void RestartCurrentScene()
+        {
+            Time.timeScale = 1f;
+            Scene activeScene = SceneManager.GetActiveScene();
+#if UNITY_EDITOR
+            if (!string.IsNullOrEmpty(activeScene.path))
+            {
+                UnityEditor.SceneManagement.EditorSceneManager.LoadScene(activeScene.path);
+                return;
+            }
+#endif
+            if (activeScene.buildIndex >= 0)
+            {
+                SceneManager.LoadScene(activeScene.buildIndex);
+            }
+            else if (!string.IsNullOrEmpty(activeScene.name))
+            {
+                SceneManager.LoadScene(activeScene.name);
+            }
+        }
+
         private void ResolveReferences()
         {
             if (canvasGroup == null)
@@ -159,6 +182,11 @@ namespace Wonderland.UI
             if (followCamera == null)
             {
                 followCamera = global::QuestInteractionUtils.FindHeadTransform();
+            }
+
+            if (restartButton == null)
+            {
+                restartButton = FindButton(mainPanel != null ? mainPanel.transform : null, "RestartButton", "Button_Restart");
             }
         }
 
@@ -183,6 +211,35 @@ namespace Wonderland.UI
             if (cancelButton != null) cancelButton.onClick.AddListener(CloseMenu);
             if (exitButton != null) exitButton.onClick.AddListener(ExitExperience);
             if (backButton != null) backButton.onClick.AddListener(ShowMainPanel);
+            if (restartButton != null) restartButton.onClick.AddListener(RestartCurrentScene);
+        }
+
+        private Button FindButton(Transform root, params string[] names)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            Button[] buttons = root.GetComponentsInChildren<Button>(true);
+            for (int i = 0; i < buttons.Length; i++)
+            {
+                Button button = buttons[i];
+                if (button == null)
+                {
+                    continue;
+                }
+
+                for (int nameIndex = 0; nameIndex < names.Length; nameIndex++)
+                {
+                    if (button.name == names[nameIndex])
+                    {
+                        return button;
+                    }
+                }
+            }
+
+            return null;
         }
 
         private void SetVisible(bool shouldShow, bool immediate)

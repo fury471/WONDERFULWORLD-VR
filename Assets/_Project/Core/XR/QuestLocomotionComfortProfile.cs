@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -90,7 +89,10 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     [SerializeField, Min(0f)] private float easeOutTime = 0.20f;
     [SerializeField, Min(0f)] private float easeOutDelayTime = 0.06f;
 
-    private readonly List<LocomotionVignetteProvider> vignetteProviders = new List<LocomotionVignetteProvider>(3);
+    private LocomotionVignetteProvider teleportVignetteProvider;
+    private LocomotionVignetteProvider snapTurnVignetteProvider;
+    private LocomotionVignetteProvider continuousMoveVignetteProvider;
+    private LocomotionVignetteProvider continuousTurnVignetteProvider;
 
     private int lastInstalledTeleportAreaCount;
     private float suppressRightHandTurnUntil;
@@ -545,6 +547,16 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void ConfigureTunnelingVignettes()
     {
+        // Reuse persistent provider instances. The XRI TunnelingVignetteController
+        // keeps an internal record list keyed by provider reference, and that list is
+        // not cleared when locomotionVignetteProviders is cleared. If we created new
+        // instances each time, the controller would accumulate orphan records pinned
+        // at the old apertureSize and the on-screen vignette would never go away.
+        EnsureVignetteProvider(ref teleportVignetteProvider, teleportationProvider, teleportAperture, true);
+        EnsureVignetteProvider(ref snapTurnVignetteProvider, snapTurn, turnAperture, true);
+        EnsureVignetteProvider(ref continuousMoveVignetteProvider, continuousMove, smoothMoveAperture, false);
+        EnsureVignetteProvider(ref continuousTurnVignetteProvider, continuousTurn, smoothTurnAperture, false);
+
 #if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
         var vignettes = FindObjectsByType<TunnelingVignetteController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 #else
@@ -561,54 +573,85 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
             }
 
             vignette.locomotionVignetteProviders.Clear();
-            vignetteProviders.Clear();
 
             if (comfortVignetteEnabled)
             {
-                AddVignetteProvider(vignetteProviders, teleportationProvider, teleportAperture, true);
-                AddVignetteProvider(vignetteProviders, snapTurn, turnAperture, true);
-                AddVignetteProvider(vignetteProviders, continuousMove, smoothMoveAperture, false);
-                AddVignetteProvider(vignetteProviders, continuousTurn, smoothTurnAperture, false);
+                AddIfNotNull(vignette, teleportVignetteProvider);
+                AddIfNotNull(vignette, snapTurnVignetteProvider);
+                AddIfNotNull(vignette, continuousMoveVignetteProvider);
+                AddIfNotNull(vignette, continuousTurnVignetteProvider);
             }
-
-            for (int providerIndex = 0; providerIndex < vignetteProviders.Count; providerIndex++)
+            else
             {
-                vignette.locomotionVignetteProviders.Add(vignetteProviders[providerIndex]);
+                // Vignette turned off in settings. Removing providers from the list
+                // alone is not enough — any record still in the controller stays in
+                // EasingIn at its previous aperture. Explicitly end each provider so
+                // the controller transitions the record to EasingOut and the visual
+                // vignette actually fades back to no-effect.
+                EndIfNotNull(vignette, teleportVignetteProvider);
+                EndIfNotNull(vignette, snapTurnVignetteProvider);
+                EndIfNotNull(vignette, continuousMoveVignetteProvider);
+                EndIfNotNull(vignette, continuousTurnVignetteProvider);
             }
         }
     }
 
-    private void AddVignetteProvider(
-        List<LocomotionVignetteProvider> providers,
-        LocomotionProvider provider,
+    private void EnsureVignetteProvider(
+        ref LocomotionVignetteProvider vignetteProvider,
+        LocomotionProvider locomotionProvider,
         float aperture,
         bool lockEaseIn)
     {
-        if (provider == null)
+        if (locomotionProvider == null)
         {
+            vignetteProvider = null;
             return;
         }
 
-        var vignetteProvider = new LocomotionVignetteProvider
+        if (vignetteProvider == null)
         {
-            locomotionProvider = provider,
-            enabled = true,
-            overrideDefaultParameters = true,
-            overrideParameters = new VignetteParameters
+            vignetteProvider = new LocomotionVignetteProvider
             {
-                apertureSize = aperture,
-                featheringEffect = feathering,
-                easeInTime = easeInTime,
-                easeOutTime = easeOutTime,
-                easeInTimeLock = lockEaseIn,
-                easeOutDelayTime = easeOutDelayTime,
-                vignetteColor = Color.black,
-                vignetteColorBlend = Color.black,
-                apertureVerticalPosition = 0f,
-            },
-        };
+                overrideParameters = new VignetteParameters(),
+            };
+        }
 
-        providers.Add(vignetteProvider);
+        vignetteProvider.locomotionProvider = locomotionProvider;
+        vignetteProvider.enabled = true;
+        vignetteProvider.overrideDefaultParameters = true;
+
+        var parameters = vignetteProvider.overrideParameters;
+        if (parameters == null)
+        {
+            parameters = new VignetteParameters();
+            vignetteProvider.overrideParameters = parameters;
+        }
+
+        parameters.apertureSize = aperture;
+        parameters.featheringEffect = feathering;
+        parameters.easeInTime = easeInTime;
+        parameters.easeOutTime = easeOutTime;
+        parameters.easeInTimeLock = lockEaseIn;
+        parameters.easeOutDelayTime = easeOutDelayTime;
+        parameters.vignetteColor = Color.black;
+        parameters.vignetteColorBlend = Color.black;
+        parameters.apertureVerticalPosition = 0f;
+    }
+
+    private static void AddIfNotNull(TunnelingVignetteController vignette, LocomotionVignetteProvider provider)
+    {
+        if (provider != null)
+        {
+            vignette.locomotionVignetteProviders.Add(provider);
+        }
+    }
+
+    private static void EndIfNotNull(TunnelingVignetteController vignette, LocomotionVignetteProvider provider)
+    {
+        if (provider != null)
+        {
+            vignette.EndTunnelingVignette(provider);
+        }
     }
 
     private static bool ContainsToken(string value, string token)

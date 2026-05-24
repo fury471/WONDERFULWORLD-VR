@@ -16,12 +16,36 @@ namespace Wonderland.UI
         public const string VignetteLevelPrefKey = "WW.Settings.ComfortVignetteLevel";
 
         private const string RuntimeRootName = "WW_RuntimeSettingsRoot";
-        private const float ButtonHeight = 42f;
+        private const float ButtonHeight = 34f;
+        private const float SliderHeight = 28f;
+        private const float LayoutSpacing = 6f;
 
         [Header("Runtime Wiring")]
         [SerializeField] private AudioMixer audioMixer;
         [SerializeField] private QuestLocomotionComfortProfile locomotionProfile;
         [SerializeField] private VRSystemMenuController systemMenu;
+        [SerializeField] private bool buildFallbackHierarchyAtRuntime = true;
+
+        [Header("Hierarchy Pages")]
+        [SerializeField] private RectTransform settingsPage;
+        [SerializeField] private RectTransform languagePage;
+
+        [Header("Hierarchy Controls")]
+        [SerializeField] private Slider masterSlider;
+        [SerializeField] private Button teleportButton;
+        [SerializeField] private Button continuousMoveButton;
+        [SerializeField] private Button snapTurnButton;
+        [SerializeField] private Button continuousTurnButton;
+        [SerializeField] private Button vignetteOffButton;
+        [SerializeField] private Button vignetteLowButton;
+        [SerializeField] private Button vignetteMediumButton;
+        [SerializeField] private Button vignetteHighButton;
+        [SerializeField] private Button languageButton;
+        [SerializeField] private Button restartButton;
+        [SerializeField] private Button settingsBackButton;
+        [SerializeField] private Button settingsCancelButton;
+        [SerializeField] private Button languageBackButton;
+        [SerializeField] private Button languageCancelButton;
 
         [Header("Legacy Language Buttons")]
         [SerializeField] private Button englishButton;
@@ -39,18 +63,6 @@ namespace Wonderland.UI
         [SerializeField] private Color selectedTextColor = Color.white;
         [SerializeField] private Color normalTextColor = new Color(0.08f, 0.12f, 0.14f, 1f);
 
-        private RectTransform settingsPage;
-        private RectTransform languagePage;
-        private Slider masterSlider;
-        private Slider vignetteSlider;
-        private Button teleportButton;
-        private Button continuousMoveButton;
-        private Button snapTurnButton;
-        private Button continuousTurnButton;
-        private Button vignetteOffButton;
-        private Button vignetteLowButton;
-        private Button vignetteMediumButton;
-        private Button vignetteHighButton;
         private Button runtimeEnglishButton;
         private Button runtimeChineseButton;
         private Button runtimeSwedishButton;
@@ -58,13 +70,21 @@ namespace Wonderland.UI
         private TMP_Text runtimeChineseLabel;
         private TMP_Text runtimeSwedishLabel;
         private bool suppressSliderEvents;
+        private bool controlsWired;
 
         private void Awake()
         {
             ResolveRuntimeReferences();
             WonderlandAudioBus.SetMixer(audioMixer);
-            BuildRuntimeView();
+            BindHierarchyView();
+            if (settingsPage == null && buildFallbackHierarchyAtRuntime)
+            {
+                BuildRuntimeView();
+                BindHierarchyView();
+            }
+
             WireLegacyLanguageButtons();
+            WireHierarchyControls();
         }
 
         private void OnEnable()
@@ -153,6 +173,32 @@ namespace Wonderland.UI
             }
         }
 
+        public void Restart()
+        {
+            ResolveRuntimeReferences();
+            if (systemMenu != null)
+            {
+                systemMenu.RestartCurrentScene();
+            }
+        }
+
+        public void OnMasterVolumeChanged(float value)
+        {
+            if (!suppressSliderEvents)
+            {
+                WonderlandAudioBus.SetMasterVolume(value, save: true);
+            }
+        }
+
+        public void SelectTeleport() => SetMovementMode(QuestLocomotionComfortProfile.MovementMode.Teleport);
+        public void SelectContinuousMove() => SetMovementMode(QuestLocomotionComfortProfile.MovementMode.Smooth);
+        public void SelectSnapTurn() => SetTurnMode(QuestLocomotionComfortProfile.TurnMode.Snap);
+        public void SelectContinuousTurn() => SetTurnMode(QuestLocomotionComfortProfile.TurnMode.Smooth);
+        public void SetVignetteOff() => SetVignetteLevel(0);
+        public void SetVignetteLow() => SetVignetteLevel(1);
+        public void SetVignetteMedium() => SetVignetteLevel(2);
+        public void SetVignetteHigh() => SetVignetteLevel(3);
+
         private void ResolveRuntimeReferences()
         {
             if (systemMenu == null)
@@ -172,6 +218,52 @@ namespace Wonderland.UI
             }
         }
 
+        private void BindHierarchyView()
+        {
+            settingsPage = settingsPage != null ? settingsPage : FindRect("SettingsPage", "PageSettings");
+            languagePage = languagePage != null ? languagePage : FindRect("LanguagePage", "PageLanguage");
+            masterSlider = masterSlider != null ? masterSlider : FindComponent<Slider>("MasterAudioSlider", "MasterSlider", "Slider_MasterAudio");
+            teleportButton = teleportButton != null ? teleportButton : FindComponent<Button>("TeleportButton", "Button_Teleport");
+            continuousMoveButton = continuousMoveButton != null ? continuousMoveButton : FindComponent<Button>("ContinuousMoveButton", "Button_ContinuousMove", "MoveContinuousButton");
+            snapTurnButton = snapTurnButton != null ? snapTurnButton : FindComponent<Button>("SnapTurnButton", "Button_SnapTurn");
+            continuousTurnButton = continuousTurnButton != null ? continuousTurnButton : FindComponent<Button>("ContinuousTurnButton", "Button_ContinuousTurn", "TurnContinuousButton");
+            vignetteOffButton = vignetteOffButton != null ? vignetteOffButton : FindComponent<Button>("VignetteOffButton", "Button_VignetteOff");
+            vignetteLowButton = vignetteLowButton != null ? vignetteLowButton : FindComponent<Button>("VignetteLowButton", "Button_VignetteLow");
+            vignetteMediumButton = vignetteMediumButton != null ? vignetteMediumButton : FindComponent<Button>("VignetteMediumButton", "Button_VignetteMedium", "VignetteMedButton");
+            vignetteHighButton = vignetteHighButton != null ? vignetteHighButton : FindComponent<Button>("VignetteHighButton", "Button_VignetteHigh");
+            languageButton = languageButton != null ? languageButton : FindComponent<Button>("LanguageButton", "Button_Language");
+            restartButton = restartButton != null ? restartButton : FindComponent<Button>("RestartButton", "Button_Restart");
+            settingsBackButton = settingsBackButton != null ? settingsBackButton : FindComponent<Button>("SettingsBackButton", "BackButton", "Button_Back");
+            settingsCancelButton = settingsCancelButton != null ? settingsCancelButton : FindComponent<Button>("SettingsCancelButton", "CancelButton", "Button_Cancel");
+            languageBackButton = languageBackButton != null ? languageBackButton : FindComponent<Button>("LanguageBackButton");
+            languageCancelButton = languageCancelButton != null ? languageCancelButton : FindComponent<Button>("LanguageCancelButton");
+        }
+
+        private void WireHierarchyControls()
+        {
+            if (controlsWired)
+            {
+                return;
+            }
+
+            Wire(masterSlider, OnMasterVolumeChanged);
+            Wire(teleportButton, SelectTeleport);
+            Wire(continuousMoveButton, SelectContinuousMove);
+            Wire(snapTurnButton, SelectSnapTurn);
+            Wire(continuousTurnButton, SelectContinuousTurn);
+            Wire(vignetteOffButton, SetVignetteOff);
+            Wire(vignetteLowButton, SetVignetteLow);
+            Wire(vignetteMediumButton, SetVignetteMedium);
+            Wire(vignetteHighButton, SetVignetteHigh);
+            Wire(languageButton, ShowLanguagePage);
+            Wire(restartButton, Restart);
+            Wire(settingsBackButton, Back);
+            Wire(settingsCancelButton, Cancel);
+            Wire(languageBackButton, Back);
+            Wire(languageCancelButton, Cancel);
+            controlsWired = true;
+        }
+
         private void BuildRuntimeView()
         {
             Transform existingRoot = transform.Find(RuntimeRootName);
@@ -187,8 +279,8 @@ namespace Wonderland.UI
             RectTransform root = CreateRect(RuntimeRootName, transform);
             root.anchorMin = Vector2.zero;
             root.anchorMax = Vector2.one;
-            root.offsetMin = new Vector2(28f, 24f);
-            root.offsetMax = new Vector2(-28f, -24f);
+            root.offsetMin = new Vector2(20f, 14f);
+            root.offsetMax = new Vector2(-20f, -14f);
 
             settingsPage = CreatePage("SettingsPage", root);
             languagePage = CreatePage("LanguagePage", root);
@@ -217,7 +309,7 @@ namespace Wonderland.UI
             page.offsetMax = Vector2.zero;
 
             VerticalLayoutGroup layout = page.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 12f;
+            layout.spacing = LayoutSpacing;
             layout.padding = new RectOffset(0, 0, 0, 0);
             layout.childControlWidth = true;
             layout.childControlHeight = false;
@@ -228,63 +320,47 @@ namespace Wonderland.UI
 
         private void BuildSettingsPage(Transform parent)
         {
-            AddLabel(parent, "Settings", 34, TextAlignmentOptions.Left);
-            AddSpacer(parent, 2f);
+            AddLocalizedLabel(parent, "Settings", "设置", "Inställningar", 22, TextAlignmentOptions.Left);
 
-            AddLabel(parent, "Master Audio", 20, TextAlignmentOptions.Left);
+            AddLocalizedLabel(parent, "Master Audio", "主音量", "Huvudvolym", 14, TextAlignmentOptions.Left);
             masterSlider = AddSlider(parent, 0f, 1f, wholeNumbers: false);
-            masterSlider.onValueChanged.AddListener(value =>
-            {
-                if (!suppressSliderEvents)
-                {
-                    WonderlandAudioBus.SetMasterVolume(value, save: true);
-                }
-            });
+            masterSlider.onValueChanged.AddListener(OnMasterVolumeChanged);
 
-            AddSectionLabel(parent, "Locomotion Mode");
+            AddLocalizedLabel(parent, "Locomotion", "移动", "Rörelse", 14, TextAlignmentOptions.Left);
             RectTransform moveRow = AddHorizontalRow(parent);
-            teleportButton = AddButton(moveRow, "Teleport", () => SetMovementMode(QuestLocomotionComfortProfile.MovementMode.Teleport));
-            continuousMoveButton = AddButton(moveRow, "Continuous", () => SetMovementMode(QuestLocomotionComfortProfile.MovementMode.Smooth));
+            teleportButton = AddLocalizedButton(moveRow, "Teleport", "传送", "Teleport", SelectTeleport);
+            continuousMoveButton = AddLocalizedButton(moveRow, "Continuous", "连续", "Kontinuerlig", SelectContinuousMove);
 
-            AddSectionLabel(parent, "Turn Mode");
+            AddLocalizedLabel(parent, "Turn", "转向", "Vridning", 14, TextAlignmentOptions.Left);
             RectTransform turnRow = AddHorizontalRow(parent);
-            snapTurnButton = AddButton(turnRow, "Snap", () => SetTurnMode(QuestLocomotionComfortProfile.TurnMode.Snap));
-            continuousTurnButton = AddButton(turnRow, "Continuous", () => SetTurnMode(QuestLocomotionComfortProfile.TurnMode.Smooth));
+            snapTurnButton = AddLocalizedButton(turnRow, "Snap", "瞬转", "Snäpp", SelectSnapTurn);
+            continuousTurnButton = AddLocalizedButton(turnRow, "Continuous", "连续", "Kontinuerlig", SelectContinuousTurn);
 
-            AddSectionLabel(parent, "Comfort Vignette");
+            AddLocalizedLabel(parent, "Comfort Vignette", "舒适晕影", "Vinjettering", 14, TextAlignmentOptions.Left);
             RectTransform vignetteRow = AddHorizontalRow(parent);
-            vignetteOffButton = AddButton(vignetteRow, "Off", () => SetVignetteLevel(0));
-            vignetteLowButton = AddButton(vignetteRow, "Low", () => SetVignetteLevel(1));
-            vignetteMediumButton = AddButton(vignetteRow, "Med", () => SetVignetteLevel(2));
-            vignetteHighButton = AddButton(vignetteRow, "High", () => SetVignetteLevel(3));
-            vignetteSlider = AddSlider(parent, 0f, 3f, wholeNumbers: true);
-            vignetteSlider.onValueChanged.AddListener(value =>
-            {
-                if (!suppressSliderEvents)
-                {
-                    SetVignetteLevel(Mathf.RoundToInt(value));
-                }
-            });
+            vignetteOffButton = AddLocalizedButton(vignetteRow, "Off", "关", "Av", SetVignetteOff);
+            vignetteLowButton = AddLocalizedButton(vignetteRow, "Low", "低", "Låg", SetVignetteLow);
+            vignetteMediumButton = AddLocalizedButton(vignetteRow, "Med", "中", "Med", SetVignetteMedium);
+            vignetteHighButton = AddLocalizedButton(vignetteRow, "High", "高", "Hög", SetVignetteHigh);
 
-            AddSpacer(parent, 4f);
-            AddButton(parent, "Language", ShowLanguagePage);
             AddFlexibleSpace(parent);
             RectTransform bottomRow = AddHorizontalRow(parent);
-            AddButton(bottomRow, "Back", Back);
-            AddButton(bottomRow, "Cancel", Cancel);
+            languageButton = AddLocalizedButton(bottomRow, "Language", "语言", "Språk", ShowLanguagePage);
+            restartButton = AddLocalizedButton(bottomRow, "Restart", "重启", "Starta om", Restart);
+            settingsBackButton = AddLocalizedButton(bottomRow, "Back", "返回", "Tillbaka", Back);
+            settingsCancelButton = AddLocalizedButton(bottomRow, "Cancel", "取消", "Avbryt", Cancel);
         }
 
         private void BuildLanguagePage(Transform parent)
         {
-            AddLabel(parent, "Language", 34, TextAlignmentOptions.Left);
-            AddSpacer(parent, 8f);
+            AddLocalizedLabel(parent, "Language", "语言", "Språk", 22, TextAlignmentOptions.Left);
             runtimeEnglishButton = AddButton(parent, "English", SetEnglish, out runtimeEnglishLabel);
-            runtimeChineseButton = AddButton(parent, "Chinese", SetChinese, out runtimeChineseLabel);
+            runtimeChineseButton = AddButton(parent, "中文", SetChinese, out runtimeChineseLabel);
             runtimeSwedishButton = AddButton(parent, "Svenska", SetSwedish, out runtimeSwedishLabel);
             AddFlexibleSpace(parent);
             RectTransform bottomRow = AddHorizontalRow(parent);
-            AddButton(bottomRow, "Back", Back);
-            AddButton(bottomRow, "Cancel", Cancel);
+            languageBackButton = AddLocalizedButton(bottomRow, "Back", "返回", "Tillbaka", Back);
+            languageCancelButton = AddLocalizedButton(bottomRow, "Cancel", "取消", "Avbryt", Cancel);
         }
 
         private void ApplySavedPreferences()
@@ -367,11 +443,6 @@ namespace Wonderland.UI
             }
 
             int vignetteLevel = PlayerPrefs.GetInt(VignetteLevelPrefKey, locomotionProfile != null && locomotionProfile.ComfortVignetteEnabled ? 2 : 0);
-            if (vignetteSlider != null)
-            {
-                vignetteSlider.value = vignetteLevel;
-            }
-
             suppressSliderEvents = false;
 
             QuestLocomotionComfortProfile.MovementMode movementMode = locomotionProfile != null
@@ -448,20 +519,33 @@ namespace Wonderland.UI
             }
 
             LayoutElement layout = go.AddComponent<LayoutElement>();
-            layout.minHeight = size + 8f;
-            layout.preferredHeight = size + 10f;
+            layout.minHeight = size + 2f;
+            layout.preferredHeight = size + 4f;
             return label;
         }
 
-        private void AddSectionLabel(Transform parent, string text)
+        private TMP_Text AddLocalizedLabel(Transform parent, string english, string chineseSimplified, string swedish, int size, TextAlignmentOptions alignment)
         {
-            AddSpacer(parent, 4f);
-            AddLabel(parent, text, 19, TextAlignmentOptions.Left);
+            TMP_Text label = AddLabel(parent, english, size, alignment);
+            LocalizedUIText localized = label.gameObject.AddComponent<LocalizedUIText>();
+            localized.SetTexts(english, chineseSimplified, swedish);
+            return label;
         }
 
         private Button AddButton(Transform parent, string text, UnityEngine.Events.UnityAction action)
         {
             return AddButton(parent, text, action, out _);
+        }
+
+        private Button AddLocalizedButton(Transform parent, string english, string chineseSimplified, string swedish, UnityEngine.Events.UnityAction action)
+        {
+            Button button = AddButton(parent, english, action, out TMP_Text label);
+            if (label != null)
+            {
+                LocalizedUIText localized = label.gameObject.AddComponent<LocalizedUIText>();
+                localized.SetTexts(english, chineseSimplified, swedish);
+            }
+            return button;
         }
 
         private Button AddButton(Transform parent, string text, UnityEngine.Events.UnityAction action, out TMP_Text label)
@@ -496,8 +580,8 @@ namespace Wonderland.UI
         {
             RectTransform root = CreateRect("Slider", parent);
             LayoutElement layout = root.gameObject.AddComponent<LayoutElement>();
-            layout.minHeight = 38f;
-            layout.preferredHeight = 38f;
+            layout.minHeight = SliderHeight;
+            layout.preferredHeight = SliderHeight;
 
             Image background = CreateImage("Background", root, new Color(0.2f, 0.24f, 0.27f, 0.95f));
             Stretch(background.rectTransform, new Vector2(0f, 0.35f), new Vector2(1f, 0.65f));
@@ -510,7 +594,7 @@ namespace Wonderland.UI
             RectTransform handleArea = CreateRect("Handle Slide Area", root);
             Stretch(handleArea, Vector2.zero, Vector2.one);
             Image handle = CreateImage("Handle", handleArea, Color.white);
-            handle.rectTransform.sizeDelta = new Vector2(24f, 24f);
+            handle.rectTransform.sizeDelta = new Vector2(20f, 20f);
 
             Slider slider = root.gameObject.AddComponent<Slider>();
             slider.minValue = min;
@@ -537,19 +621,67 @@ namespace Wonderland.UI
             return row;
         }
 
-        private void AddSpacer(Transform parent, float height)
-        {
-            RectTransform spacer = CreateRect("Spacer", parent);
-            LayoutElement layout = spacer.gameObject.AddComponent<LayoutElement>();
-            layout.minHeight = height;
-            layout.preferredHeight = height;
-        }
-
         private void AddFlexibleSpace(Transform parent)
         {
             RectTransform spacer = CreateRect("FlexibleSpace", parent);
             LayoutElement layout = spacer.gameObject.AddComponent<LayoutElement>();
             layout.flexibleHeight = 1f;
+        }
+
+        private RectTransform FindRect(params string[] names)
+        {
+            RectTransform[] rects = GetComponentsInChildren<RectTransform>(true);
+            for (int nameIndex = 0; nameIndex < names.Length; nameIndex++)
+            {
+                for (int i = 0; i < rects.Length; i++)
+                {
+                    if (rects[i] != null && rects[i].name == names[nameIndex])
+                    {
+                        return rects[i];
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private T FindComponent<T>(params string[] names) where T : Component
+        {
+            T[] components = GetComponentsInChildren<T>(true);
+            for (int nameIndex = 0; nameIndex < names.Length; nameIndex++)
+            {
+                for (int i = 0; i < components.Length; i++)
+                {
+                    if (components[i] != null && components[i].name == names[nameIndex])
+                    {
+                        return components[i];
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static void Wire(Button button, UnityEngine.Events.UnityAction action)
+        {
+            if (button == null || action == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveListener(action);
+            button.onClick.AddListener(action);
+        }
+
+        private static void Wire(Slider slider, UnityEngine.Events.UnityAction<float> action)
+        {
+            if (slider == null || action == null)
+            {
+                return;
+            }
+
+            slider.onValueChanged.RemoveListener(action);
+            slider.onValueChanged.AddListener(action);
         }
 
         private static RectTransform CreateRect(string name, Transform parent)

@@ -214,8 +214,9 @@ namespace Wonderland.UI.Editor
             SetObject(controller, "cancelButton", cancelButton);
             SetObject(controller, "exitButton", exitButton);
             SetObject(controller, "backButton", backButton);
-            SetVector3(controller, "worldScale", new Vector3(0.0014f, 0.0014f, 0.0014f));
+            SetVector3(controller, "worldScale", new Vector3(0.0015f, 0.0015f, 0.0015f));
 
+            VRSystemMenuHierarchyBaker.Bake(root);
             settingsPanel.SetActive(false);
 
             GameObject prefab = SavePrefab(root, MenuPrefabPath);

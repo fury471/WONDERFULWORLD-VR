@@ -172,6 +172,7 @@ public class MountController : MonoBehaviour
         }
 
         WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_MountTransition", transform.position, volumeScale: 1f, maxVoices: 3);
+        WonderfulWorld.Audio.WonderlandMountAudioAutoBinder.PlayVoice(gameObject, volumeScale: 0.85f, maxVoices: 2);
         stateRoutine = StartCoroutine(MountSequence());
     }
 

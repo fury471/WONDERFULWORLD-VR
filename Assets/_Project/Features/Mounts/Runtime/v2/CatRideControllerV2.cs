@@ -5,6 +5,7 @@ using UnityEngine.InputSystem;
 using Unity.XR.CoreUtils;
 using UnityEngine.XR.Interaction.Toolkit.Inputs.Simulation;
 using UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion;
 using UnityEngine.XR.Interaction.Toolkit.Locomotion.Comfort;
 
 public class CatRideControllerV2 : MonoBehaviour
@@ -122,8 +123,8 @@ public class CatRideControllerV2 : MonoBehaviour
     private bool playerCharacterControllerWasEnabled;
     private bool playerCharacterControllerDetectCollisionsWasEnabled;
     private bool locomotionRootWasActive;
-    private Behaviour[] locomotionRootBehaviours;
-    private bool[] locomotionRootBehaviourWasEnabled;
+    private LocomotionProvider[] lockedLocomotionProviders;
+    private bool[] lockedLocomotionProviderWasEnabled;
     private Transform rigOriginalParent;
     private int rigOriginalSiblingIndex = -1;
     private bool hasRigOriginalParent;
@@ -553,17 +554,25 @@ public class CatRideControllerV2 : MonoBehaviour
         for (int i = 0; i < rideVignetteControllers.Length; i++)
         {
             TunnelingVignetteController vignetteController = rideVignetteControllers[i];
-            if (vignetteController == null || !vignetteController.isActiveAndEnabled)
+            if (vignetteController == null)
             {
                 continue;
             }
 
             if (active)
             {
+                if (!vignetteController.isActiveAndEnabled)
+                {
+                    continue;
+                }
+
                 vignetteController.BeginTunnelingVignette(rideVignetteProvider);
             }
             else
             {
+                // Always queue the End even if the controller is momentarily disabled
+                // during a state transition — otherwise the provider's record stays
+                // pinned in EasingIn and the vignette is stuck after dismount.
                 vignetteController.EndTunnelingVignette(rideVignetteProvider);
             }
         }
@@ -836,6 +845,7 @@ public class CatRideControllerV2 : MonoBehaviour
         }
 
         WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_MountTransition", transform.position, volumeScale: 1f, maxVoices: 3);
+        WonderfulWorld.Audio.WonderlandMountAudioAutoBinder.PlayVoice(gameObject, volumeScale: 0.85f, maxVoices: 2);
         stateRoutine = StartCoroutine(MountSequence());
     }
 
@@ -1776,49 +1786,46 @@ public class CatRideControllerV2 : MonoBehaviour
 
         if (locked)
         {
-            locomotionRootBehaviours = locomotionRoot.GetComponentsInChildren<Behaviour>(true);
-            locomotionRootBehaviourWasEnabled = new bool[locomotionRootBehaviours.Length];
+            // Only disable LocomotionProvider components themselves. Touching every
+            // Behaviour under locomotionRoot also disabled LocomotionMediator,
+            // XRBodyTransformer and any UI / ray-interactor components a project
+            // might park under the locomotion subtree — which broke menu interaction
+            // and tunneling-vignette updates while mounted.
+            lockedLocomotionProviders = locomotionRoot.GetComponentsInChildren<LocomotionProvider>(true);
+            lockedLocomotionProviderWasEnabled = new bool[lockedLocomotionProviders.Length];
 
-            for (int i = 0; i < locomotionRootBehaviours.Length; i++)
+            for (int i = 0; i < lockedLocomotionProviders.Length; i++)
             {
-                Behaviour behaviour = locomotionRootBehaviours[i];
-                if (behaviour == null)
+                LocomotionProvider provider = lockedLocomotionProviders[i];
+                if (provider == null)
                 {
                     continue;
                 }
 
-                locomotionRootBehaviourWasEnabled[i] = behaviour.enabled;
-                if (!ShouldKeepLocomotionBehaviourEnabledDuringRide(behaviour))
-                {
-                    behaviour.enabled = false;
-                }
+                lockedLocomotionProviderWasEnabled[i] = provider.enabled;
+                provider.enabled = false;
             }
 
             return;
         }
 
-        if (locomotionRootBehaviours == null || locomotionRootBehaviourWasEnabled == null)
+        if (lockedLocomotionProviders == null || lockedLocomotionProviderWasEnabled == null)
         {
             return;
         }
 
-        int count = Mathf.Min(locomotionRootBehaviours.Length, locomotionRootBehaviourWasEnabled.Length);
+        int count = Mathf.Min(lockedLocomotionProviders.Length, lockedLocomotionProviderWasEnabled.Length);
         for (int i = 0; i < count; i++)
         {
-            Behaviour behaviour = locomotionRootBehaviours[i];
-            if (behaviour != null)
+            LocomotionProvider provider = lockedLocomotionProviders[i];
+            if (provider != null)
             {
-                behaviour.enabled = locomotionRootBehaviourWasEnabled[i];
+                provider.enabled = lockedLocomotionProviderWasEnabled[i];
             }
         }
 
-        locomotionRootBehaviours = null;
-        locomotionRootBehaviourWasEnabled = null;
-    }
-
-    private static bool ShouldKeepLocomotionBehaviourEnabledDuringRide(Behaviour behaviour)
-    {
-        return behaviour != null && behaviour.GetComponent<TunnelingVignetteController>() != null;
+        lockedLocomotionProviders = null;
+        lockedLocomotionProviderWasEnabled = null;
     }
 
     private sealed class RaycastHitDistanceComparer : System.Collections.IComparer
