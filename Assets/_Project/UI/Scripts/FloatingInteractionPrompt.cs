@@ -39,13 +39,11 @@ public class FloatingInteractionPrompt : MonoBehaviour
         // If the Player Camera is not assigned in the Inspector (which is normal for prefabs)
         if (playerCamera == null)
         {
-            // Automatically find the object with the "MainCamera" tag from your screenshot
-            GameObject mainCam = GameObject.FindGameObjectWithTag("MainCamera");
-            
-            if (mainCam != null)
+            playerCamera = QuestInteractionUtils.FindHeadTransform();
+
+            if (playerCamera != null)
             {
-                playerCamera = mainCam.transform;
-                if (enableDebugLog) Debug.Log($"[Prompt] Successfully linked to: {mainCam.name}");
+                if (enableDebugLog) Debug.Log($"[Prompt] Successfully linked to: {playerCamera.name}");
             }
             else
             {
@@ -56,6 +54,11 @@ public class FloatingInteractionPrompt : MonoBehaviour
 
     private void Update()
     {
+        if (playerCamera == null)
+        {
+            playerCamera = QuestInteractionUtils.FindHeadTransform();
+        }
+
         if (isCompleted || promptCanvasGroup == null || playerCamera == null)
         {
             if (enableDebugLog && playerCamera == null && Time.frameCount % 60 == 0) 

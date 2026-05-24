@@ -1,8 +1,8 @@
-# VFX Hooks (M2 - Wenao)
+# VFX Hooks
 
-This folder contains **decoupled visual/VFX hooks** for signature systems, meant for M3 integration into an exploration-first magical park slice.
+This folder contains decoupled visual and VFX hooks for signature systems in the production park scene.
 
-Current demonstration direction:
+Production direction:
 
 - use VFX hooks to support attraction identity, skyline spectacle, land readability, and soft-boundary atmosphere
 - avoid using them as hard mission rails or rigid sequence controllers

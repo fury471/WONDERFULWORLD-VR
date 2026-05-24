@@ -135,7 +135,7 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
 
         if (playerCamera == null)
         {
-            playerCamera = Camera.main;
+            playerCamera = ResolvePlayerCamera();
         }
     }
 
@@ -148,7 +148,7 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
 
         if (playerCamera == null)
         {
-            playerCamera = Camera.main;
+            playerCamera = ResolvePlayerCamera();
         }
     }
 
@@ -405,6 +405,11 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
 
         ray = default;
         return false;
+    }
+
+    private static Camera ResolvePlayerCamera()
+    {
+        return QuestInteractionUtils.FindHeadCamera();
     }
 
     private bool RayHitsOrb(Ray ray)

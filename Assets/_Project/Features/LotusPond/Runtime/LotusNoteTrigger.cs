@@ -728,11 +728,10 @@ public class LotusNoteTrigger : MonoBehaviour
 
     private static Vector3 ResolveFallbackMagicOrigin(Vector3 target)
     {
-        Camera mainCamera = Camera.main;
-        if (mainCamera != null)
+        Transform headTransform = QuestInteractionUtils.FindHeadTransform();
+        if (headTransform != null)
         {
-            Transform cameraTransform = mainCamera.transform;
-            return cameraTransform.position + cameraTransform.forward * 0.45f;
+            return headTransform.position + headTransform.forward * 0.45f;
         }
 
         return target + Vector3.up * 1.25f - Vector3.forward * 1.5f;

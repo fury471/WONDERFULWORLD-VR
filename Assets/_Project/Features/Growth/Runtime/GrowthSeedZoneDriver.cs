@@ -2,7 +2,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.SceneManagement;
 using UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
@@ -134,7 +133,11 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     [SerializeField] private bool logDebugMessages;
     [SerializeField] private bool drawDebugRay = true;
 
+    private const float ReferenceRefreshInterval = 0.5f;
+    private static readonly RaycastHitDistanceComparer RaycastHitComparer = new();
+
     private readonly List<PlantSlot> slots = new();
+    private readonly RaycastHit[] raycastHits = new RaycastHit[96];
     private PendingInput pendingInput;
     private Material runtimeEarthMaterial;
     private Material runtimeEarthParticleMaterial;
@@ -144,6 +147,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     private GrowthPlant hoveredMushroom;
     private QuestInteractableFeedback hoveredMushroomFeedback;
     private HapticImpulsePlayer rightHaptics;
+    private float nextReferenceRefreshTime;
 
     private void Awake()
     {
@@ -175,7 +179,11 @@ public class GrowthSeedZoneDriver : MonoBehaviour
 
     private void Update()
     {
-        AutoAssignReferences();
+        if (ShouldRefreshReferences())
+        {
+            AutoAssignReferences();
+        }
+
         UpdateMushroomHoverFeedback();
         UpdateInputChargeState();
     }
@@ -187,16 +195,17 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             growthZone = GetComponent<Collider>();
         }
 
-        if (interactionOrigin == null && Camera.main != null)
+        Transform headTransform = QuestInteractionUtils.FindHeadTransform();
+        if (interactionOrigin == null && headTransform != null)
         {
-            interactionOrigin = Camera.main.transform;
+            interactionOrigin = headTransform;
         }
 
         if (playerClearanceOrigin == null)
         {
-            if (Camera.main != null)
+            if (headTransform != null)
             {
-                playerClearanceOrigin = Camera.main.transform;
+                playerClearanceOrigin = headTransform;
             }
             else
             {
@@ -226,6 +235,36 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         {
             mushroomPool = GetComponentsInChildren<GrowthPlant>(includeInactive: true);
         }
+    }
+
+    private bool ShouldRefreshReferences()
+    {
+        bool needsRefresh =
+            growthZone == null ||
+            interactionOrigin == null ||
+            playerClearanceOrigin == null ||
+            rightHaptics == null ||
+            mushroomPool == null ||
+            mushroomPool.Length == 0 ||
+            (preferRightControllerOrigin && !IsRightControllerOrigin(interactionOrigin));
+
+        if (!needsRefresh)
+        {
+            return false;
+        }
+
+        if (!Application.isPlaying)
+        {
+            return true;
+        }
+
+        if (Time.unscaledTime < nextReferenceRefreshTime)
+        {
+            return false;
+        }
+
+        nextReferenceRefreshTime = Time.unscaledTime + ReferenceRefreshInterval;
+        return true;
     }
 
     private void BuildSlots()
@@ -381,28 +420,27 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             }
         }
 
-        RaycastHit[] hits = Physics.RaycastAll(ray, rayDistance, groundMask, QueryTriggerInteraction.Ignore);
-        if (hits == null || hits.Length == 0)
+        int hitCount = RaycastNonAllocSorted(ray, rayDistance);
+        if (hitCount <= 0)
         {
             return visualTarget;
         }
 
-        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
-            Collider hitCollider = hits[i].collider;
+            Collider hitCollider = raycastHits[i].collider;
             if (IsIgnoredRaycastHit(hitCollider))
             {
                 continue;
             }
 
-            if (visualTarget != null && visualDistance <= hits[i].distance + 0.03f)
+            if (visualTarget != null && visualDistance <= raycastHits[i].distance + 0.03f)
             {
                 hitPoint = ray.GetPoint(visualDistance);
                 return visualTarget;
             }
 
-            if (TryResolveCultivationTarget(hitCollider, hits[i].point, out hitPoint, out GrowthPlant targetPlant))
+            if (TryResolveCultivationTarget(hitCollider, raycastHits[i].point, out hitPoint, out GrowthPlant targetPlant))
             {
                 return targetPlant;
             }
@@ -485,7 +523,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
 
         if (enableMouseClickFallback && Mouse.current != null && Mouse.current.leftButton.isPressed)
         {
-            Camera camera = Camera.main;
+            Camera camera = QuestInteractionUtils.FindHeadCamera();
             if (camera == null)
             {
                 return false;
@@ -682,13 +720,12 @@ public class GrowthSeedZoneDriver : MonoBehaviour
                 out visualTargetDistance);
         }
 
-        RaycastHit[] hits = Physics.RaycastAll(ray, rayDistance, groundMask, QueryTriggerInteraction.Ignore);
-        if (hits != null && hits.Length > 0)
+        int hitCount = RaycastNonAllocSorted(ray, rayDistance);
+        if (hitCount > 0)
         {
-            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-
-            foreach (RaycastHit hit in hits)
+            for (int i = 0; i < hitCount; i++)
             {
+                RaycastHit hit = raycastHits[i];
                 Collider hitCollider = hit.collider;
                 if (IsIgnoredRaycastHit(hitCollider))
                 {
@@ -923,16 +960,15 @@ public class GrowthSeedZoneDriver : MonoBehaviour
 
     private float ResolveFirstBlockingHitDistance(Ray ray, GrowthPlant allowedPlant)
     {
-        RaycastHit[] hits = Physics.RaycastAll(ray, rayDistance, groundMask, QueryTriggerInteraction.Ignore);
-        if (hits == null || hits.Length == 0)
+        int hitCount = RaycastNonAllocSorted(ray, rayDistance);
+        if (hitCount <= 0)
         {
             return float.MaxValue;
         }
 
-        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
-            Collider hitCollider = hits[i].collider;
+            Collider hitCollider = raycastHits[i].collider;
             if (IsIgnoredRaycastHit(hitCollider))
             {
                 continue;
@@ -946,7 +982,7 @@ public class GrowthSeedZoneDriver : MonoBehaviour
 
             if (IsValidPlantingSurface(hitCollider) || IsBlockingInteractableHit(hitCollider))
             {
-                return hits[i].distance;
+                return raycastHits[i].distance;
             }
         }
 
@@ -1141,9 +1177,17 @@ public class GrowthSeedZoneDriver : MonoBehaviour
             return false;
         }
 
-        Transform clearanceOrigin = playerClearanceOrigin != null
-            ? playerClearanceOrigin
-            : (Camera.main != null ? Camera.main.transform : interactionOrigin);
+        Transform clearanceOrigin = playerClearanceOrigin;
+        if (clearanceOrigin == null)
+        {
+            clearanceOrigin = QuestInteractionUtils.FindHeadTransform();
+        }
+
+        if (clearanceOrigin == null)
+        {
+            clearanceOrigin = interactionOrigin;
+        }
+
         if (clearanceOrigin == null)
         {
             return false;
@@ -1287,21 +1331,15 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         }
 
         Vector3 probeOrigin = requestedPosition + Vector3.up * Mathf.Max(0.1f, spawnGroundProbeHeight);
-        RaycastHit[] hits = Physics.RaycastAll(
-            probeOrigin,
-            Vector3.down,
-            Mathf.Max(0.1f, spawnGroundProbeDepth),
-            groundMask,
-            QueryTriggerInteraction.Ignore);
-
-        if (hits == null || hits.Length == 0)
+        int hitCount = RaycastNonAllocSorted(probeOrigin, Vector3.down, Mathf.Max(0.1f, spawnGroundProbeDepth));
+        if (hitCount <= 0)
         {
             return requestedPosition;
         }
 
-        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-        foreach (RaycastHit hit in hits)
+        for (int i = 0; i < hitCount; i++)
         {
+            RaycastHit hit = raycastHits[i];
             if (IsIgnoredRaycastHit(hit.collider) || !IsValidPlantingSurface(hit.collider))
             {
                 continue;
@@ -1355,19 +1393,12 @@ public class GrowthSeedZoneDriver : MonoBehaviour
     private Vector3 ReprojectPointToGround(Vector3 flatPoint)
     {
         Vector3 reprojectionOrigin = flatPoint + Vector3.up * rayDistance;
-        RaycastHit[] hits = Physics.RaycastAll(
-            reprojectionOrigin,
-            Vector3.down,
-            rayDistance * 2f,
-            groundMask,
-            QueryTriggerInteraction.Ignore);
-
-        if (hits != null && hits.Length > 0)
+        int hitCount = RaycastNonAllocSorted(reprojectionOrigin, Vector3.down, rayDistance * 2f);
+        if (hitCount > 0)
         {
-            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-
-            foreach (RaycastHit hit in hits)
+            for (int i = 0; i < hitCount; i++)
             {
+                RaycastHit hit = raycastHits[i];
                 if (IsIgnoredRaycastHit(hit.collider) || !IsValidPlantingSurface(hit.collider))
                 {
                     continue;
@@ -1472,72 +1503,40 @@ public class GrowthSeedZoneDriver : MonoBehaviour
         return candidate != null && candidate.name.Contains("Right Controller");
     }
 
+    private int RaycastNonAllocSorted(Ray ray, float distance)
+    {
+        return RaycastNonAllocSorted(ray.origin, ray.direction, distance);
+    }
+
+    private int RaycastNonAllocSorted(Vector3 origin, Vector3 direction, float distance)
+    {
+        int hitCount = Physics.RaycastNonAlloc(
+            origin,
+            direction,
+            raycastHits,
+            Mathf.Max(0.01f, distance),
+            groundMask,
+            QueryTriggerInteraction.Ignore);
+
+        if (hitCount > 1)
+        {
+            System.Array.Sort(raycastHits, 0, hitCount, RaycastHitComparer);
+        }
+
+        return hitCount;
+    }
+
+    private sealed class RaycastHitDistanceComparer : IComparer<RaycastHit>
+    {
+        public int Compare(RaycastHit x, RaycastHit y)
+        {
+            return x.distance.CompareTo(y.distance);
+        }
+    }
+
     private static Transform FindRightControllerOrigin()
     {
-        Transform found = FindInScene("Right Controller Stabilized Attach");
-        if (found != null)
-        {
-            return found;
-        }
-
-        found = FindInScene("Right Controller Teleport Stabilized Origin");
-        if (found != null)
-        {
-            return found;
-        }
-
-        return FindInScene("Right Controller");
-    }
-
-    private static Transform FindInScene(string targetName)
-    {
-        if (string.IsNullOrWhiteSpace(targetName))
-        {
-            return null;
-        }
-
-        Scene activeScene = SceneManager.GetActiveScene();
-        if (!activeScene.IsValid() || !activeScene.isLoaded)
-        {
-            return null;
-        }
-
-        GameObject[] roots = activeScene.GetRootGameObjects();
-
-        for (int i = 0; i < roots.Length; i++)
-        {
-            Transform found = FindChildRecursive(roots[i].transform, targetName);
-            if (found != null)
-            {
-                return found;
-            }
-        }
-
-        return null;
-    }
-
-    private static Transform FindChildRecursive(Transform root, string targetName)
-    {
-        if (root == null)
-        {
-            return null;
-        }
-
-        if (root.name == targetName)
-        {
-            return root;
-        }
-
-        for (int i = 0; i < root.childCount; i++)
-        {
-            Transform found = FindChildRecursive(root.GetChild(i), targetName);
-            if (found != null)
-            {
-                return found;
-            }
-        }
-
-        return null;
+        return QuestInteractionUtils.FindControllerRayOrigin(true);
     }
 
     private IEnumerator FlyEarthMagicProjectile(Vector3 start, Vector3 end)

@@ -532,13 +532,13 @@ namespace WonderfulWorld.Features.Fireworks
 
         private Quaternion ResolveReadableRotation(Vector3 center)
         {
-            Camera camera = Camera.main;
-            if (camera == null)
+            Transform headTransform = QuestInteractionUtils.FindHeadTransform();
+            if (headTransform == null)
             {
                 return transform.rotation;
             }
 
-            Vector3 normal = center - camera.transform.position;
+            Vector3 normal = center - headTransform.position;
             if (normal.sqrMagnitude < 0.001f)
             {
                 normal = transform.forward;

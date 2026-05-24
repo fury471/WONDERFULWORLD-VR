@@ -12,6 +12,9 @@ using UnityEditor;
 [RequireComponent(typeof(ScaleTransitionController))]
 public class ScaleManager : MonoBehaviour
 {
+    private const float MinCharacterControllerHeight = 0.01f;
+    private const float CharacterControllerStepOffsetEpsilon = 0.001f;
+
     [Header("Core References")]
     [SerializeField] private Transform scaleRoot;
     [SerializeField] private Transform cameraPivot;
@@ -388,7 +391,7 @@ public class ScaleManager : MonoBehaviour
             targetCamera = GetComponentInChildren<Camera>(includeInactive: true);
             if (targetCamera == null)
             {
-                targetCamera = Camera.main;
+                targetCamera = QuestInteractionUtils.FindHeadCamera();
             }
         }
 
@@ -691,16 +694,20 @@ public class ScaleManager : MonoBehaviour
             GetHorizontalScale(baseControllerLossyScale));
         float localHeightMultiplier = heightMultiplier / verticalScaleRatio;
         float localRadiusMultiplier = radiusMultiplier / radiusScaleRatio;
-        float localHeight = baseControllerHeight * localHeightMultiplier;
-        float localRadius = baseControllerRadius * localRadiusMultiplier;
+        float localHeight = Mathf.Max(MinCharacterControllerHeight, baseControllerHeight * localHeightMultiplier);
+        float localRadius = Mathf.Max(0f, baseControllerRadius * localRadiusMultiplier);
 
-        characterController.stepOffset = 0f;
+        float preResizeMaxStepOffset = GetMaxAllowedStepOffset(
+            characterController.height,
+            characterController.radius,
+            currentLossyScale);
+        characterController.stepOffset = Mathf.Clamp(characterController.stepOffset, 0f, preResizeMaxStepOffset);
         characterController.height = localHeight;
         characterController.radius = localRadius;
 
-        float targetStepOffset = baseControllerStepOffset * localHeightMultiplier;
+        float targetStepOffset = baseControllerStepOffset * Mathf.Max(0f, heightMultiplier);
         float maxAllowedStepOffset = GetMaxAllowedStepOffset(localHeight, localRadius, currentLossyScale);
-        characterController.stepOffset = Mathf.Min(targetStepOffset, maxAllowedStepOffset);
+        characterController.stepOffset = Mathf.Clamp(targetStepOffset, 0f, maxAllowedStepOffset);
 
         Vector3 center = baseControllerCenter;
         center.y = baseControllerCenter.y * localHeightMultiplier;
@@ -821,6 +828,11 @@ public class ScaleManager : MonoBehaviour
         }
 
         bool wasEnabled = characterController.enabled;
+        if (enabled)
+        {
+            ClampCharacterControllerStepOffset();
+        }
+
         characterController.enabled = enabled;
         return wasEnabled;
     }
@@ -853,7 +865,11 @@ public class ScaleManager : MonoBehaviour
 
     private static float GetMaxAllowedStepOffset(float controllerHeight, float controllerRadius, Vector3 controllerLossyScale)
     {
-        return Mathf.Max(0f, controllerHeight - 0.001f);
+        float localHeightLimit = Mathf.Max(0f, controllerHeight - CharacterControllerStepOffsetEpsilon);
+        float scaledHeight = Mathf.Max(0f, controllerHeight * Mathf.Abs(controllerLossyScale.y));
+        float scaledRadius = Mathf.Max(0f, controllerRadius * GetHorizontalScale(controllerLossyScale));
+        float scaledColliderLimit = Mathf.Max(0f, scaledHeight + scaledRadius * 2f - CharacterControllerStepOffsetEpsilon);
+        return Mathf.Min(localHeightLimit, scaledColliderLimit);
     }
 
     private Transform ResolveXrCameraOffsetTransform()

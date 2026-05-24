@@ -170,9 +170,9 @@ namespace Wonderland.UI
             ResolveReferences();
 
             Transform origin = rightRayOrigin;
-            if (origin == null && Camera.main != null)
+            if (origin == null)
             {
-                origin = Camera.main.transform;
+                origin = global::QuestInteractionUtils.FindHeadTransform();
             }
 
             if (origin == null)
@@ -191,6 +191,12 @@ namespace Wonderland.UI
 
         private static Transform FindRightRayOrigin()
         {
+            Transform origin = global::QuestInteractionUtils.FindControllerRayOrigin(true);
+            if (origin != null)
+            {
+                return origin;
+            }
+
             string[] candidateNames =
             {
                 "Right Controller Stabilized Attach",
@@ -202,10 +208,10 @@ namespace Wonderland.UI
 
             for (int i = 0; i < candidateNames.Length; i++)
             {
-                GameObject candidate = GameObject.Find(candidateNames[i]);
+                Transform candidate = global::QuestInteractionUtils.FindInScene(candidateNames[i]);
                 if (candidate != null)
                 {
-                    return candidate.transform;
+                    return candidate;
                 }
             }
 

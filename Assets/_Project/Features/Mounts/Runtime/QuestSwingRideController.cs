@@ -451,20 +451,12 @@ public sealed class QuestSwingRideController : MonoBehaviour
 
         if (playerRigRoot == null)
         {
-            GameObject xrOrigin = GameObject.Find("WonderlandXROrigin");
-            if (xrOrigin != null)
-            {
-                playerRigRoot = xrOrigin.transform;
-            }
+            playerRigRoot = QuestInteractionUtils.FindInScene("WonderlandXROrigin");
         }
 
         if (playerHead == null)
         {
-            Camera mainCamera = Camera.main;
-            if (mainCamera != null)
-            {
-                playerHead = mainCamera.transform;
-            }
+            playerHead = QuestInteractionUtils.FindHeadTransform();
         }
 
         if (locomotionRoot == null && playerRigRoot != null)

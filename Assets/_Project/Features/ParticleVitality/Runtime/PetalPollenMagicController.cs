@@ -41,6 +41,7 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private InputActionReference collectAction;
     [SerializeField] private List<PetalPollenSource> sources = new List<PetalPollenSource>();
     [SerializeField] private bool autoDiscoverSources = true;
+    [SerializeField, Min(0.1f)] private float sourceAutoDiscoveryRetrySeconds = 0.5f;
 
     [Header("Beginner Debug")]
     [SerializeField] private bool enableKeyboardFallback = true;
@@ -287,6 +288,7 @@ public class PetalPollenMagicController : MonoBehaviour
     private bool questCollectActive;
     private bool questReleaseLockActive;
     private bool useViewFacingQuestShowcasePose;
+    private float nextSourceRefreshTime;
 
     private void Awake()
     {
@@ -701,8 +703,11 @@ public class PetalPollenMagicController : MonoBehaviour
         Transform reference = playerHead != null ? playerHead : rightRayOrigin;
         if (reference == null)
         {
-            Camera mainCamera = Camera.main;
-            reference = mainCamera != null ? mainCamera.transform : transform;
+            reference = QuestInteractionUtils.FindHeadTransform();
+            if (reference == null)
+            {
+                reference = transform;
+            }
         }
 
         return Vector3.Distance(reference.position, source.transform.position) <= Mathf.Max(0.1f, questNearInteractDistance);
@@ -718,8 +723,11 @@ public class PetalPollenMagicController : MonoBehaviour
         Transform reference = playerHead != null ? playerHead : rightRayOrigin;
         if (reference == null)
         {
-            Camera mainCamera = Camera.main;
-            reference = mainCamera != null ? mainCamera.transform : transform;
+            reference = QuestInteractionUtils.FindHeadTransform();
+            if (reference == null)
+            {
+                reference = transform;
+            }
         }
 
         return Vector3.Distance(reference.position, trigger.InteractionPosition) <= Mathf.Max(0.1f, questNearInteractDistance);
@@ -876,14 +884,12 @@ public class PetalPollenMagicController : MonoBehaviour
         RestoreAuthoredHandAnchor();
     }
 
-    private sealed class RaycastHitDistanceComparer : System.Collections.IComparer
+    private sealed class RaycastHitDistanceComparer : IComparer<RaycastHit>
     {
         public static readonly RaycastHitDistanceComparer Instance = new RaycastHitDistanceComparer();
 
-        public int Compare(object x, object y)
+        public int Compare(RaycastHit a, RaycastHit b)
         {
-            RaycastHit a = (RaycastHit)x;
-            RaycastHit b = (RaycastHit)y;
             return a.distance.CompareTo(b.distance);
         }
     }
@@ -1671,6 +1677,15 @@ public class PetalPollenMagicController : MonoBehaviour
                 return;
             }
         }
+
+        if (Application.isPlaying && Time.unscaledTime < nextSourceRefreshTime)
+        {
+            return;
+        }
+
+        nextSourceRefreshTime = Application.isPlaying
+            ? Time.unscaledTime + Mathf.Max(0.1f, sourceAutoDiscoveryRetrySeconds)
+            : 0f;
 
         sources.Clear();
         PetalPollenSource[] discovered = FindObjectsByType<PetalPollenSource>(FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -2838,9 +2853,9 @@ public class PetalPollenMagicController : MonoBehaviour
             view = playerHead;
         }
 
-        if (view == null && Camera.main != null)
+        if (view == null)
         {
-            view = Camera.main.transform;
+            view = QuestInteractionUtils.FindHeadTransform();
         }
 
         if (view == null)

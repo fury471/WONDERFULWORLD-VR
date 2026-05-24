@@ -1,10 +1,11 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.SceneManagement;
 using UnityEngine.Events;
 
 public class GrowthDriver : MonoBehaviour
 {
+    private const float ReferenceRefreshSeconds = 0.5f;
+
     [Header("Interaction Origin")]
     [SerializeField] private Transform interactionOrigin;
     [Header("XR Controllers")]
@@ -31,6 +32,7 @@ public class GrowthDriver : MonoBehaviour
     private bool singlePressedLastFrame;
     private bool clusterPressedLastFrame;
     private bool regressPressedLastFrame;
+    private float nextReferenceRefreshTime;
 
     [Header("Interaction Events")]
     [Tooltip("Events to trigger when growth is successfully activated")]
@@ -43,7 +45,10 @@ public class GrowthDriver : MonoBehaviour
 
     private void Update()
     {
-        AutoAssignReferences();
+        if (ShouldRefreshReferences())
+        {
+            AutoAssignReferences();
+        }
 
         if (interactionOrigin == null)
         {
@@ -181,14 +186,7 @@ public class GrowthDriver : MonoBehaviour
     {
         if (interactionOrigin == null)
         {
-            if (Camera.main != null)
-            {
-                interactionOrigin = Camera.main.transform;
-            }
-            else
-            {
-                interactionOrigin = FindInScene("Main Camera");
-            }
+            interactionOrigin = QuestInteractionUtils.FindHeadTransform();
         }
 
         if (singleGrowthController == null)
@@ -238,54 +236,31 @@ public class GrowthDriver : MonoBehaviour
         }
     }
 
-    private static Transform FindInScene(string targetName)
+    private bool ShouldRefreshReferences()
     {
-        if (string.IsNullOrWhiteSpace(targetName))
+        bool needsRefresh =
+            interactionOrigin == null ||
+            singleGrowthController == null ||
+            clusterGrowthController == null ||
+            singleTarget == null ||
+            clusterTarget == null;
+
+        if (!needsRefresh)
         {
-            return null;
+            return false;
         }
 
-        Scene activeScene = SceneManager.GetActiveScene();
-        if (!activeScene.IsValid() || !activeScene.isLoaded)
+        if (!Application.isPlaying)
         {
-            return null;
+            return true;
         }
 
-        GameObject[] roots = activeScene.GetRootGameObjects();
-
-        for (int i = 0; i < roots.Length; i++)
+        if (Time.unscaledTime < nextReferenceRefreshTime)
         {
-            Transform found = FindChildRecursive(roots[i].transform, targetName);
-            if (found != null)
-            {
-                return found;
-            }
+            return false;
         }
 
-        return null;
-    }
-
-    private static Transform FindChildRecursive(Transform root, string targetName)
-    {
-        if (root == null)
-        {
-            return null;
-        }
-
-        if (root.name == targetName)
-        {
-            return root;
-        }
-
-        for (int i = 0; i < root.childCount; i++)
-        {
-            Transform found = FindChildRecursive(root.GetChild(i), targetName);
-            if (found != null)
-            {
-                return found;
-            }
-        }
-
-        return null;
+        nextReferenceRefreshTime = Time.unscaledTime + ReferenceRefreshSeconds;
+        return true;
     }
 }

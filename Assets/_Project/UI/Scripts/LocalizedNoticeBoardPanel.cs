@@ -164,9 +164,9 @@ namespace Wonderland.UI
                 }
             }
 
-            if (followCamera == null && Camera.main != null)
+            if (followCamera == null)
             {
-                followCamera = Camera.main.transform;
+                followCamera = global::QuestInteractionUtils.FindHeadTransform();
             }
         }
 

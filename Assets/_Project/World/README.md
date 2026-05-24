@@ -2,9 +2,12 @@
 
 This folder assembles the seamless-feeling park slice that carries the project's open-world illusion.
 
-Current demonstration direction:
+Current production documentation:
 
-- `Docs/Current_Demonstration_Direction_v1.0.md`
+- `Docs/PROJECT_OVERVIEW.md`
+- `Docs/SYSTEM_STRUCTURE.md`
+- `Docs/CLEANUP_AND_STANDARDIZATION.md`
+- `Docs/VR_PERFORMANCE_GUIDE.md`
 
 ## Structure
 
@@ -12,10 +15,10 @@ Current demonstration direction:
 - `Regions`: zone blockouts, landmark prefabs, attraction staging prefabs, scenic connectors, and future zone content for places such as FlowerField or LotusPond.
 - `Shared`: prefabs, lighting, materials, and audio reused across the park.
 
-## Current M1 decision
+## Current Production Decision
 
 - The project uses one big scene that includes all major park parts.
-- The planned scene is `World_WonderlandPark.unity` inside `Persistent`.
+- The production scene is `World_WonderlandPark.unity` inside `Persistent`.
 - `Regions` does not mean separate playable scenes for the current demo. It means content folders that feed prefabs and organized assets into the master scene.
 - The park should feel open, exploratory, and larger than its playable footprint through strong sightlines, themed lands, scenic connectors, and soft boundaries.
 - Separate additive region scenes are a possible later optimization, not the current workflow.
