@@ -53,6 +53,10 @@ public class CatRideControllerV2 : MonoBehaviour
     [SerializeField] private bool allowQuestTriggerDismount = false;
     [SerializeField] private Color questMountOutlineColor = new Color(1f, 0.66f, 0.28f, 0.64f);
 
+    [Header("Mounted UI Safety")]
+    [SerializeField] private bool ignoreMountCollidersForRaycastsWhileMounted = true;
+    [SerializeField] private int mountedRaycastIgnoreLayer = 2;
+
     [Header("Manual Ride")]
     [SerializeField] private float manualMoveSpeed = 4f;
     [SerializeField] private float manualTurnSpeed = 120f;
@@ -146,6 +150,9 @@ public class CatRideControllerV2 : MonoBehaviour
     private bool hasRideGroundNormal;
     private readonly RaycastHit[] questRayHits = new RaycastHit[16];
     private Collider[] questTargetColliders;
+    private GameObject[] mountedRaycastIgnoredObjects;
+    private int[] mountedRaycastOriginalLayers;
+    private bool mountCollidersAreIgnoredForRaycasts;
     private QuestInteractableFeedback questFeedback;
     private HapticImpulsePlayer questRightHaptics;
     private bool questHovering;
@@ -184,6 +191,7 @@ public class CatRideControllerV2 : MonoBehaviour
     private void OnDisable()
     {
         QuestLocomotionComfortProfile.ComfortVignetteChanged -= HandleComfortVignetteChanged;
+        SetMountCollidersIgnoredForRaycasts(false);
         SetRideVignetteActive(false);
     }
 
@@ -400,6 +408,88 @@ public class CatRideControllerV2 : MonoBehaviour
         playerPosition.y = 0f;
         mountPosition.y = 0f;
         return Vector3.Distance(playerPosition, mountPosition) <= Mathf.Max(remountDistance, questMountMaxDistance);
+    }
+
+    private void SetMountCollidersIgnoredForRaycasts(bool ignored)
+    {
+        if (ignored && !ignoreMountCollidersForRaycastsWhileMounted)
+        {
+            return;
+        }
+
+        if (ignored)
+        {
+            if (mountCollidersAreIgnoredForRaycasts)
+            {
+                return;
+            }
+
+            Collider[] mountColliders = GetComponentsInChildren<Collider>(true);
+            var ignoredObjects = new List<GameObject>(mountColliders.Length);
+            var originalLayers = new List<int>(mountColliders.Length);
+            var seenObjects = new HashSet<GameObject>();
+
+            int ignoreLayer = LayerMask.NameToLayer("Ignore Raycast");
+            if (ignoreLayer < 0)
+            {
+                ignoreLayer = Mathf.Clamp(mountedRaycastIgnoreLayer, 0, 31);
+            }
+
+            Transform rigTransform = playerRigRoot != null ? playerRigRoot.transform : null;
+            for (int i = 0; i < mountColliders.Length; i++)
+            {
+                Collider targetCollider = mountColliders[i];
+                if (targetCollider == null)
+                {
+                    continue;
+                }
+
+                if (rigTransform != null && targetCollider.transform.IsChildOf(rigTransform))
+                {
+                    continue;
+                }
+
+                GameObject colliderObject = targetCollider.gameObject;
+                if (colliderObject == null || !seenObjects.Add(colliderObject))
+                {
+                    continue;
+                }
+
+                ignoredObjects.Add(colliderObject);
+                originalLayers.Add(colliderObject.layer);
+                colliderObject.layer = ignoreLayer;
+            }
+
+            mountedRaycastIgnoredObjects = ignoredObjects.ToArray();
+            mountedRaycastOriginalLayers = originalLayers.ToArray();
+            mountCollidersAreIgnoredForRaycasts = true;
+            return;
+        }
+
+        if (!mountCollidersAreIgnoredForRaycasts)
+        {
+            return;
+        }
+
+        if (mountedRaycastIgnoredObjects != null && mountedRaycastOriginalLayers != null)
+        {
+            int count = Mathf.Min(mountedRaycastIgnoredObjects.Length, mountedRaycastOriginalLayers.Length);
+            for (int i = 0; i < count; i++)
+            {
+                GameObject targetObject = mountedRaycastIgnoredObjects[i];
+                if (targetObject == null || mountedRaycastOriginalLayers[i] < 0)
+                {
+                    continue;
+                }
+
+                targetObject.layer = mountedRaycastOriginalLayers[i];
+            }
+        }
+
+        mountedRaycastIgnoredObjects = null;
+        mountedRaycastOriginalLayers = null;
+        mountCollidersAreIgnoredForRaycasts = false;
+        questTargetColliders = null;
     }
 
     private void SetQuestHover(bool hover)
@@ -868,6 +958,7 @@ public class CatRideControllerV2 : MonoBehaviour
 
         CacheRigReferences();
         SetPlayerLocomotionLocked(true);
+        SetMountCollidersIgnoredForRaycasts(true);
 
         currentState = RideState.Mounting;
 
@@ -1033,6 +1124,7 @@ public class CatRideControllerV2 : MonoBehaviour
     {
         if (playerRigRoot == null)
         {
+            SetMountCollidersIgnoredForRaycasts(false);
             stateRoutine = null;
             yield break;
         }
@@ -1132,6 +1224,7 @@ public class CatRideControllerV2 : MonoBehaviour
         currentAutoIndex = 0;
         currentState = RideState.Idle;
         hasRigOriginalParent = false;
+        SetMountCollidersIgnoredForRaycasts(false);
         UpdateKittyAnimation(0f, false);
         stateRoutine = null;
 
@@ -1797,7 +1890,7 @@ public class CatRideControllerV2 : MonoBehaviour
             // Only disable LocomotionProvider components themselves. Touching every
             // Behaviour under locomotionRoot also disabled LocomotionMediator,
             // XRBodyTransformer and any UI / ray-interactor components a project
-            // might park under the locomotion subtree — which broke menu interaction
+            // might park under the locomotion subtree, which broke menu interaction
             // and tunneling-vignette updates while mounted.
             lockedLocomotionProviders = locomotionRoot.GetComponentsInChildren<LocomotionProvider>(true);
             lockedLocomotionProviderWasEnabled = new bool[lockedLocomotionProviders.Length];
