@@ -183,7 +183,10 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
             return;
         }
 
-        orbRoot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        orbRoot = new GameObject("CherryGarden_CrystalOrb");
+        orbRoot.AddComponent<MeshFilter>();
+        orbRoot.AddComponent<MeshRenderer>();
+        orbRoot.AddComponent<SphereCollider>();
         orbRoot.name = "CherryGarden_CrystalOrb";
         orbRoot.transform.SetParent(transform, true);
         orbRoot.transform.position = ResolveOrbPosition();
@@ -203,16 +206,13 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
             orbRenderer.sharedMaterial = orbMaterial;
         }
 
-        GameObject halo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        GameObject halo = new GameObject("CherryGarden_CrystalOrbHighlightVeins");
+        halo.AddComponent<MeshFilter>();
+        halo.AddComponent<MeshRenderer>();
         halo.name = "CherryGarden_CrystalOrbHighlightVeins";
         halo.transform.SetParent(orbRoot.transform, false);
         halo.transform.localScale = Vector3.one * 1.06f;
         CrystalStoneOrbStyle.ApplyMesh(halo.GetComponent<MeshFilter>());
-        Collider haloCollider = halo.GetComponent<Collider>();
-        if (haloCollider != null)
-        {
-            Destroy(haloCollider);
-        }
 
         haloMaterial = CreateOrbMaterial(texture, new Color(1f, 0.78f, 0.94f, 0.52f), true, 2.85f);
         Renderer haloRenderer = halo.GetComponent<Renderer>();
@@ -888,21 +888,55 @@ public static class CrystalStoneOrbStyle
         };
 
         Vector3[] facetedVertices = new Vector3[baseTriangles.Length];
+        Vector2[] facetedUvs = new Vector2[baseTriangles.Length];
         int[] facetedTriangles = new int[baseTriangles.Length];
         for (int i = 0; i < baseTriangles.Length; i++)
         {
             facetedVertices[i] = baseVertices[baseTriangles[i]];
+            facetedUvs[i] = ResolveSphericalUv(facetedVertices[i]);
             facetedTriangles[i] = i;
+        }
+
+        for (int i = 0; i < facetedUvs.Length; i += 3)
+        {
+            FixTriangleUvSeam(facetedUvs, i);
         }
 
         sharedMesh = new Mesh
         {
             name = "WW_CrystalStoneOrb_FacetedMesh",
             vertices = facetedVertices,
+            uv = facetedUvs,
             triangles = facetedTriangles,
             bounds = new Bounds(Vector3.zero, Vector3.one)
         };
         sharedMesh.RecalculateNormals();
         return sharedMesh;
+    }
+
+    private static Vector2 ResolveSphericalUv(Vector3 vertex)
+    {
+        Vector3 normal = vertex.sqrMagnitude > 0.0001f ? vertex.normalized : Vector3.forward;
+        float u = 0.5f + Mathf.Atan2(normal.z, normal.x) / (Mathf.PI * 2f);
+        float v = 0.5f - Mathf.Asin(Mathf.Clamp(normal.y, -1f, 1f)) / Mathf.PI;
+        return new Vector2(u, v);
+    }
+
+    private static void FixTriangleUvSeam(Vector2[] uvs, int startIndex)
+    {
+        float minU = Mathf.Min(uvs[startIndex].x, Mathf.Min(uvs[startIndex + 1].x, uvs[startIndex + 2].x));
+        float maxU = Mathf.Max(uvs[startIndex].x, Mathf.Max(uvs[startIndex + 1].x, uvs[startIndex + 2].x));
+        if (maxU - minU <= 0.5f)
+        {
+            return;
+        }
+
+        for (int i = startIndex; i < startIndex + 3; i++)
+        {
+            if (uvs[i].x < 0.5f)
+            {
+                uvs[i].x += 1f;
+            }
+        }
     }
 }

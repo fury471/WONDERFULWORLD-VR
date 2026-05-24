@@ -168,16 +168,12 @@ public sealed class PetalPollenTrigger : MonoBehaviour
         Transform highlight = transform.Find("FlowerGarden_CrystalHighlightVeins");
         if (highlight == null)
         {
-            GameObject highlightObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            GameObject highlightObject = new GameObject("FlowerGarden_CrystalHighlightVeins");
+            highlightObject.AddComponent<MeshFilter>();
+            highlightObject.AddComponent<MeshRenderer>();
             highlightObject.name = "FlowerGarden_CrystalHighlightVeins";
             highlightObject.transform.SetParent(transform, false);
             highlight = highlightObject.transform;
-
-            Collider highlightCollider = highlightObject.GetComponent<Collider>();
-            if (highlightCollider != null)
-            {
-                Destroy(highlightCollider);
-            }
         }
 
         highlight.localPosition = Vector3.zero;
