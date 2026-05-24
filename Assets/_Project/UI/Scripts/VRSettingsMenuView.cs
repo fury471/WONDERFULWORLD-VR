@@ -24,7 +24,7 @@ namespace Wonderland.UI
         [SerializeField] private AudioMixer audioMixer;
         [SerializeField] private QuestLocomotionComfortProfile locomotionProfile;
         [SerializeField] private VRSystemMenuController systemMenu;
-        [SerializeField] private bool buildFallbackHierarchyAtRuntime = true;
+        [SerializeField] private bool buildFallbackHierarchyAtRuntime = false;
 
         [Header("Hierarchy Pages")]
         [SerializeField] private RectTransform settingsPage;
@@ -41,7 +41,6 @@ namespace Wonderland.UI
         [SerializeField] private Button vignetteMediumButton;
         [SerializeField] private Button vignetteHighButton;
         [SerializeField] private Button languageButton;
-        [SerializeField] private Button restartButton;
         [SerializeField] private Button settingsBackButton;
         [SerializeField] private Button settingsCancelButton;
         [SerializeField] private Button languageBackButton;
@@ -173,15 +172,6 @@ namespace Wonderland.UI
             }
         }
 
-        public void Restart()
-        {
-            ResolveRuntimeReferences();
-            if (systemMenu != null)
-            {
-                systemMenu.RestartCurrentScene();
-            }
-        }
-
         public void OnMasterVolumeChanged(float value)
         {
             if (!suppressSliderEvents)
@@ -232,7 +222,6 @@ namespace Wonderland.UI
             vignetteMediumButton = vignetteMediumButton != null ? vignetteMediumButton : FindComponent<Button>("VignetteMediumButton", "Button_VignetteMedium", "VignetteMedButton");
             vignetteHighButton = vignetteHighButton != null ? vignetteHighButton : FindComponent<Button>("VignetteHighButton", "Button_VignetteHigh");
             languageButton = languageButton != null ? languageButton : FindComponent<Button>("LanguageButton", "Button_Language");
-            restartButton = restartButton != null ? restartButton : FindComponent<Button>("RestartButton", "Button_Restart");
             settingsBackButton = settingsBackButton != null ? settingsBackButton : FindComponent<Button>("SettingsBackButton", "BackButton", "Button_Back");
             settingsCancelButton = settingsCancelButton != null ? settingsCancelButton : FindComponent<Button>("SettingsCancelButton", "CancelButton", "Button_Cancel");
             languageBackButton = languageBackButton != null ? languageBackButton : FindComponent<Button>("LanguageBackButton");
@@ -256,7 +245,6 @@ namespace Wonderland.UI
             Wire(vignetteMediumButton, SetVignetteMedium);
             Wire(vignetteHighButton, SetVignetteHigh);
             Wire(languageButton, ShowLanguagePage);
-            Wire(restartButton, Restart);
             Wire(settingsBackButton, Back);
             Wire(settingsCancelButton, Cancel);
             Wire(languageBackButton, Back);
@@ -344,9 +332,9 @@ namespace Wonderland.UI
             vignetteHighButton = AddLocalizedButton(vignetteRow, "High", "高", "Hög", SetVignetteHigh);
 
             AddFlexibleSpace(parent);
+            languageButton = AddLocalizedButton(parent, "Language", "语言", "Språk", ShowLanguagePage);
+
             RectTransform bottomRow = AddHorizontalRow(parent);
-            languageButton = AddLocalizedButton(bottomRow, "Language", "语言", "Språk", ShowLanguagePage);
-            restartButton = AddLocalizedButton(bottomRow, "Restart", "重启", "Starta om", Restart);
             settingsBackButton = AddLocalizedButton(bottomRow, "Back", "返回", "Tillbaka", Back);
             settingsCancelButton = AddLocalizedButton(bottomRow, "Cancel", "取消", "Avbryt", Cancel);
         }

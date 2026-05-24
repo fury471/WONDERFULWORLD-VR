@@ -374,7 +374,8 @@ namespace Wonderland.UI.Editor
             }
 
             LocalizedNoticeBoardPanel noticePanel = EnsurePrefabInstance<LocalizedNoticeBoardPanel>(NoticePanelPrefabPath, "WW_NoticeBoardOverlayPanel", systemRoot.transform);
-            VRSystemMenuController systemMenu = EnsurePrefabInstance<VRSystemMenuController>(MenuPrefabPath, "WW_VRSystemMenu", systemRoot.transform);
+            VRSystemMenuController systemMenu = EnsureSystemMenuInstance(systemRoot.transform);
+            VRSystemMenuHierarchyBaker.Bake(systemMenu.gameObject);
 
             GameObject board = FindSceneObject("Notice_Board");
             if (board == null)
@@ -434,6 +435,20 @@ namespace Wonderland.UI.Editor
 
             EditorUtility.SetDirty(systemMenu);
             EditorUtility.SetDirty(noticePanel);
+        }
+
+        private static VRSystemMenuController EnsureSystemMenuInstance(Transform systemRoot)
+        {
+            if (systemRoot != null)
+            {
+                VRSystemMenuController existingUnderSystemRoot = systemRoot.GetComponentInChildren<VRSystemMenuController>(true);
+                if (existingUnderSystemRoot != null)
+                {
+                    return existingUnderSystemRoot;
+                }
+            }
+
+            return EnsurePrefabInstance<VRSystemMenuController>(MenuPrefabPath, "WW_VRSystemMenu", systemRoot);
         }
 
         private static LocalizedNoticeBoardSurface EnsureBoardSurface(GameObject board, LocalizedNoticeBoardContent content, Transform panelSurfaceTransform, Bounds panelBounds)

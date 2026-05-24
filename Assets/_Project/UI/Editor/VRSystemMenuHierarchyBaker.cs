@@ -1,7 +1,9 @@
 using TMPro;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Audio;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace Wonderland.UI.Editor
@@ -10,6 +12,7 @@ namespace Wonderland.UI.Editor
     {
         private const string PrefabPath = "Assets/_Project/UI/Prefabs/WW_VRSystemMenu.prefab";
         private const string MixerPath = "Assets/_Project/Audio/Mixers/WW_AudioMixer.mixer";
+        private const string MainScenePath = "Assets/_Project/World/Persistent/World_WonderlandPark.unity";
 
         [MenuItem("Wonderful World/UI/Bake VR System Menu Hierarchy")]
         public static void BakeDefaultPrefab()
@@ -24,6 +27,64 @@ namespace Wonderland.UI.Editor
             {
                 PrefabUtility.UnloadPrefabContents(root);
             }
+        }
+
+        [MenuItem("Wonderful World/UI/Merge Existing WW_UI_System Menu")]
+        public static void MergeMainSceneMenu()
+        {
+            Scene scene = EditorSceneManager.OpenScene(MainScenePath, OpenSceneMode.Single);
+            int bakedCount = BakeSceneMenus();
+            if (bakedCount > 0)
+            {
+                EditorSceneManager.MarkSceneDirty(scene);
+                EditorSceneManager.SaveScene(scene);
+            }
+        }
+
+        [MenuItem("Wonderful World/UI/Merge Open Scene Menus")]
+        public static void MergeOpenSceneMenus()
+        {
+            int bakedCount = BakeSceneMenus();
+            if (bakedCount > 0)
+            {
+                EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            }
+        }
+
+        public static int BakeSceneMenus()
+        {
+            int bakedCount = 0;
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+            VRSystemMenuController[] menus = Object.FindObjectsByType<VRSystemMenuController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+#pragma warning disable CS0618
+            VRSystemMenuController[] menus = Object.FindObjectsOfType<VRSystemMenuController>(true);
+#pragma warning restore CS0618
+#endif
+            for (int i = 0; i < menus.Length; i++)
+            {
+                VRSystemMenuController menu = menus[i];
+                if (menu == null || EditorUtility.IsPersistent(menu))
+                {
+                    continue;
+                }
+
+                Bake(menu.gameObject);
+                PrefabUtility.RecordPrefabInstancePropertyModifications(menu.gameObject);
+                EditorUtility.SetDirty(menu.gameObject);
+                bakedCount++;
+            }
+
+            if (bakedCount == 0)
+            {
+                Debug.LogWarning("[VRSystemMenuHierarchyBaker] No VRSystemMenuController found in the open scene.");
+            }
+            else
+            {
+                Debug.Log($"[VRSystemMenuHierarchyBaker] Merged {bakedCount} existing scene menu(s).");
+            }
+
+            return bakedCount;
         }
 
         public static void Bake(GameObject root)
@@ -46,7 +107,7 @@ namespace Wonderland.UI.Editor
 
             BuildSettingsPage(settingsPage);
             BuildLanguagePage(languagePage);
-            HideLegacySettingsChildren(settingsPanel, settingsPage, languagePage);
+            RemoveLegacySettingsChildren(settingsPanel, settingsPage, languagePage);
             Button restartButton = EnsureMainRestartButton(mainPanel);
 
             VRSettingsMenuView view = settingsPanel.GetComponent<VRSettingsMenuView>();
@@ -71,7 +132,6 @@ namespace Wonderland.UI.Editor
             Set(viewObject, "vignetteMediumButton", Find<Button>(settingsPage, "VignetteMediumButton"));
             Set(viewObject, "vignetteHighButton", Find<Button>(settingsPage, "VignetteHighButton"));
             Set(viewObject, "languageButton", Find<Button>(settingsPage, "LanguageButton"));
-            Set(viewObject, "restartButton", Find<Button>(settingsPage, "RestartButton"));
             Set(viewObject, "settingsBackButton", Find<Button>(settingsPage, "SettingsBackButton"));
             Set(viewObject, "settingsCancelButton", Find<Button>(settingsPage, "SettingsCancelButton"));
             Set(viewObject, "languageBackButton", Find<Button>(languagePage, "LanguageBackButton"));
@@ -86,6 +146,7 @@ namespace Wonderland.UI.Editor
 
             SerializedObject menuObject = new SerializedObject(systemMenu);
             Set(menuObject, "restartButton", restartButton);
+            Set(menuObject, "backButton", Find<Button>(settingsPage, "SettingsBackButton"));
             Set(menuObject, "distanceFromCamera", 1.3f);
             Set(menuObject, "cameraLocalOffset", new Vector3(0f, -0.12f, 0f));
             Set(menuObject, "worldScale", new Vector3(0.0015f, 0.0015f, 0.0015f));
@@ -112,10 +173,9 @@ namespace Wonderland.UI.Editor
             AddButton(page, "VignetteMediumButton", "Med", "\u4e2d", "Med", new Vector2(218f, -56f), new Vector2(82f, 40f));
             AddButton(page, "VignetteHighButton", "High", "\u9ad8", "H\u00f6g", new Vector2(306f, -56f), new Vector2(82f, 40f));
 
-            AddButton(page, "LanguageButton", "Language", "\u8bed\u8a00", "Spr\u00e5k", new Vector2(-210f, -164f), new Vector2(150f, 46f));
-            AddButton(page, "RestartButton", "Restart", "\u91cd\u542f", "Starta om", new Vector2(-52f, -164f), new Vector2(140f, 46f));
-            AddButton(page, "SettingsBackButton", "Back", "\u8fd4\u56de", "Tillbaka", new Vector2(102f, -164f), new Vector2(130f, 46f));
-            AddButton(page, "SettingsCancelButton", "Cancel", "\u53d6\u6d88", "Avbryt", new Vector2(250f, -164f), new Vector2(140f, 46f));
+            AddButton(page, "LanguageButton", "Language", "\u8bed\u8a00", "Spr\u00e5k", new Vector2(80f, -122f), new Vector2(440f, 46f));
+            AddButton(page, "SettingsBackButton", "Back", "\u8fd4\u56de", "Tillbaka", new Vector2(80f, -176f), new Vector2(210f, 46f));
+            AddButton(page, "SettingsCancelButton", "Cancel", "\u53d6\u6d88", "Avbryt", new Vector2(310f, -176f), new Vector2(210f, 46f));
         }
 
         private static void BuildLanguagePage(RectTransform page)
@@ -269,9 +329,9 @@ namespace Wonderland.UI.Editor
             }
         }
 
-        private static void HideLegacySettingsChildren(Transform settingsPanel, RectTransform settingsPage, RectTransform languagePage)
+        private static void RemoveLegacySettingsChildren(Transform settingsPanel, RectTransform settingsPage, RectTransform languagePage)
         {
-            for (int i = 0; i < settingsPanel.childCount; i++)
+            for (int i = settingsPanel.childCount - 1; i >= 0; i--)
             {
                 Transform child = settingsPanel.GetChild(i);
                 if (child == settingsPage || child == languagePage)
@@ -279,7 +339,7 @@ namespace Wonderland.UI.Editor
                     continue;
                 }
 
-                child.gameObject.SetActive(false);
+                Object.DestroyImmediate(child.gameObject);
             }
         }
 
