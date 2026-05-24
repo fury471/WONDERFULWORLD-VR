@@ -606,9 +606,16 @@ public class ScaleManager : MonoBehaviour
 
         if (characterController != null)
         {
+            PrepareCharacterControllerForStepOffsetWrite();
             baseControllerHeight = characterController.height;
             baseControllerRadius = characterController.radius;
-            baseControllerStepOffset = characterController.stepOffset;
+            baseControllerStepOffset = Mathf.Clamp(
+                characterController.stepOffset,
+                0f,
+                GetMaxAllowedStepOffset(
+                    characterController.height,
+                    characterController.radius,
+                    characterController.transform.lossyScale));
             baseControllerCenter = characterController.center;
             baseControllerLossyScale = characterController.transform.lossyScale;
             baseControllerCaptured = true;
@@ -703,6 +710,7 @@ public class ScaleManager : MonoBehaviour
         localHeight = Mathf.Max(localHeight, localRadius * 2f + CharacterControllerRadiusEpsilon);
         localRadius = Mathf.Clamp(localRadius, 0f, Mathf.Max(0f, localHeight * 0.5f - CharacterControllerRadiusEpsilon));
 
+        PrepareCharacterControllerForStepOffsetWrite();
         ForceCharacterControllerStepOffsetZero();
 
         if (characterController.height < localHeight)
@@ -836,6 +844,7 @@ public class ScaleManager : MonoBehaviour
             wasEnabled = characterController.enabled
         };
 
+        PrepareCharacterControllerForStepOffsetWrite();
         ForceCharacterControllerStepOffsetZero();
         if (characterController.enabled)
         {
@@ -852,6 +861,7 @@ public class ScaleManager : MonoBehaviour
             return;
         }
 
+        PrepareCharacterControllerForStepOffsetWrite();
         ForceCharacterControllerStepOffsetZero();
 
         if (mutation.wasEnabled)
@@ -872,6 +882,41 @@ public class ScaleManager : MonoBehaviour
         if (characterController.stepOffset != 0f)
         {
             characterController.stepOffset = 0f;
+        }
+    }
+
+    private void PrepareCharacterControllerForStepOffsetWrite()
+    {
+        if (characterController == null)
+        {
+            return;
+        }
+
+        float currentStepOffset = Mathf.Max(0f, characterController.stepOffset);
+        float currentRadius = Mathf.Max(0f, characterController.radius);
+        Vector3 lossyScale = characterController.transform.lossyScale;
+        float scaleY = Mathf.Max(0.0001f, Mathf.Abs(lossyScale.y));
+        float scaleH = GetHorizontalScale(lossyScale);
+        float scaledRadius = currentRadius * scaleH;
+        float requiredHeightForScaledStep = Mathf.Max(
+            0f,
+            (currentStepOffset + CharacterControllerStepOffsetEpsilon * 2f - scaledRadius * 2f) / scaleY);
+        float requiredHeight = Mathf.Max(
+            MinCharacterControllerHeight,
+            characterController.height,
+            currentStepOffset + CharacterControllerStepOffsetEpsilon * 2f,
+            currentRadius * 2f + CharacterControllerRadiusEpsilon * 2f,
+            requiredHeightForScaledStep);
+
+        if (characterController.height < requiredHeight)
+        {
+            characterController.height = requiredHeight;
+        }
+
+        float maxRadius = Mathf.Max(0f, requiredHeight * 0.5f - CharacterControllerRadiusEpsilon);
+        if (characterController.radius > maxRadius)
+        {
+            characterController.radius = maxRadius;
         }
     }
 
