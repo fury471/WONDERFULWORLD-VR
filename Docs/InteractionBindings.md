@@ -105,7 +105,7 @@ Path: `World_Regions/Region_CatGarden/`
 
 Three independent mounts, all sharing the same script:
 [`CatRideControllerV2`](../Assets/_Project/Features/Mounts/Runtime/v2/CatRideControllerV2.cs).
-Each animal has its own `CatMount_Root_V2` instance.
+Each animal has its own root: `MountRig_Cat`, `MountRig_Dog`, and `MountRig_Horse`.
 
 ### 2.1 Shared mount behaviour
 

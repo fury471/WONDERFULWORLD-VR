@@ -118,6 +118,7 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
         activated = true;
         interactionFeedback?.SetInteractable(false);
         interactionFeedback?.PulseSelect(null);
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_CrystalSelect", ResolveOrbPosition(), volumeScale: 1f, maxVoices: 4);
         StartCoroutine(ActivateSequence());
     }
 
@@ -471,12 +472,15 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
     private IEnumerator ActivateSequence()
     {
         yield return CollapseOrb();
+        Vector3 growthPosition = treeGrowthController != null ? treeGrowthController.transform.position : ResolveOrbPosition();
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_GrowthRustle", growthPosition, volumeScale: 1f, maxVoices: 4);
         treeGrowthController?.PlayGrowthOnce();
         flowerVortexEffect?.PlayOnce();
     }
 
     private IEnumerator CollapseOrb()
     {
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_CrystalCollapse", ResolveOrbPosition(), volumeScale: 1f, maxVoices: 4);
         float duration = Mathf.Max(0.01f, collapseDuration);
         float elapsed = 0f;
 

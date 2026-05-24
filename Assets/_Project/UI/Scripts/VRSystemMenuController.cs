@@ -127,6 +127,11 @@ namespace Wonderland.UI
         {
             if (mainPanel != null) mainPanel.SetActive(false);
             if (settingsPanel != null) settingsPanel.SetActive(true);
+            VRSettingsMenuView settingsView = settingsPanel != null ? settingsPanel.GetComponentInChildren<VRSettingsMenuView>(true) : null;
+            if (settingsView != null)
+            {
+                settingsView.ShowSettingsPage();
+            }
         }
 
         public void ShowMainPanel()

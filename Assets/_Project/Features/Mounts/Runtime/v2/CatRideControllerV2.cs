@@ -835,6 +835,7 @@ public class CatRideControllerV2 : MonoBehaviour
             return;
         }
 
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_MountTransition", transform.position, volumeScale: 1f, maxVoices: 3);
         stateRoutine = StartCoroutine(MountSequence());
     }
 
@@ -1006,6 +1007,7 @@ public class CatRideControllerV2 : MonoBehaviour
         }
 
         SetRideVignetteActive(false);
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_MountTransition", transform.position, volumeScale: 0.9f, maxVoices: 3);
         stateRoutine = StartCoroutine(DismountSequence());
     }
 

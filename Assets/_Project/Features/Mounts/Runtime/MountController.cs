@@ -171,6 +171,7 @@ public class MountController : MonoBehaviour
             stateRoutine = null;
         }
 
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_MountTransition", transform.position, volumeScale: 1f, maxVoices: 3);
         stateRoutine = StartCoroutine(MountSequence());
     }
 
@@ -256,6 +257,7 @@ public class MountController : MonoBehaviour
             stateRoutine = null;
         }
 
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_MountTransition", transform.position, volumeScale: 0.9f, maxVoices: 3);
         stateRoutine = StartCoroutine(DismountSequence());
     }
 

@@ -18,7 +18,8 @@ namespace WonderfulWorld.Audio
                 return;
             }
 
-            WonderlandAudioCue cue = WonderlandRuntimeAudioLibrary.ResolveMountFootstepCue(mountRoot.transform);
+            MountFootstepProfile profile = ResolveProfile(mountRoot.transform);
+            WonderlandAudioCue cue = WonderlandRuntimeAudioLibrary.ResolveMountFootstepCue(profile);
             if (cue == null)
             {
                 return;
@@ -30,11 +31,22 @@ namespace WonderfulWorld.Audio
                 footstepAudio = mountRoot.AddComponent<MountFootstepAudio>();
             }
 
-            footstepAudio.Configure(cue, mountRoot.transform, ResolveEmitter(mountRoot.transform), ResolveProfile(mountRoot.transform));
+            footstepAudio.Configure(cue, mountRoot.transform, ResolveEmitter(mountRoot.transform), profile);
         }
 
         private static MountFootstepProfile ResolveProfile(Transform root)
         {
+            if (root != null && root.TryGetComponent(out WonderlandMountAudioProfile explicitProfile))
+            {
+                return explicitProfile.Profile;
+            }
+
+            MountFootstepAudio existingFootsteps = root != null ? root.GetComponent<MountFootstepAudio>() : null;
+            if (existingFootsteps != null && existingFootsteps.HasProfileOverride)
+            {
+                return existingFootsteps.ProfileOverride;
+            }
+
             if (WonderlandRuntimeAudioLibrary.HasComponentNamed(root, "HorseSummonV2") ||
                 WonderlandRuntimeAudioLibrary.HierarchyContainsName(root, "Horse"))
             {
@@ -58,6 +70,12 @@ namespace WonderfulWorld.Audio
 
         private static Transform ResolveEmitter(Transform root)
         {
+            if (root != null && root.TryGetComponent(out WonderlandMountAudioProfile explicitProfile) &&
+                explicitProfile.FootstepEmitter != null)
+            {
+                return explicitProfile.FootstepEmitter;
+            }
+
             return FindChildContains(root, "Visual") ??
                    FindChildContains(root, "Kitty") ??
                    FindChildContains(root, "Dog") ??

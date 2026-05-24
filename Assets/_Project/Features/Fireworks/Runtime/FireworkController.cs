@@ -71,7 +71,6 @@ namespace WonderfulWorld.Features.Fireworks
         [SerializeField] private bool useProceduralAudioFallback = true;
 
         private Coroutine showcaseRoutine;
-        private Coroutine pointCloudAudioRoutine;
         private static AudioClip proceduralLaunchClip;
         private static AudioClip proceduralBurstClip;
 
@@ -232,7 +231,7 @@ namespace WonderfulWorld.Features.Fireworks
                 request.rotationSpeedDegrees,
                 request.rotationAxis,
                 request.extraHoldDuration);
-            ScheduleBurstAudio(pointCloudBurstAudioDelay);
+            ScheduleBurstAudio(pointCloudBurstAudioDelay, center);
             PointCloudFireworkSpawned?.Invoke(request, center);
         }
 
@@ -435,6 +434,13 @@ namespace WonderfulWorld.Features.Fireworks
 
         private void PlayLaunchAudio()
         {
+            Vector3 position = launchPoint != null ? launchPoint.position : transform.position;
+            if (WonderfulWorld.Audio.WonderlandRuntimeAudioLibrary.LoadCue("WW_SFX_FireworkLaunch") != null)
+            {
+                WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_FireworkLaunch", position, volumeScale: 1f, maxVoices: 6);
+                return;
+            }
+
             AudioClip clip = launchAudioClip != null
                 ? launchAudioClip
                 : (useProceduralAudioFallback ? GetProceduralLaunchClip() : null);
@@ -447,19 +453,23 @@ namespace WonderfulWorld.Features.Fireworks
             audioSource.PlayOneShot(clip, launchAudioVolume);
         }
 
-        private void ScheduleBurstAudio(float delay)
+        private void ScheduleBurstAudio(float delay, Vector3 position)
         {
             if (burstAudioClip == null && !useProceduralAudioFallback)
             {
+                if (WonderfulWorld.Audio.WonderlandRuntimeAudioLibrary.LoadCue("WW_SFX_FireworkBurst") == null)
+                {
+                    return;
+                }
+            }
+
+            if (WonderfulWorld.Audio.WonderlandRuntimeAudioLibrary.LoadCue("WW_SFX_FireworkBurst") != null)
+            {
+                StartCoroutine(PlayWonderlandBurstAudioAfterDelay(Mathf.Max(0f, delay), position));
                 return;
             }
 
-            if (pointCloudAudioRoutine != null)
-            {
-                StopCoroutine(pointCloudAudioRoutine);
-            }
-
-            pointCloudAudioRoutine = StartCoroutine(PlayBurstAudioAfterDelay(Mathf.Max(0f, delay)));
+            StartCoroutine(PlayBurstAudioAfterDelay(Mathf.Max(0f, delay)));
         }
 
         private IEnumerator PlayBurstAudioAfterDelay(float delay)
@@ -476,7 +486,20 @@ namespace WonderfulWorld.Features.Fireworks
                 audioSource.PlayOneShot(clip, burstAudioVolume);
             }
 
-            pointCloudAudioRoutine = null;
+        }
+
+        private IEnumerator PlayWonderlandBurstAudioAfterDelay(float delay, Vector3 position)
+        {
+            if (delay > 0f)
+            {
+                yield return new WaitForSeconds(delay);
+            }
+
+            WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt(
+                "WW_SFX_FireworkBurst",
+                position,
+                volumeScale: 1f,
+                maxVoices: 6);
         }
 
         private void EnsureAudioSource()

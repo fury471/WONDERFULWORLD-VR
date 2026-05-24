@@ -18,6 +18,8 @@ public class GrowthController : MonoBehaviour
 
     public void TriggerGrowth()
     {
+        PlayGrowthAudio();
+
         if (targetCluster != null)
         {
             targetCluster.AdvanceAllPlants();
@@ -48,6 +50,7 @@ public class GrowthController : MonoBehaviour
     {
         if (targetPlant != null)
         {
+            PlayGrowthAudio();
             targetPlant.AdvanceStage();
         }
     }
@@ -56,6 +59,7 @@ public class GrowthController : MonoBehaviour
     {
         if (targetCluster != null)
         {
+            PlayGrowthAudio();
             targetCluster.AdvanceAllPlants();
         }
     }
@@ -95,5 +99,10 @@ public class GrowthController : MonoBehaviour
                 targetCluster = FindFirstObjectByType<GrowthCluster>();
             }
         }
+    }
+
+    private void PlayGrowthAudio()
+    {
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_GrowthRustle", transform.position, volumeScale: 1f, maxVoices: 4);
     }
 }

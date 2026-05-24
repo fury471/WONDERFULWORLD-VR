@@ -4,6 +4,7 @@ using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Audio;
 using UnityEngine.SceneManagement;
 using WonderfulWorld.Audio;
 
@@ -18,6 +19,7 @@ namespace WonderfulWorld.Audio.Editor
         private const string LegacyCatMountPrefabPath = "Assets/_Project/Features/Mounts/Prefabs/CatMount_Root.prefab";
 
         private const string CueRoot = "Assets/_Project/Audio/Resources/AudioCues";
+        private const string MixerPath = "Assets/_Project/Audio/Mixers/WW_AudioMixer.mixer";
         private const string NightForestClip = "Assets/_Project/Audio/Ambience/NightForest_AfterRain_BigSoundBank_0555.ogg";
         private const string WaterfallLoopClip = "Assets/_Project/Audio/SFX/Water/Watercourse_5_2_BigSoundBank_3137.ogg";
         private const string WaterfallDetailClip = "Assets/_Project/Audio/SFX/Water/SmallWaterfall_02_BigSoundBank_0219.ogg";
@@ -28,6 +30,12 @@ namespace WonderfulWorld.Audio.Editor
         private const string CatVoiceClip = "Assets/_Project/Audio/Music/animals/cat.mp3";
         private const string DogVoiceClip = "Assets/_Project/Audio/Music/animals/dog.mp3";
         private const string HorseVoiceClip = "Assets/_Project/Audio/Music/animals/horse.mp3";
+        private const string UiClickClip = "Assets/_Project/Audio/SFX/UI/UI_Click_RaspberryMouse_BigSoundBank_1735.ogg";
+        private const string MagicWhooshClip = "Assets/_Project/Audio/SFX/Magic/Whoosh_Rope_BigSoundBank_1796.ogg";
+        private const string FirecrackerClip = "Assets/_Project/Audio/SFX/Fireworks/FirecrackerWick_BigSoundBank_1140.ogg";
+        private const string ChimesDreamClip = "Assets/_Project/Audio/SFX/Magic/ChimesDream_BigSoundBank_2084.ogg";
+        private const string SparklingCandleClip = "Assets/_Project/Audio/SFX/Fireworks/SparklingCandle_BigSoundBank_1279.ogg";
+        private const string GrowthLeavesClip = "Assets/_Project/Audio/SFX/Growth/MiscanthusLeaves_BigSoundBank_1814.ogg";
 
         [MenuItem("Wonderful World/Audio/Install Production Audio")]
         public static void InstallProductionAudio()
@@ -68,6 +76,12 @@ namespace WonderfulWorld.Audio.Editor
             ConfigureImporter(CatVoiceClip, AudioClipLoadType.CompressedInMemory, 0.7f, preload: true, background: false, forceMono: false);
             ConfigureImporter(DogVoiceClip, AudioClipLoadType.CompressedInMemory, 0.7f, preload: true, background: false, forceMono: false);
             ConfigureImporter(HorseVoiceClip, AudioClipLoadType.CompressedInMemory, 0.7f, preload: true, background: false, forceMono: false);
+            ConfigureImporter(UiClickClip, AudioClipLoadType.DecompressOnLoad, 0.85f, preload: true, background: false, forceMono: true);
+            ConfigureImporter(MagicWhooshClip, AudioClipLoadType.DecompressOnLoad, 0.8f, preload: true, background: false, forceMono: false);
+            ConfigureImporter(FirecrackerClip, AudioClipLoadType.DecompressOnLoad, 0.8f, preload: true, background: false, forceMono: true);
+            ConfigureImporter(ChimesDreamClip, AudioClipLoadType.DecompressOnLoad, 0.8f, preload: true, background: false, forceMono: false);
+            ConfigureImporter(SparklingCandleClip, AudioClipLoadType.Streaming, 0.65f, preload: false, background: true, forceMono: true);
+            ConfigureImporter(GrowthLeavesClip, AudioClipLoadType.DecompressOnLoad, 0.8f, preload: true, background: false, forceMono: true);
         }
 
         private static void ConfigureImporter(string path, AudioClipLoadType loadType, float quality, bool preload, bool background, bool forceMono)
@@ -114,7 +128,7 @@ namespace WonderfulWorld.Audio.Editor
                     loop: true,
                     spatialBlend: 1f,
                     minDistance: 4f,
-                    maxDistance: 70f,
+                    maxDistance: 28f,
                     randomPitchRange: 0f,
                     randomVolumeRange: 0f,
                     priority: 150),
@@ -125,14 +139,14 @@ namespace WonderfulWorld.Audio.Editor
                     loop: true,
                     spatialBlend: 1f,
                     minDistance: 1.5f,
-                    maxDistance: 30f,
+                    maxDistance: 14f,
                     randomPitchRange: 0f,
                     randomVolumeRange: 0f,
                     priority: 145),
                 CatFootsteps = CreateCue(
                     $"{CueRoot}/WW_Footsteps_Cat.asset",
                     new[] { LoadClip(AnimalFootstepsClip) },
-                    volume: 0.16f,
+                    volume: 0.22f,
                     loop: false,
                     spatialBlend: 1f,
                     minDistance: 0.75f,
@@ -143,7 +157,7 @@ namespace WonderfulWorld.Audio.Editor
                 DogFootsteps = CreateCue(
                     $"{CueRoot}/WW_Footsteps_Dog.asset",
                     new[] { LoadClip(AnimalFootstepsClip), LoadClip(DogRunClip) },
-                    volume: 0.2f,
+                    volume: 0.26f,
                     loop: false,
                     spatialBlend: 1f,
                     minDistance: 0.9f,
@@ -195,9 +209,210 @@ namespace WonderfulWorld.Audio.Editor
                     randomPitchRange: 0.02f,
                     randomVolumeRange: 0.02f,
                     priority: 100),
+                UiClick = CreateCue(
+                    $"{CueRoot}/WW_UI_Click.asset",
+                    new[] { LoadClip(UiClickClip) },
+                    volume: 0.5f,
+                    loop: false,
+                    spatialBlend: 0f,
+                    minDistance: 1f,
+                    maxDistance: 5f,
+                    randomPitchRange: 0.02f,
+                    randomVolumeRange: 0.04f,
+                    priority: 64),
+                UiHover = CreateCue(
+                    $"{CueRoot}/WW_UI_Hover.asset",
+                    new[] { LoadClip(UiClickClip) },
+                    volume: 0.22f,
+                    loop: false,
+                    spatialBlend: 0f,
+                    minDistance: 1f,
+                    maxDistance: 5f,
+                    randomPitchRange: 0.03f,
+                    randomVolumeRange: 0.04f,
+                    priority: 72),
+                MountTransition = CreateCue(
+                    $"{CueRoot}/WW_SFX_MountTransition.asset",
+                    new[] { LoadClip(MagicWhooshClip) },
+                    volume: 0.42f,
+                    loop: false,
+                    spatialBlend: 1f,
+                    minDistance: 1f,
+                    maxDistance: 12f,
+                    randomPitchRange: 0.04f,
+                    randomVolumeRange: 0.08f,
+                    priority: 120),
+                ScaleShift = CreateCue(
+                    $"{CueRoot}/WW_SFX_ScaleShift.asset",
+                    new[] { LoadClip(MagicWhooshClip) },
+                    volume: 0.34f,
+                    loop: false,
+                    spatialBlend: 0f,
+                    minDistance: 1f,
+                    maxDistance: 5f,
+                    randomPitchRange: 0.06f,
+                    randomVolumeRange: 0.04f,
+                    priority: 72),
+                FireworkLaunch = CreateCue(
+                    $"{CueRoot}/WW_SFX_FireworkLaunch.asset",
+                    new[] { LoadClip(MagicWhooshClip) },
+                    volume: 0.54f,
+                    loop: false,
+                    spatialBlend: 1f,
+                    minDistance: 2f,
+                    maxDistance: 45f,
+                    randomPitchRange: 0.04f,
+                    randomVolumeRange: 0.08f,
+                    priority: 112),
+                FireworkBurst = CreateCue(
+                    $"{CueRoot}/WW_SFX_FireworkBurst.asset",
+                    new[] { LoadClip(FirecrackerClip) },
+                    volume: 0.72f,
+                    loop: false,
+                    spatialBlend: 1f,
+                    minDistance: 4f,
+                    maxDistance: 65f,
+                    randomPitchRange: 0.05f,
+                    randomVolumeRange: 0.1f,
+                    priority: 104),
+                CrystalSelect = CreateCue(
+                    $"{CueRoot}/WW_SFX_CrystalSelect.asset",
+                    new[] { LoadClip(ChimesDreamClip) },
+                    volume: 0.52f,
+                    loop: false,
+                    spatialBlend: 1f,
+                    minDistance: 1f,
+                    maxDistance: 14f,
+                    randomPitchRange: 0.03f,
+                    randomVolumeRange: 0.08f,
+                    priority: 96),
+                CrystalCollapse = CreateCue(
+                    $"{CueRoot}/WW_SFX_CrystalCollapse.asset",
+                    new[] { LoadClip(MagicWhooshClip), LoadClip(ChimesDreamClip) },
+                    volume: 0.5f,
+                    loop: false,
+                    spatialBlend: 1f,
+                    minDistance: 1f,
+                    maxDistance: 16f,
+                    randomPitchRange: 0.04f,
+                    randomVolumeRange: 0.08f,
+                    priority: 96),
+                GrowthRustle = CreateCue(
+                    $"{CueRoot}/WW_SFX_GrowthRustle.asset",
+                    new[] { LoadClip(GrowthLeavesClip) },
+                    volume: 0.48f,
+                    loop: false,
+                    spatialBlend: 1f,
+                    minDistance: 1f,
+                    maxDistance: 16f,
+                    randomPitchRange: 0.05f,
+                    randomVolumeRange: 0.12f,
+                    priority: 136),
+                MagicCollect = CreateCue(
+                    $"{CueRoot}/WW_SFX_MagicCollect.asset",
+                    new[] { LoadClip(ChimesDreamClip) },
+                    volume: 0.38f,
+                    loop: false,
+                    spatialBlend: 0f,
+                    minDistance: 1f,
+                    maxDistance: 5f,
+                    randomPitchRange: 0.02f,
+                    randomVolumeRange: 0.06f,
+                    priority: 80),
+                MagicRelease = CreateCue(
+                    $"{CueRoot}/WW_SFX_MagicRelease.asset",
+                    new[] { LoadClip(MagicWhooshClip), LoadClip(ChimesDreamClip) },
+                    volume: 0.58f,
+                    loop: false,
+                    spatialBlend: 0f,
+                    minDistance: 1f,
+                    maxDistance: 5f,
+                    randomPitchRange: 0.03f,
+                    randomVolumeRange: 0.08f,
+                    priority: 76),
+                MagicChargedRelease = CreateCue(
+                    $"{CueRoot}/WW_SFX_MagicChargedRelease.asset",
+                    new[] { LoadClip(SparklingCandleClip) },
+                    volume: 0.62f,
+                    loop: false,
+                    spatialBlend: 0f,
+                    minDistance: 1f,
+                    maxDistance: 5f,
+                    randomPitchRange: 0.02f,
+                    randomVolumeRange: 0.04f,
+                    priority: 74),
             };
 
+            AssignMixerGroups(cues);
             return cues;
+        }
+
+        private static void AssignMixerGroups(CueSet cues)
+        {
+            AudioMixer mixer = AssetDatabase.LoadAssetAtPath<AudioMixer>(MixerPath);
+            if (mixer == null)
+            {
+                return;
+            }
+
+            AudioMixerGroup ambience = FindMixerGroup(mixer, "Ambience");
+            AudioMixerGroup sfx = FindMixerGroup(mixer, "SFX");
+            AudioMixerGroup ui = FindMixerGroup(mixer, "UI");
+            AudioMixerGroup voice = FindMixerGroup(mixer, "Voice");
+
+            AssignMixerGroup(cues.NightForest, ambience);
+            AssignMixerGroup(cues.WaterfallLoop, ambience);
+            AssignMixerGroup(cues.WaterfallDetail, ambience);
+            AssignMixerGroup(cues.CatFootsteps, sfx);
+            AssignMixerGroup(cues.DogFootsteps, sfx);
+            AssignMixerGroup(cues.HorseFootsteps, sfx);
+            AssignMixerGroup(cues.CatVoice, voice);
+            AssignMixerGroup(cues.DogVoice, voice);
+            AssignMixerGroup(cues.HorseVoice, voice);
+            AssignMixerGroup(cues.UiClick, ui);
+            AssignMixerGroup(cues.UiHover, ui);
+            AssignMixerGroup(cues.MountTransition, sfx);
+            AssignMixerGroup(cues.ScaleShift, sfx);
+            AssignMixerGroup(cues.FireworkLaunch, sfx);
+            AssignMixerGroup(cues.FireworkBurst, sfx);
+            AssignMixerGroup(cues.CrystalSelect, sfx);
+            AssignMixerGroup(cues.CrystalCollapse, sfx);
+            AssignMixerGroup(cues.GrowthRustle, sfx);
+            AssignMixerGroup(cues.MagicCollect, sfx);
+            AssignMixerGroup(cues.MagicRelease, sfx);
+            AssignMixerGroup(cues.MagicChargedRelease, sfx);
+        }
+
+        private static AudioMixerGroup FindMixerGroup(AudioMixer mixer, string groupName)
+        {
+            if (mixer == null)
+            {
+                return null;
+            }
+
+            AudioMixerGroup[] groups = mixer.FindMatchingGroups(groupName);
+            for (int i = 0; i < groups.Length; i++)
+            {
+                if (groups[i] != null && groups[i].name == groupName)
+                {
+                    return groups[i];
+                }
+            }
+
+            return null;
+        }
+
+        private static void AssignMixerGroup(WonderlandAudioCue cue, AudioMixerGroup group)
+        {
+            if (cue == null || group == null)
+            {
+                return;
+            }
+
+            SerializedObject serializedCue = new SerializedObject(cue);
+            serializedCue.FindProperty("mixerGroup").objectReferenceValue = group;
+            serializedCue.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(cue);
         }
 
         private static AudioClip LoadClip(string path)
@@ -427,6 +642,8 @@ namespace WonderfulWorld.Audio.Editor
             serializedFootstep.FindProperty("cue").objectReferenceValue = cue;
             serializedFootstep.FindProperty("movementRoot").objectReferenceValue = movementRoot;
             serializedFootstep.FindProperty("emitter").objectReferenceValue = emitter;
+            serializedFootstep.FindProperty("useProfileOverride").boolValue = true;
+            serializedFootstep.FindProperty("profileOverride").enumValueIndex = (int)profile;
             serializedFootstep.FindProperty("requireActiveRide").boolValue = true;
             serializedFootstep.FindProperty("allowOverlap").boolValue = false;
 
@@ -656,6 +873,18 @@ namespace WonderfulWorld.Audio.Editor
             public WonderlandAudioCue CatVoice;
             public WonderlandAudioCue DogVoice;
             public WonderlandAudioCue HorseVoice;
+            public WonderlandAudioCue UiClick;
+            public WonderlandAudioCue UiHover;
+            public WonderlandAudioCue MountTransition;
+            public WonderlandAudioCue ScaleShift;
+            public WonderlandAudioCue FireworkLaunch;
+            public WonderlandAudioCue FireworkBurst;
+            public WonderlandAudioCue CrystalSelect;
+            public WonderlandAudioCue CrystalCollapse;
+            public WonderlandAudioCue GrowthRustle;
+            public WonderlandAudioCue MagicCollect;
+            public WonderlandAudioCue MagicRelease;
+            public WonderlandAudioCue MagicChargedRelease;
         }
     }
 }

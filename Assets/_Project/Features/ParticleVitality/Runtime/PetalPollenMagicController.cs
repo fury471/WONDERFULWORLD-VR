@@ -364,6 +364,10 @@ public class PetalPollenMagicController : MonoBehaviour
         spawnAccumulator = 0f;
 
         PlayMagicClip(collectStartClip, collectStartVolume);
+        if (collectStartClip == null)
+        {
+            WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.Play2D("WW_SFX_MagicCollect", volumeScale: 1f, maxVoices: 3);
+        }
     }
 
     public void Release()
@@ -385,8 +389,18 @@ public class PetalPollenMagicController : MonoBehaviour
         CaptureReleaseShowcasePose(gatherCenter);
         releaseOriginCenter = GetReleaseImpactCenter();
         PrepareAttractorSamples(activeReleaseMode, Mathf.Max(activeParticles.Count, GetReleaseDensitySampleCount(activeReleaseMode)));
-        PlayMagicClip(holdSeconds >= chargedHoldSeconds && chargedReleaseClip != null ? chargedReleaseClip : releaseClip, releaseVolume);
-        BeginReleaseLightFeedback(holdSeconds >= chargedHoldSeconds);
+        bool chargedRelease = holdSeconds >= chargedHoldSeconds;
+        AudioClip configuredReleaseClip = chargedRelease && chargedReleaseClip != null ? chargedReleaseClip : releaseClip;
+        PlayMagicClip(configuredReleaseClip, releaseVolume);
+        if (configuredReleaseClip == null)
+        {
+            WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.Play2D(
+                chargedRelease ? "WW_SFX_MagicChargedRelease" : "WW_SFX_MagicRelease",
+                volumeScale: 1f,
+                maxVoices: chargedRelease ? 1 : 3);
+        }
+
+        BeginReleaseLightFeedback(chargedRelease);
 
         int releaseCount = Mathf.Max(1, activeParticles.Count - 1);
         for (int i = 0; i < activeParticles.Count; i++)

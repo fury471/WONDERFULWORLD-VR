@@ -463,6 +463,7 @@ public class ScaleManager : MonoBehaviour
         if (Time.time < lastChangeTime + settings.cooldown)
             return;
 
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.Play2D("WW_SFX_ScaleShift", volumeScale: 1f, maxVoices: 3);
         StartCoroutine(SetScaleRoutine(newState));
     }
 

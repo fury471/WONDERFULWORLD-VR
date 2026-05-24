@@ -76,6 +76,19 @@ namespace WonderfulWorld.Audio
             return LoadCue("WW_Footsteps_Cat");
         }
 
+        public static WonderlandAudioCue ResolveMountFootstepCue(MountFootstepProfile profile)
+        {
+            switch (profile)
+            {
+                case MountFootstepProfile.Horse:
+                    return LoadCue("WW_Footsteps_Horse");
+                case MountFootstepProfile.Dog:
+                    return LoadCue("WW_Footsteps_Dog");
+                default:
+                    return LoadCue("WW_Footsteps_Cat");
+            }
+        }
+
         public static WonderlandAudioCue ResolveVoiceCue(Transform root, AudioSource source)
         {
             string clipName = source != null && source.clip != null ? source.clip.name : string.Empty;

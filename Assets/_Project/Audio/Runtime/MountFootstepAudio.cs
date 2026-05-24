@@ -12,6 +12,8 @@ namespace WonderfulWorld.Audio
         [SerializeField] private Transform movementRoot;
         [SerializeField] private Transform emitter;
         [SerializeField] private AudioSource audioSource;
+        [SerializeField] private bool useProfileOverride;
+        [SerializeField] private MountFootstepProfile profileOverride = MountFootstepProfile.Cat;
         [SerializeField] private bool requireActiveRide = true;
         [SerializeField] private bool allowOverlap = false;
         [SerializeField, Min(0f)] private float minimumSpeed = 0.12f;
@@ -30,6 +32,9 @@ namespace WonderfulWorld.Audio
         private MonoBehaviour rideStateProvider;
         private PropertyInfo rideActiveProperty;
         private FieldInfo rideStateField;
+
+        public bool HasProfileOverride => useProfileOverride;
+        public MountFootstepProfile ProfileOverride => profileOverride;
 
         private void Reset()
         {
@@ -59,6 +64,8 @@ namespace WonderfulWorld.Audio
             this.cue = cue;
             this.movementRoot = movementRoot != null ? movementRoot : transform;
             this.emitter = emitter != null ? emitter : transform;
+            useProfileOverride = true;
+            profileOverride = profile;
 
             switch (profile)
             {
