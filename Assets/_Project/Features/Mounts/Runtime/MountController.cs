@@ -36,8 +36,11 @@ public class MountController : MonoBehaviour
     private bool hasCachedCameraOffsetY = false;
     private Transform trackedHeadTransform;
 
+    public bool IsRideActive => currentState != MountState.Idle;
+
     private void Awake()
     {
+        WonderfulWorld.Audio.WonderlandMountAudioAutoBinder.EnsureFootsteps(gameObject);
         CacheRigReferences();
     }
 

@@ -167,6 +167,7 @@ public class CatRideControllerV2 : MonoBehaviour
 
     private void Awake()
     {
+        WonderfulWorld.Audio.WonderlandMountAudioAutoBinder.EnsureFootsteps(gameObject);
         CacheRigReferences();
         CacheQuestInteractionReferences();
         CacheScaleManagerReference();

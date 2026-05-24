@@ -1,4 +1,5 @@
 using UnityEngine;
+using WonderfulWorld.Audio;
 
 [ExecuteAlways]
 [DisallowMultipleComponent]
@@ -20,18 +21,52 @@ public sealed class StylizedWaterfallController : MonoBehaviour
     [SerializeField, Min(1f)] private float splashRate = 46f;
     [SerializeField, Min(0.1f)] private float mistRate = 24f;
 
+    [Header("Audio")]
+    [SerializeField] private bool autoInstallAudio = true;
+    [SerializeField] private WonderlandAudioCue waterfallLoopCue;
+    [SerializeField] private WonderlandAudioCue waterfallDetailCue;
+
     private const string SurfaceName = "WaterFall";
     private const string SplashRootName = "Waterfall_BottomSplash";
     private const string BurstName = "Splash_Burst";
     private const string MistName = "Splash_Mist";
+    private const string AudioMainName = "Audio_Waterfall_Main";
+    private const string AudioDetailName = "Audio_Waterfall_Splash";
 
     private Mesh generatedMesh;
+    private bool editorRebuildQueued;
+    private bool audioInstallQueued;
+    private bool audioInstallQueuedInPlayMode;
 
-    private void Awake() => Rebuild();
+    private void Awake() => RebuildSafely();
 
-    private void OnEnable() => Rebuild();
+    private void OnEnable() => RebuildSafely();
 
-    private void OnValidate() => Rebuild();
+    private void RebuildSafely()
+    {
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            QueueEditorRebuild();
+            return;
+        }
+#endif
+
+        Rebuild();
+    }
+
+    private void OnValidate()
+    {
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            QueueEditorRebuild();
+            return;
+        }
+#endif
+
+        Rebuild();
+    }
 
     [ContextMenu("Rebuild Waterfall")]
     public void Rebuild()
@@ -44,6 +79,7 @@ public sealed class StylizedWaterfallController : MonoBehaviour
         Transform surface = ResolveSurface();
         BuildSurface(surface);
         BuildSplash(surface);
+        QueueAudioInstall();
     }
 
     private Transform ResolveSurface()
@@ -155,6 +191,149 @@ public sealed class StylizedWaterfallController : MonoBehaviour
 
         ConfigureBurstSystem(ResolveParticleChild(splashRoot, BurstName), false);
         ConfigureBurstSystem(ResolveParticleChild(splashRoot, MistName), true);
+    }
+
+    private void BuildAudio()
+    {
+        if (!autoInstallAudio)
+        {
+            return;
+        }
+
+        if (waterfallLoopCue == null)
+        {
+            waterfallLoopCue = WonderlandRuntimeAudioLibrary.LoadCue("WW_Spatial_WaterfallLoop");
+        }
+
+        if (waterfallDetailCue == null)
+        {
+            waterfallDetailCue = WonderlandRuntimeAudioLibrary.LoadCue("WW_Spatial_WaterfallDetail");
+        }
+
+        ConfigureAudioLoop(ResolveAudioChild(AudioMainName, Vector3.zero), waterfallLoopCue, 0.8f, 0.3f);
+        ConfigureAudioLoop(ResolveAudioChild(AudioDetailName, new Vector3(0f, -2.2f, 2.1f)), waterfallDetailCue, 0.8f, 0.3f);
+    }
+
+    private void QueueAudioInstall()
+    {
+        if (!autoInstallAudio)
+        {
+            return;
+        }
+
+        bool isPlaying = Application.isPlaying;
+        if (audioInstallQueued && audioInstallQueuedInPlayMode == isPlaying)
+        {
+            return;
+        }
+
+        audioInstallQueued = true;
+        audioInstallQueuedInPlayMode = isPlaying;
+
+        if (isPlaying)
+        {
+            StartCoroutine(InstallAudioNextFrame());
+            return;
+        }
+
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.delayCall += InstallEditorAudioAfterValidation;
+#else
+        audioInstallQueued = false;
+#endif
+    }
+
+    private System.Collections.IEnumerator InstallAudioNextFrame()
+    {
+        yield return null;
+        audioInstallQueued = false;
+        if (this != null && isActiveAndEnabled)
+        {
+            BuildAudio();
+        }
+    }
+
+#if UNITY_EDITOR
+    private void QueueEditorRebuild()
+    {
+        if (editorRebuildQueued)
+        {
+            return;
+        }
+
+        editorRebuildQueued = true;
+        UnityEditor.EditorApplication.delayCall += RebuildAfterValidation;
+    }
+
+    private void RebuildAfterValidation()
+    {
+        editorRebuildQueued = false;
+        if (this == null || Application.isPlaying || !isActiveAndEnabled)
+        {
+            return;
+        }
+
+        Rebuild();
+    }
+
+    private void InstallEditorAudioAfterValidation()
+    {
+        if (this == null)
+        {
+            audioInstallQueued = false;
+            return;
+        }
+
+        if (Application.isPlaying)
+        {
+            if (!audioInstallQueuedInPlayMode)
+            {
+                audioInstallQueued = false;
+            }
+
+            return;
+        }
+
+        audioInstallQueued = false;
+        if (!isActiveAndEnabled)
+        {
+            return;
+        }
+
+        BuildAudio();
+    }
+#endif
+
+    private Transform ResolveAudioChild(string childName, Vector3 localPosition)
+    {
+        Transform child = transform.Find(childName);
+        if (child == null)
+        {
+            GameObject go = new GameObject(childName);
+            child = go.transform;
+            child.SetParent(transform, false);
+        }
+
+        child.localPosition = localPosition;
+        child.localRotation = Quaternion.identity;
+        child.localScale = Vector3.one;
+        return child;
+    }
+
+    private static void ConfigureAudioLoop(Transform holder, WonderlandAudioCue cue, float fadeIn, float fadeOut)
+    {
+        if (holder == null || cue == null)
+        {
+            return;
+        }
+
+        WonderlandAmbientLoop loop = GetOrAdd<WonderlandAmbientLoop>(holder.gameObject);
+        loop.Configure(cue, playOnEnable: true, volumeScale: 1f, fadeInSeconds: fadeIn, fadeOutSeconds: fadeOut);
+
+        if (Application.isPlaying)
+        {
+            loop.Play();
+        }
     }
 
     private Transform ResolveParticleChild(Transform parent, string childName)
