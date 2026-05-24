@@ -99,6 +99,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private int lastInstalledTeleportAreaCount;
     private float suppressRightHandTurnUntil;
+    private bool runtimeLocomotionLocked;
 
     public int lastTeleportSurfaceInstallCount => lastInstalledTeleportAreaCount;
 
@@ -109,6 +110,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     public bool ComfortVignetteEnabled => comfortVignetteEnabled;
     public float ComfortVignetteStrength => comfortVignetteStrength;
     public float ComfortVignetteAperture => ComfortToVignetteAperture(comfortVignetteStrength);
+    public bool RuntimeLocomotionLocked => runtimeLocomotionLocked;
 
     public static float ComfortToVignetteAperture(float comfort01)
     {
@@ -162,6 +164,18 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     {
         suppressRightHandTurnUntil = Mathf.Max(suppressRightHandTurnUntil, Time.time + Mathf.Max(0f, seconds));
         EnforceInputOwnership();
+    }
+
+    public void SetRuntimeLocomotionLocked(bool locked)
+    {
+        if (runtimeLocomotionLocked == locked)
+        {
+            EnforceInputOwnership();
+            return;
+        }
+
+        runtimeLocomotionLocked = locked;
+        ApplyProfile();
     }
 
     private void Reset()
@@ -336,9 +350,11 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void ConfigureControllerOwnership()
     {
+        bool locomotionAllowed = !runtimeLocomotionLocked;
+
         if (leftController != null)
         {
-            leftController.smoothMotionEnabled = movementMode == MovementMode.Smooth;
+            leftController.smoothMotionEnabled = locomotionAllowed && movementMode == MovementMode.Smooth;
             leftController.smoothTurnEnabled = false;
         }
         else
@@ -349,7 +365,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
         if (rightController != null)
         {
             rightController.smoothMotionEnabled = false;
-            rightController.smoothTurnEnabled = turnMode == TurnMode.Smooth;
+            rightController.smoothTurnEnabled = locomotionAllowed && turnMode == TurnMode.Smooth;
         }
         else
         {
@@ -372,9 +388,11 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void ConfigureLocomotionProviders()
     {
+        bool locomotionAllowed = !runtimeLocomotionLocked;
+
         if (teleportationProvider != null)
         {
-            teleportationProvider.enabled = movementMode == MovementMode.Teleport;
+            teleportationProvider.enabled = locomotionAllowed && movementMode == MovementMode.Teleport;
             teleportationProvider.delayTime = teleportDelayTime;
         }
         else
@@ -384,7 +402,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
         if (continuousMove != null)
         {
-            continuousMove.enabled = movementMode == MovementMode.Smooth;
+            continuousMove.enabled = locomotionAllowed && movementMode == MovementMode.Smooth;
             continuousMove.moveSpeed = smoothMoveSpeed;
             continuousMove.enableStrafe = false;
             continuousMove.enableFly = false;
@@ -396,7 +414,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
         if (continuousTurn != null)
         {
-            continuousTurn.enabled = turnMode == TurnMode.Smooth;
+            continuousTurn.enabled = locomotionAllowed && turnMode == TurnMode.Smooth;
             continuousTurn.turnSpeed = smoothTurnSpeed;
             continuousTurn.enableTurnLeftRight = true;
             continuousTurn.enableTurnAround = false;
@@ -408,7 +426,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
         if (snapTurn != null)
         {
-            snapTurn.enabled = turnMode == TurnMode.Snap;
+            snapTurn.enabled = locomotionAllowed && turnMode == TurnMode.Snap;
             snapTurn.turnAmount = snapTurnAmount;
             snapTurn.debounceTime = snapTurnDebounceTime;
             snapTurn.delayTime = snapTurnDelayTime;
@@ -439,6 +457,20 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void EnforceInputOwnership()
     {
+        if (runtimeLocomotionLocked)
+        {
+            SetActionEnabled(leftTeleportModeAction, false);
+            SetActionEnabled(leftTeleportCancelAction, false);
+            SetActionEnabled(leftMoveAction, false);
+            SetActionEnabled(leftContinuousTurnAction, false);
+            SetActionEnabled(leftSnapTurnAction, false);
+            SetActionEnabled(rightTeleportModeAction, false);
+            SetActionEnabled(rightTeleportCancelAction, false);
+            SetActionEnabled(rightContinuousMoveAction, false);
+            SetActionEnabled(rightContinuousTurnAction, false);
+            return;
+        }
+
         SetActionEnabled(leftTeleportModeAction, movementMode == MovementMode.Teleport);
         SetActionEnabled(leftTeleportCancelAction, movementMode == MovementMode.Teleport);
         SetActionEnabled(leftMoveAction, movementMode == MovementMode.Smooth);

@@ -191,6 +191,7 @@ public class CatRideControllerV2 : MonoBehaviour
     private void OnDisable()
     {
         QuestLocomotionComfortProfile.ComfortVignetteChanged -= HandleComfortVignetteChanged;
+        SetComfortProfileLocomotionLocked(false);
         SetMountCollidersIgnoredForRaycasts(false);
         SetRideVignetteActive(false);
     }
@@ -605,6 +606,15 @@ public class CatRideControllerV2 : MonoBehaviour
 #endif
     }
 
+    private void SetComfortProfileLocomotionLocked(bool locked)
+    {
+        CacheComfortProfileReference();
+        if (comfortProfile != null)
+        {
+            comfortProfile.SetRuntimeLocomotionLocked(locked);
+        }
+    }
+
     private void SyncRideVignetteFromComfortProfile()
     {
         if (!syncRideVignetteWithComfortProfile)
@@ -845,6 +855,8 @@ public class CatRideControllerV2 : MonoBehaviour
                 SetLocomotionRootBehavioursLocked(true);
             }
 
+            SetComfortProfileLocomotionLocked(true);
+
             if (xrDeviceSimulator != null)
             {
                 DisableXRDeviceSimulatorInput();
@@ -863,6 +875,8 @@ public class CatRideControllerV2 : MonoBehaviour
                 SetLocomotionRootBehavioursLocked(false);
                 locomotionRoot.SetActive(locomotionRootWasActive);
             }
+
+            SetComfortProfileLocomotionLocked(false);
 
             if (!lockXRDeviceSimulatorDuringRide)
             {
@@ -1124,6 +1138,7 @@ public class CatRideControllerV2 : MonoBehaviour
     {
         if (playerRigRoot == null)
         {
+            SetComfortProfileLocomotionLocked(false);
             SetMountCollidersIgnoredForRaycasts(false);
             stateRoutine = null;
             yield break;
