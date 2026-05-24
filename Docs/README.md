@@ -1,4 +1,4 @@
-# Butterfly House Documentation
+# Wonderland Documentation
 
 This folder is the current documentation source of truth for the production closeout stage.
 
