@@ -69,6 +69,8 @@ public class CatRideControllerV2 : MonoBehaviour
     [SerializeField] private float debugSimulatorRestoreDelay = 0.15f;
 
     [Header("Ride Comfort")]
+    [SerializeField] private bool syncRideVignetteWithComfortProfile = true;
+    [SerializeField] private QuestLocomotionComfortProfile comfortProfile;
     [SerializeField] private bool enableRideComfortVignette = true;
     [SerializeField, Range(0.2f, 1f)] private float rideVignetteAperture = 0.58f;
     [SerializeField, Range(0f, 1f)] private float rideVignetteFeathering = 0.30f;
@@ -134,9 +136,6 @@ public class CatRideControllerV2 : MonoBehaviour
     private XROrigin xrOrigin;
     private XRDeviceSimulator xrDeviceSimulator;
     [SerializeField] private ScaleManager scaleManager;
-    private bool simulatorDeviceActionAssetWasEnabled;
-    private bool simulatorControllerActionAssetWasEnabled;
-    private bool simulatorHandActionAssetWasEnabled;
     private bool simulatorKeyboardXWasEnabled;
     private bool simulatorKeyboardYWasEnabled;
     private bool simulatorKeyboardZWasEnabled;
@@ -173,10 +172,18 @@ public class CatRideControllerV2 : MonoBehaviour
         CacheQuestInteractionReferences();
         CacheScaleManagerReference();
         CacheRideVignetteReferences();
+        SyncRideVignetteFromComfortProfile();
+    }
+
+    private void OnEnable()
+    {
+        QuestLocomotionComfortProfile.ComfortVignetteChanged += HandleComfortVignetteChanged;
+        SyncRideVignetteFromComfortProfile();
     }
 
     private void OnDisable()
     {
+        QuestLocomotionComfortProfile.ComfortVignetteChanged -= HandleComfortVignetteChanged;
         SetRideVignetteActive(false);
     }
 
@@ -492,6 +499,65 @@ public class CatRideControllerV2 : MonoBehaviour
 #endif
     }
 
+    private void CacheComfortProfileReference()
+    {
+        if (comfortProfile != null)
+        {
+            return;
+        }
+
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+        comfortProfile = FindAnyObjectByType<QuestLocomotionComfortProfile>(FindObjectsInactive.Include);
+#else
+#pragma warning disable CS0618
+        comfortProfile = FindObjectOfType<QuestLocomotionComfortProfile>(true);
+#pragma warning restore CS0618
+#endif
+    }
+
+    private void SyncRideVignetteFromComfortProfile()
+    {
+        if (!syncRideVignetteWithComfortProfile)
+        {
+            return;
+        }
+
+        CacheComfortProfileReference();
+
+        if (comfortProfile == null)
+        {
+            return;
+        }
+
+        ApplyRideVignetteSettings(comfortProfile.ComfortVignetteEnabled, comfortProfile.ComfortVignetteAperture);
+    }
+
+    private void HandleComfortVignetteChanged(bool enabled, float comfort01, float aperture)
+    {
+        if (!syncRideVignetteWithComfortProfile)
+        {
+            return;
+        }
+
+        ApplyRideVignetteSettings(enabled, aperture);
+    }
+
+    private void ApplyRideVignetteSettings(bool enabled, float aperture)
+    {
+        enableRideComfortVignette = enabled;
+        rideVignetteAperture = Mathf.Clamp(aperture, 0.2f, 1f);
+
+        if (rideVignetteProvider != null)
+        {
+            rideVignetteProvider.SetParameters(CreateRideVignetteParameters());
+        }
+
+        if (!enableRideComfortVignette)
+        {
+            SetRideVignetteActive(false);
+        }
+    }
+
     private void CacheRideVignetteReferences()
     {
         if (rideVignetteProvider == null)
@@ -715,41 +781,6 @@ public class CatRideControllerV2 : MonoBehaviour
         }
     }
 
-    private static bool IsActionAssetEnabled(InputActionAsset actionAsset)
-    {
-        if (actionAsset == null)
-        {
-            return false;
-        }
-
-        foreach (InputActionMap actionMap in actionAsset.actionMaps)
-        {
-            if (actionMap.enabled)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static void SetActionAssetEnabled(InputActionAsset actionAsset, bool enabled)
-    {
-        if (actionAsset == null)
-        {
-            return;
-        }
-
-        if (enabled)
-        {
-            actionAsset.Enable();
-        }
-        else
-        {
-            actionAsset.Disable();
-        }
-    }
-
     private void DisableXRDeviceSimulatorInput()
     {
         if (xrDeviceSimulator == null)
@@ -761,18 +792,7 @@ public class CatRideControllerV2 : MonoBehaviour
         simulatorKeyboardYWasEnabled = IsActionEnabled(xrDeviceSimulator.keyboardYTranslateAction);
         simulatorKeyboardZWasEnabled = IsActionEnabled(xrDeviceSimulator.keyboardZTranslateAction);
 
-        if (lockXRDeviceSimulatorDuringRide)
-        {
-            simulatorDeviceActionAssetWasEnabled = IsActionAssetEnabled(xrDeviceSimulator.deviceSimulatorActionAsset);
-            simulatorControllerActionAssetWasEnabled = IsActionAssetEnabled(xrDeviceSimulator.controllerActionAsset);
-            simulatorHandActionAssetWasEnabled = IsActionAssetEnabled(xrDeviceSimulator.handActionAsset);
-
-            SetActionAssetEnabled(xrDeviceSimulator.deviceSimulatorActionAsset, false);
-            SetActionAssetEnabled(xrDeviceSimulator.controllerActionAsset, false);
-            SetActionAssetEnabled(xrDeviceSimulator.handActionAsset, false);
-            return;
-        }
-
+        // Keep controller and hand action assets alive so XR ray/UI selection still works while mounted.
         SetActionEnabled(xrDeviceSimulator.keyboardXTranslateAction, false);
         SetActionEnabled(xrDeviceSimulator.keyboardYTranslateAction, false);
         SetActionEnabled(xrDeviceSimulator.keyboardZTranslateAction, false);
@@ -782,18 +802,6 @@ public class CatRideControllerV2 : MonoBehaviour
     {
         if (xrDeviceSimulator == null)
         {
-            return;
-        }
-
-        if (lockXRDeviceSimulatorDuringRide)
-        {
-            SetActionAssetEnabled(xrDeviceSimulator.deviceSimulatorActionAsset, simulatorDeviceActionAssetWasEnabled);
-            SetActionAssetEnabled(xrDeviceSimulator.controllerActionAsset, simulatorControllerActionAssetWasEnabled);
-            SetActionAssetEnabled(xrDeviceSimulator.handActionAsset, simulatorHandActionAssetWasEnabled);
-
-            SetActionEnabled(xrDeviceSimulator.keyboardXTranslateAction, simulatorKeyboardXWasEnabled);
-            SetActionEnabled(xrDeviceSimulator.keyboardYTranslateAction, simulatorKeyboardYWasEnabled);
-            SetActionEnabled(xrDeviceSimulator.keyboardZTranslateAction, simulatorKeyboardZWasEnabled);
             return;
         }
 

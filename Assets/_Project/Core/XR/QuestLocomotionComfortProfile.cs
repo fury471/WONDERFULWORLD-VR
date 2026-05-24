@@ -15,6 +15,8 @@ using UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets;
 [DisallowMultipleComponent]
 public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 {
+    public static event System.Action<bool, float, float> ComfortVignetteChanged;
+
     public enum MovementMode
     {
         Teleport,
@@ -84,6 +86,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     [SerializeField, Range(0.2f, 1f)] private float smoothMoveAperture = 0.58f;
     [SerializeField, Range(0.2f, 1f)] private float smoothTurnAperture = 0.62f;
     [SerializeField] private bool comfortVignetteEnabled = true;
+    [SerializeField, Range(0f, 1f)] private float comfortVignetteStrength = 0.5f;
     [SerializeField, Range(0f, 1f)] private float feathering = 0.30f;
     [SerializeField, Min(0f)] private float easeInTime = 0.10f;
     [SerializeField, Min(0f)] private float easeOutTime = 0.20f;
@@ -104,6 +107,13 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     public float SmoothMoveSpeed => smoothMoveSpeed;
     public float SmoothTurnSpeed => smoothTurnSpeed;
     public bool ComfortVignetteEnabled => comfortVignetteEnabled;
+    public float ComfortVignetteStrength => comfortVignetteStrength;
+    public float ComfortVignetteAperture => ComfortToVignetteAperture(comfortVignetteStrength);
+
+    public static float ComfortToVignetteAperture(float comfort01)
+    {
+        return Mathf.Lerp(0.85f, 0.45f, Mathf.Clamp01(comfort01));
+    }
 
     public void SetMovementMode(MovementMode mode)
     {
@@ -133,16 +143,19 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     {
         comfortVignetteEnabled = enabled;
         ApplyProfile();
+        NotifyComfortVignetteChanged();
     }
 
     public void SetVignetteComfort(float comfort01)
     {
-        float aperture = Mathf.Lerp(0.85f, 0.45f, Mathf.Clamp01(comfort01));
+        comfortVignetteStrength = Mathf.Clamp01(comfort01);
+        float aperture = ComfortToVignetteAperture(comfortVignetteStrength);
         teleportAperture = aperture;
         turnAperture = aperture;
         smoothMoveAperture = aperture;
         smoothTurnAperture = aperture;
         ApplyProfile();
+        NotifyComfortVignetteChanged();
     }
 
     public void SuppressRightHandTurn(float seconds)
@@ -158,6 +171,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void OnValidate()
     {
+        comfortVignetteStrength = Mathf.Clamp01(comfortVignetteStrength);
         AutoWireReferences();
     }
 
@@ -180,6 +194,11 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     private void OnDisable()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    private void NotifyComfortVignetteChanged()
+    {
+        ComfortVignetteChanged?.Invoke(comfortVignetteEnabled, comfortVignetteStrength, ComfortVignetteAperture);
     }
 
     private void LateUpdate()
