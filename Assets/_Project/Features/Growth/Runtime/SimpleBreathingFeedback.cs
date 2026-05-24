@@ -5,7 +5,7 @@ public class SimpleBreathingFeedback : MonoBehaviour
     private const float CameraRetrySeconds = 0.5f;
 
     [Header("Debug")]
-    public bool enableDebugLog = true;
+    [SerializeField] private bool enableDebugLog;
 
     [Header("Dependencies")]
     public Transform playerCamera;

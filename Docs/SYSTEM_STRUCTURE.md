@@ -59,7 +59,8 @@ The current static audit found an inactive empty `Debug` root and both `UI` and 
 The menu `Wonderful World > Production` contains editor tools for safe closeout work:
 
 - `Create Standard Project Folders`
-- `Generate Production Audit`
+- `Generate Production Audit`, including a scan for enabled production debug logging flags
+- `Generate Asset Reference Audit`
 - `Normalize Main Scene Hierarchy`
 
 These tools run inside Unity, so folder creation, hierarchy edits, and scene saving happen through Unity APIs.

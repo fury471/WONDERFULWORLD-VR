@@ -9,7 +9,9 @@ This folder is the current documentation source of truth for the production clos
 - [System Structure](SYSTEM_STRUCTURE.md): project folders, main scene hierarchy, core prefabs, and runtime systems.
 - [Interaction Bindings](InteractionBindings.md): player-facing controls and interactables in the production scene.
 - [Cleanup And Standardization](CLEANUP_AND_STANDARDIZATION.md): hierarchy, asset, naming, and documentation cleanup rules.
+- [Asset Reference Audit](Asset_Reference_Audit.md): current external dependency snapshot and Unity-side asset cleanup queue.
 - [VR Performance Guide](VR_PERFORMANCE_GUIDE.md): profiling workflow, target budgets, rendering settings, and issue triage.
+- [Final Release Checklist](FINAL_RELEASE_CHECKLIST.md): Unity Editor, Play Mode, and Quest 3 Link signoff steps.
 
 ## Documentation Policy
 

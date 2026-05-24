@@ -11,6 +11,7 @@ public static class ProductionCleanupTools
 {
     private const string MainScenePath = "Assets/_Project/World/Persistent/World_WonderlandPark.unity";
     private const string AuditReportPath = "Docs/Production_Audit.md";
+    private const string AssetReferenceReportPath = "Docs/Asset_Reference_Audit.md";
 
     private static readonly string[] StandardProjectFolders =
     {
@@ -42,6 +43,37 @@ public static class ProductionCleanupTools
     private static readonly string[] RequiredRootNames = CanonicalRootOrder
         .Where(rootName => rootName != "Debug")
         .ToArray();
+
+    private static readonly string[] CleanupCandidateFolders =
+    {
+        "Assets/_TempArt",
+        "Assets/_Recovery",
+        "Assets/Scenes",
+        "Assets/Scripts"
+    };
+
+    private static readonly string[] DecorativeRootPrefixes =
+    {
+        "TFF_",
+        "SM_",
+        "P_",
+        "Rock",
+        "Tree",
+        "Flower",
+        "Grass",
+        "Bush",
+        "Stone",
+        "Water",
+        "Bridge",
+        "Pavilion"
+    };
+
+    private static readonly string[] ProductionDebugFlagNames =
+    {
+        "enableDebugLog",
+        "logDebug",
+        "logDebugMessages"
+    };
 
     [MenuItem("Wonderful World/Production/Create Standard Project Folders")]
     public static void CreateStandardProjectFolders()
@@ -81,6 +113,8 @@ public static class ProductionCleanupTools
 
         AppendSceneAudit(report, scene);
         AppendAssetAudit(report);
+        AppendMainSceneDependencyAudit(report);
+        AppendDebugFlagAudit(report);
         AppendValidationChecklist(report);
 
         Directory.CreateDirectory(Path.GetDirectoryName(AuditReportPath));
@@ -93,6 +127,30 @@ public static class ProductionCleanupTools
         }
 
         Debug.Log($"[ProductionCleanup] Wrote {AuditReportPath}.");
+    }
+
+    [MenuItem("Wonderful World/Production/Generate Asset Reference Audit")]
+    public static void GenerateAssetReferenceAudit()
+    {
+        CreateStandardProjectFolders();
+
+        StringBuilder report = new StringBuilder(16384);
+        report.AppendLine("# Asset Reference Audit");
+        report.AppendLine();
+        report.AppendLine("- Main scene: `Assets/_Project/World/Persistent/World_WonderlandPark.unity`");
+        report.AppendLine("- Rule: move or rename Unity assets only through Unity/AssetDatabase so GUID references remain intact.");
+        report.AppendLine();
+
+        AppendMainSceneDependencyAudit(report);
+        AppendCleanupCandidateAudit(report);
+        AppendNamingAudit(report);
+        AppendAssetMovePlan(report);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(AssetReferenceReportPath));
+        File.WriteAllText(AssetReferenceReportPath, report.ToString(), Encoding.UTF8);
+        AssetDatabase.Refresh();
+
+        Debug.Log($"[ProductionCleanup] Wrote {AssetReferenceReportPath}.");
     }
 
     [MenuItem("Wonderful World/Production/Normalize Main Scene Hierarchy")]
@@ -130,6 +188,7 @@ public static class ProductionCleanupTools
             Undo.SetTransformParent(uiSystem.transform, uiRoot.transform, "Move WW_UI_System under UI");
         }
 
+        MoveDecorativeOrphanRoots(scene, roots);
         RemoveEmptyInactiveDebugRoot(roots);
         ApplyRootOrder(scene);
 
@@ -224,6 +283,212 @@ public static class ProductionCleanupTools
         report.AppendLine();
     }
 
+    private static void AppendMainSceneDependencyAudit(StringBuilder report)
+    {
+        report.AppendLine("## Main Scene Dependencies");
+        report.AppendLine();
+
+        string[] dependencies = AssetDatabase.GetDependencies(MainScenePath, recursive: true)
+            .Where(path => path.StartsWith("Assets/"))
+            .Where(path => !AssetDatabase.IsValidFolder(path))
+            .Distinct()
+            .OrderBy(path => path)
+            .ToArray();
+
+        report.AppendLine($"- Asset dependencies discovered by `AssetDatabase.GetDependencies`: {dependencies.Length}");
+        report.AppendLine();
+
+        var groups = dependencies
+            .GroupBy(GetTopLevelAssetFolder)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key);
+
+        report.AppendLine("| Top-level folder | Referenced assets | Classification |");
+        report.AppendLine("| --- | ---: | --- |");
+        foreach (var group in groups)
+        {
+            report.AppendLine($"| `{group.Key}` | {group.Count()} | {ClassifyTopLevelFolder(group.Key)} |");
+        }
+
+        report.AppendLine();
+        report.AppendLine("Referenced assets outside `Assets/_Project`:");
+        report.AppendLine();
+
+        string[] externalDependencies = dependencies
+            .Where(path => !path.StartsWith("Assets/_Project/"))
+            .ToArray();
+
+        if (externalDependencies.Length == 0)
+        {
+            report.AppendLine("- None.");
+        }
+        else
+        {
+            foreach (string path in externalDependencies.Take(150))
+            {
+                report.AppendLine($"- `{path}`");
+            }
+
+            if (externalDependencies.Length > 150)
+            {
+                report.AppendLine($"- ...and {externalDependencies.Length - 150} more.");
+            }
+        }
+
+        report.AppendLine();
+        AppendUnresolvedGuidAudit(report);
+    }
+
+    private static void AppendCleanupCandidateAudit(StringBuilder report)
+    {
+        report.AppendLine("## Cleanup Candidates");
+        report.AppendLine();
+
+        string[] dependencies = AssetDatabase.GetDependencies(MainScenePath, recursive: true)
+            .Where(path => path.StartsWith("Assets/"))
+            .Distinct()
+            .ToArray();
+
+        report.AppendLine("| Folder | Assets | Referenced by main scene | Recommendation |");
+        report.AppendLine("| --- | ---: | ---: | --- |");
+        foreach (string folder in CleanupCandidateFolders)
+        {
+            string[] assets = AssetDatabase.FindAssets(string.Empty, new[] { folder })
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Where(path => !string.IsNullOrEmpty(path))
+                .Where(path => !AssetDatabase.IsValidFolder(path))
+                .Distinct()
+                .ToArray();
+
+            int referencedCount = assets.Count(assetPath => dependencies.Contains(assetPath));
+            string recommendation = referencedCount > 0
+                ? "Keep referenced assets; move confirmed production assets through AssetDatabase only."
+                : "Candidate for removal after team confirmation.";
+
+            report.AppendLine($"| `{folder}` | {assets.Length} | {referencedCount} | {recommendation} |");
+        }
+
+        report.AppendLine();
+    }
+
+    private static void AppendNamingAudit(StringBuilder report)
+    {
+        report.AppendLine("## Naming Audit");
+        report.AppendLine();
+
+        string[] productionAssets = AssetDatabase.FindAssets(string.Empty, new[] { "Assets/_Project" })
+            .Select(AssetDatabase.GUIDToAssetPath)
+            .Where(path => !string.IsNullOrEmpty(path))
+            .Where(path => !AssetDatabase.IsValidFolder(path))
+            .Distinct()
+            .OrderBy(path => path)
+            .ToArray();
+
+        List<string> namingWarnings = new List<string>();
+        for (int i = 0; i < productionAssets.Length; i++)
+        {
+            string path = productionAssets[i];
+            string fileName = Path.GetFileNameWithoutExtension(path);
+            string extension = Path.GetExtension(path).ToLowerInvariant();
+            string expectedPrefix = GetExpectedAssetPrefix(path, extension);
+            if (string.IsNullOrEmpty(expectedPrefix) || fileName.StartsWith(expectedPrefix))
+            {
+                continue;
+            }
+
+            namingWarnings.Add($"- `{path}` should usually start with `{expectedPrefix}`.");
+        }
+
+        if (namingWarnings.Count == 0)
+        {
+            report.AppendLine("- No obvious naming-prefix warnings under `Assets/_Project`.");
+        }
+        else
+        {
+            report.AppendLine($"- Warnings: {namingWarnings.Count}");
+            report.AppendLine();
+            foreach (string warning in namingWarnings.Take(150))
+            {
+                report.AppendLine(warning);
+            }
+
+            if (namingWarnings.Count > 150)
+            {
+                report.AppendLine($"- ...and {namingWarnings.Count - 150} more.");
+            }
+        }
+
+        report.AppendLine();
+    }
+
+    private static void AppendAssetMovePlan(StringBuilder report)
+    {
+        report.AppendLine("## Asset Move Plan");
+        report.AppendLine();
+        report.AppendLine("Use this as a review queue. Do not move these paths from the operating system.");
+        report.AppendLine();
+        report.AppendLine("1. Keep vendor and package assets in their vendor folders unless the team decides to internalize them.");
+        report.AppendLine("2. For project-authored assets outside `Assets/_Project`, use Unity Project window drag/drop or `AssetDatabase.MoveAsset`.");
+        report.AppendLine("3. Re-run this report after each move batch and open the main scene before committing.");
+        report.AppendLine("4. Delete `_Recovery`, `_TempArt`, template scenes, or legacy scripts only after this report shows zero production references and the team confirms they are obsolete.");
+        report.AppendLine();
+    }
+
+    private static void AppendDebugFlagAudit(StringBuilder report)
+    {
+        report.AppendLine("## Production Debug Flags");
+        report.AppendLine();
+
+        string[] scannedAssets = AssetDatabase.FindAssets(string.Empty, new[] { "Assets/_Project" })
+            .Select(AssetDatabase.GUIDToAssetPath)
+            .Where(path => path.EndsWith(".unity") || path.EndsWith(".prefab"))
+            .Where(path => !path.Contains("/Sandbox/"))
+            .Where(path => !Path.GetFileNameWithoutExtension(path).Contains("_bak"))
+            .Distinct()
+            .OrderBy(path => path)
+            .ToArray();
+
+        List<string> enabledFlags = new List<string>();
+        foreach (string path in scannedAssets)
+        {
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            int lineNumber = 0;
+            foreach (string line in File.ReadLines(path))
+            {
+                lineNumber++;
+                string trimmed = line.Trim();
+                for (int i = 0; i < ProductionDebugFlagNames.Length; i++)
+                {
+                    string flag = ProductionDebugFlagNames[i];
+                    if (trimmed == $"{flag}: 1")
+                    {
+                        enabledFlags.Add($"| `{path}` | {lineNumber} | `{flag}` |");
+                    }
+                }
+            }
+        }
+
+        if (enabledFlags.Count == 0)
+        {
+            report.AppendLine("- No enabled production debug flags found in non-sandbox scenes or prefabs.");
+        }
+        else
+        {
+            report.AppendLine("| Asset | Line | Flag |");
+            report.AppendLine("| --- | ---: | --- |");
+            foreach (string enabledFlag in enabledFlags)
+            {
+                report.AppendLine(enabledFlag);
+            }
+        }
+
+        report.AppendLine();
+    }
+
     private static void AppendValidationChecklist(StringBuilder report)
     {
         report.AppendLine("## Validation Checklist");
@@ -266,6 +531,29 @@ public static class ProductionCleanupTools
         if (!debugRoot.activeSelf && debugRoot.transform.childCount == 0 && onlyTransform)
         {
             Undo.DestroyObjectImmediate(debugRoot);
+        }
+    }
+
+    private static void MoveDecorativeOrphanRoots(Scene scene, Dictionary<string, GameObject> roots)
+    {
+        if (!roots.TryGetValue("Decorations", out GameObject decorationsRoot))
+        {
+            return;
+        }
+
+        GameObject[] sceneRoots = scene.GetRootGameObjects();
+        for (int i = 0; i < sceneRoots.Length; i++)
+        {
+            GameObject root = sceneRoots[i];
+            if (root == null ||
+                root == decorationsRoot ||
+                CanonicalRootOrder.Contains(root.name) ||
+                !ShouldMoveRootUnderDecorations(root))
+            {
+                continue;
+            }
+
+            Undo.SetTransformParent(root.transform, decorationsRoot.transform, $"Move {root.name} under Decorations");
         }
     }
 
@@ -335,5 +623,114 @@ public static class ProductionCleanupTools
         }
 
         return "Review and either move through AssetDatabase or document as vendor content";
+    }
+
+    private static void AppendUnresolvedGuidAudit(StringBuilder report)
+    {
+        if (!File.Exists(MainScenePath))
+        {
+            return;
+        }
+
+        string sceneText = File.ReadAllText(MainScenePath);
+        System.Text.RegularExpressions.MatchCollection matches =
+            System.Text.RegularExpressions.Regex.Matches(sceneText, "guid: ([0-9a-f]{32})");
+
+        HashSet<string> unresolved = new HashSet<string>();
+        for (int i = 0; i < matches.Count; i++)
+        {
+            string guid = matches[i].Groups[1].Value;
+            if (IsBuiltInGuid(guid))
+            {
+                continue;
+            }
+
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            if (string.IsNullOrEmpty(path))
+            {
+                unresolved.Add(guid);
+            }
+        }
+
+        report.AppendLine("Unresolved scene GUIDs:");
+        report.AppendLine();
+        if (unresolved.Count == 0)
+        {
+            report.AppendLine("- None.");
+        }
+        else
+        {
+            foreach (string guid in unresolved.OrderBy(value => value))
+            {
+                report.AppendLine($"- `{guid}`");
+            }
+        }
+
+        report.AppendLine();
+    }
+
+    private static bool ShouldMoveRootUnderDecorations(GameObject root)
+    {
+        if (root == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < DecorativeRootPrefixes.Length; i++)
+        {
+            if (root.name.StartsWith(DecorativeRootPrefixes[i], System.StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string GetExpectedAssetPrefix(string path, string extension)
+    {
+        if (path.Contains("/Scripts/") || extension == ".cs")
+        {
+            return string.Empty;
+        }
+
+        if (extension == ".mat")
+        {
+            return "M_";
+        }
+
+        if (extension == ".prefab")
+        {
+            return "P_";
+        }
+
+        if (extension == ".asset")
+        {
+            return "SO_";
+        }
+
+        if (extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".tga" || extension == ".exr")
+        {
+            return "T_";
+        }
+
+        if (extension == ".fbx" || extension == ".obj" || extension == ".blend")
+        {
+            return "SM_";
+        }
+
+        if (extension == ".wav" || extension == ".mp3" || extension == ".ogg")
+        {
+            return "SFX_";
+        }
+
+        return string.Empty;
+    }
+
+    private static bool IsBuiltInGuid(string guid)
+    {
+        return guid == "00000000000000000000000000000000" ||
+               guid == "0000000000000000e000000000000000" ||
+               guid == "0000000000000000f000000000000000";
     }
 }

@@ -700,7 +700,7 @@ public class ScaleManager : MonoBehaviour
         float localHeight = Mathf.Max(MinCharacterControllerHeight, baseControllerHeight * localHeightMultiplier);
         float localRadius = Mathf.Max(0f, baseControllerRadius * localRadiusMultiplier);
 
-        // Zero stepOffset before resizing — 0 is unconditionally valid against any
+        // Zero stepOffset before resizing. 0 is unconditionally valid against any
         // positive height/radius/lossy, so neither set_height nor set_radius can trip
         // Unity's "stepOffset > height" or "stepOffset > scaled extent" checks.
         characterController.stepOffset = 0f;
@@ -710,7 +710,7 @@ public class ScaleManager : MonoBehaviour
         // Scale stepOffset by the WORLD-space size change (heightMultiplier), not the
         // local one. The local height stays constant in unified-rig mode while lossy
         // shrinks, so localHeightMultiplier would leave stepOffset pinned at its base
-        // value (0.5) while the scaled extent shrinks toward it — putting us right at
+        // value (0.5) while the scaled extent shrinks toward it, putting us right at
         // Unity's validation threshold. heightMultiplier keeps the ratio of stepOffset
         // to scaled capsule extent constant across all scales.
         float targetStepOffset = baseControllerStepOffset * Mathf.Max(0f, heightMultiplier);
@@ -877,7 +877,7 @@ public class ScaleManager : MonoBehaviour
     {
         // Unity validates stepOffset at multiple sites (set_stepOffset, set_height,
         // set_enabled) and empirically uses a stricter bound than the documented
-        // "scaledHeight + 2*scaledRadius" — likely accounting for skinWidth and
+        // "scaledHeight + 2*scaledRadius", likely accounting for skinWidth and
         // floating-point slack. Use a 15% relative margin on the world-scaled extent
         // to stay clear of all checks. Also satisfy the raw local check
         // (stepOffset <= height) since both bounds apply to the same stored value.

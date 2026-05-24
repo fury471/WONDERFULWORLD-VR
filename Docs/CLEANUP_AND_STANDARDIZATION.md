@@ -49,10 +49,11 @@ Existing feature prefixes such as `Lotus`, `Growth`, `CatRide`, `CherryGarden`, 
 
 1. Create or switch to a cleanup branch.
 2. Run `Wonderful World > Production > Generate Production Audit`.
-3. Fix missing scripts, empty inactive roots, and duplicate root UI grouping first.
-4. Move assets only in Unity, preferably in small batches.
-5. After each batch, open the production scene and enter Play Mode.
-6. Commit hierarchy, asset organization, documentation, and performance work separately.
+3. Run `Wonderful World > Production > Generate Asset Reference Audit`.
+4. Fix missing scripts, empty inactive roots, duplicate root UI grouping, and decorative orphan roots first.
+5. Move assets only in Unity, preferably in small batches.
+6. After each batch, open the production scene and enter Play Mode.
+7. Commit hierarchy, asset organization, documentation, and performance work separately.
 
 ## Deletion Rules
 
