@@ -1,4 +1,12 @@
+<p align="center">
+  <img src="Docs/images/wonderland-cover.png" alt="Wonderland — Utforska här och ha det trevligt" width="100%">
+</p>
+
+<p align="center"><em>MAMF45 — Virtual Reality in Theory and Practice</em></p>
+
 # Wonderland
+
+> *Utforska här och ha det trevligt.*
 
 En handgjord PC VR-sagopark — en förstapersons, komfortinriktad underbar värld med fjärilar, lotusmusik, blommagi, vänliga riddjur, växande svampar och ett blommande körsbärsträd.
 

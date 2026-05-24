@@ -1,4 +1,13 @@
+<p align="center">
+  <img src="Docs/images/wonderland-cover.png" alt="Wonderland — Explore here and enjoy yourself" width="100%">
+</p>
+
+
+<p align="center"><em>MAMF45 — Virtual Reality in Theory and Practice</em></p>
+
 # Wonderland
+
+> *Explore here and enjoy yourself.*
 
 A handcrafted PC VR fantasy park — a first-person, comfort-first wonderland of butterflies, lotus music, flower magic, friendly mounts, growing mushrooms, and a blossoming cherry tree.
 

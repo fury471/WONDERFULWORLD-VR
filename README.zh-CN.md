@@ -1,4 +1,12 @@
+<p align="center">
+  <img src="Docs/images/wonderland-cover.png" alt="Wonderland —— 来这里探索，尽情玩耍" width="100%">
+</p>
+
+<p align="center"><em>MAMF45 —— Virtual Reality in Theory and Practice</em></p>
+
 # Wonderland 仙境
+
+> *来这里探索，尽情玩耍。*
 
 一座手作的 PC VR 奇幻乐园 —— 第一人称、舒适优先的奇境，住着蝴蝶、莲池乐音、花朵魔法、温顺坐骑、生长的蘑菇与盛放的樱花树。
 
