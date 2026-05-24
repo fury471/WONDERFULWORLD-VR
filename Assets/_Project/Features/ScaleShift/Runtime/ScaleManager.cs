@@ -469,6 +469,15 @@ public class ScaleManager : MonoBehaviour
         StartCoroutine(SetScaleRoutine(newState));
     }
 
+    public void SetThumbstickScaleEnabled(bool enabled)
+    {
+        enableQuestThumbstickScale = enabled;
+        if (!enabled)
+        {
+            ResetQuestScaleGesture();
+        }
+    }
+
     public void SetNormalScale()
     {
         SetScale(ScaleState.Normal);

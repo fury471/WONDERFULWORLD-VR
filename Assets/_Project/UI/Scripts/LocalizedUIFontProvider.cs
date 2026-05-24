@@ -5,16 +5,19 @@ namespace Wonderland.UI
 {
     public static class LocalizedUIFontProvider
     {
+        private const string ProjectCjkFontAssetResourcePath = "Fonts/WW_NotoSansCJKsc_Dynamic";
+        private const string ProjectCjkFontResourcePath = "Fonts/NotoSansCJKsc-Regular";
+
         private static readonly (string family, string style)[] FontCandidates =
         {
+            ("Noto Sans CJK SC", "Regular"),
+            ("Noto Sans SC", "Regular"),
+            ("Droid Sans Fallback", "Regular"),
             ("Microsoft YaHei", "Regular"),
             ("Microsoft YaHei UI", "Regular"),
             ("DengXian", "Regular"),
             ("SimHei", "Regular"),
-            ("SimSun", "Regular"),
-            ("Noto Sans CJK SC", "Regular"),
-            ("Noto Sans CJK", "Regular"),
-            ("Droid Sans Fallback", "Regular")
+            ("SimSun", "Regular")
         };
 
         private static TMP_FontAsset cachedFont;
@@ -34,6 +37,26 @@ namespace Wonderland.UI
 
             attemptedResolve = true;
 
+            TMP_FontAsset bundledAsset = Resources.Load<TMP_FontAsset>(ProjectCjkFontAssetResourcePath);
+            if (bundledAsset != null)
+            {
+                ConfigureFontAsset(bundledAsset, "WW_NotoSansCJKsc_Dynamic");
+                cachedFont = bundledAsset;
+                return cachedFont;
+            }
+
+            Font bundledFont = Resources.Load<Font>(ProjectCjkFontResourcePath);
+            if (bundledFont != null)
+            {
+                TMP_FontAsset bundledFontAsset = TMP_FontAsset.CreateFontAsset(bundledFont);
+                if (bundledFontAsset != null)
+                {
+                    ConfigureFontAsset(bundledFontAsset, "Runtime Localized UI Font (Noto Sans CJK SC)");
+                    cachedFont = bundledFontAsset;
+                    return cachedFont;
+                }
+            }
+
             for (int i = 0; i < FontCandidates.Length; i++)
             {
                 var candidate = FontCandidates[i];
@@ -43,15 +66,28 @@ namespace Wonderland.UI
                     continue;
                 }
 
-                fontAsset.name = "Runtime Localized UI Font";
-                fontAsset.atlasPopulationMode = AtlasPopulationMode.DynamicOS;
-                fontAsset.isMultiAtlasTexturesEnabled = true;
+                ConfigureFontAsset(fontAsset, "Runtime Localized UI Font");
                 cachedFont = fontAsset;
                 return cachedFont;
             }
 
             Debug.LogWarning("[Localized UI] Could not find a CJK-capable system font. Assign a CJK TMP Font Asset to your localized UI text if Chinese still appears as boxes.");
             return null;
+        }
+
+#if UNITY_EDITOR
+        public static void ClearCachedFontForEditor()
+        {
+            cachedFont = null;
+            attemptedResolve = false;
+        }
+#endif
+
+        private static void ConfigureFontAsset(TMP_FontAsset fontAsset, string assetName)
+        {
+            fontAsset.name = assetName;
+            fontAsset.atlasPopulationMode = AtlasPopulationMode.Dynamic;
+            fontAsset.isMultiAtlasTexturesEnabled = true;
         }
     }
 }
