@@ -12,6 +12,8 @@ namespace Wonderland.UI
     [DisallowMultipleComponent]
     public sealed class WelcomeFlowController : MonoBehaviour
     {
+        private static bool showRequestedForNextSceneLoad;
+
         [System.Serializable]
         public struct LocalizedLabel
         {
@@ -50,8 +52,8 @@ namespace Wonderland.UI
         [SerializeField, Min(0f)] private float postClickDestroyDelay = 0.6f;
 
         [Header("Behavior")]
-        [SerializeField] private bool lockLocomotionWhileShown = true;
-        [SerializeField] private bool disableThumbstickScaleWhileShown = true;
+        [SerializeField] private bool lockLocomotionWhileShown = false;
+        [SerializeField] private bool disableThumbstickScaleWhileShown = false;
         [SerializeField] private bool destroyAfterStart = true;
 
         [Header("Language Button State")]
@@ -140,6 +142,11 @@ namespace Wonderland.UI
             {
                 StartCoroutine(DestroyAfterFade());
             }
+        }
+
+        public static void RequestShowOnNextSceneLoad()
+        {
+            showRequestedForNextSceneLoad = true;
         }
 
         private void ResolveReferences()
@@ -348,6 +355,16 @@ namespace Wonderland.UI
 
         private void ShowAndLock()
         {
+            if (showRequestedForNextSceneLoad)
+            {
+                showRequestedForNextSceneLoad = false;
+                if (gameFlow != null)
+                {
+                    gameFlow.ResetRuntimeState();
+                }
+            }
+
+            dismissed = false;
             targetVisible = true;
 
             if (canvasGroup != null)

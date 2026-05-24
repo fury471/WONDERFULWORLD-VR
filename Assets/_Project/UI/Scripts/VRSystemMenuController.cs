@@ -19,9 +19,11 @@ namespace Wonderland.UI
         [SerializeField] private CanvasGroup canvasGroup;
         [SerializeField] private GameObject mainPanel;
         [SerializeField] private GameObject settingsPanel;
+        [SerializeField] private GameObject tutorialPanel;
 
         [Header("Buttons")]
         [SerializeField] private Button settingsButton;
+        [SerializeField] private Button tutorialButton;
         [SerializeField] private Button cancelButton;
         [SerializeField] private Button exitButton;
         [SerializeField] private Button backButton;
@@ -129,6 +131,7 @@ namespace Wonderland.UI
         {
             if (mainPanel != null) mainPanel.SetActive(false);
             if (settingsPanel != null) settingsPanel.SetActive(true);
+            if (tutorialPanel != null) tutorialPanel.SetActive(false);
             VRSettingsMenuView settingsView = settingsPanel != null ? settingsPanel.GetComponentInChildren<VRSettingsMenuView>(true) : null;
             if (settingsView != null)
             {
@@ -136,9 +139,23 @@ namespace Wonderland.UI
             }
         }
 
+        public void ShowTutorialPanel()
+        {
+            if (mainPanel != null) mainPanel.SetActive(false);
+            if (settingsPanel != null) settingsPanel.SetActive(false);
+            if (tutorialPanel != null) tutorialPanel.SetActive(true);
+
+            VRTutorialMenuView tutorialView = tutorialPanel != null ? tutorialPanel.GetComponentInChildren<VRTutorialMenuView>(true) : null;
+            if (tutorialView != null)
+            {
+                tutorialView.ShowFirstPage();
+            }
+        }
+
         public void ShowMainPanel()
         {
             if (settingsPanel != null) settingsPanel.SetActive(false);
+            if (tutorialPanel != null) tutorialPanel.SetActive(false);
             if (mainPanel != null) mainPanel.SetActive(true);
         }
 
@@ -154,11 +171,22 @@ namespace Wonderland.UI
         public void RestartCurrentScene()
         {
             Time.timeScale = 1f;
+            ResetGameFlowRuntimeState();
+            WelcomeFlowController.RequestShowOnNextSceneLoad();
+
             Scene activeScene = SceneManager.GetActiveScene();
 #if UNITY_EDITOR
             if (!string.IsNullOrEmpty(activeScene.path))
             {
-                UnityEditor.SceneManagement.EditorSceneManager.LoadScene(activeScene.path);
+                if (Application.isPlaying)
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager.LoadSceneInPlayMode(activeScene.path, new LoadSceneParameters(LoadSceneMode.Single));
+                }
+                else
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager.OpenScene(activeScene.path);
+                }
+
                 return;
             }
 #endif
@@ -169,6 +197,21 @@ namespace Wonderland.UI
             else if (!string.IsNullOrEmpty(activeScene.name))
             {
                 SceneManager.LoadScene(activeScene.name);
+            }
+        }
+
+        private static void ResetGameFlowRuntimeState()
+        {
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+            GameFlowManager gameFlow = FindFirstObjectByType<GameFlowManager>(FindObjectsInactive.Include);
+#else
+#pragma warning disable CS0618
+            GameFlowManager gameFlow = FindObjectOfType<GameFlowManager>(true);
+#pragma warning restore CS0618
+#endif
+            if (gameFlow != null)
+            {
+                gameFlow.ResetRuntimeState();
             }
         }
 
@@ -208,6 +251,7 @@ namespace Wonderland.UI
         private void WireButtons()
         {
             if (settingsButton != null) settingsButton.onClick.AddListener(ShowSettingsPanel);
+            if (tutorialButton != null) tutorialButton.onClick.AddListener(ShowTutorialPanel);
             if (cancelButton != null) cancelButton.onClick.AddListener(CloseMenu);
             if (exitButton != null) exitButton.onClick.AddListener(ExitExperience);
             if (backButton != null) backButton.onClick.AddListener(ShowMainPanel);

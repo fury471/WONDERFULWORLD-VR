@@ -100,15 +100,19 @@ namespace Wonderland.UI.Editor
 
             DestroyChild(settingsPanel, "SettingsPage");
             DestroyChild(settingsPanel, "LanguagePage");
+            DestroyChild(root.transform, "TutorialPanel");
 
             RectTransform settingsPage = CreatePage("SettingsPage", settingsPanel);
             RectTransform languagePage = CreatePage("LanguagePage", settingsPanel);
             languagePage.gameObject.SetActive(false);
+            RectTransform tutorialPanel = CreateMenuPanel("TutorialPanel", root.transform);
+            tutorialPanel.gameObject.SetActive(false);
 
             BuildSettingsPage(settingsPage);
             BuildLanguagePage(languagePage);
+            BuildTutorialPanel(tutorialPanel, systemMenu);
             RemoveLegacySettingsChildren(settingsPanel, settingsPage, languagePage);
-            Button restartButton = EnsureMainRestartButton(mainPanel);
+            Button tutorialButton = EnsureMainButtonLayout(mainPanel, out Button restartButton);
 
             VRSettingsMenuView view = settingsPanel.GetComponent<VRSettingsMenuView>();
             if (view == null)
@@ -146,6 +150,8 @@ namespace Wonderland.UI.Editor
 
             SerializedObject menuObject = new SerializedObject(systemMenu);
             Set(menuObject, "restartButton", restartButton);
+            Set(menuObject, "tutorialButton", tutorialButton);
+            Set(menuObject, "tutorialPanel", tutorialPanel.gameObject);
             Set(menuObject, "backButton", Find<Button>(settingsPage, "SettingsBackButton"));
             Set(menuObject, "distanceFromCamera", 1.3f);
             Set(menuObject, "cameraLocalOffset", new Vector3(0f, -0.12f, 0f));
@@ -188,6 +194,61 @@ namespace Wonderland.UI.Editor
             AddButton(page, "LanguageCancelButton", "Cancel", "\u53d6\u6d88", "Avbryt", new Vector2(310f, -152f), new Vector2(210f, 48f));
         }
 
+        private static void BuildTutorialPanel(RectTransform panel, VRSystemMenuController systemMenu)
+        {
+            TMP_Text title = AddRawText(panel, "TutorialTitle", "Tutorial", 34f, new Vector2(-250f, 170f), new Vector2(240f, 50f), TextAlignmentOptions.Left, Color.white);
+            TMP_Text counter = AddRawText(panel, "TutorialPageCounter", "1/7", 21f, new Vector2(260f, 170f), new Vector2(100f, 36f), TextAlignmentOptions.Right, new Color(0.82f, 0.88f, 0.86f, 1f));
+            TMP_Text body = AddRawText(panel, "TutorialBody", "Use Previous and Next to browse park basics.", 22f, new Vector2(0f, 34f), new Vector2(560f, 220f), TextAlignmentOptions.TopLeft, Color.white);
+            body.textWrappingMode = TextWrappingModes.Normal;
+            body.enableAutoSizing = true;
+            body.fontSizeMin = 16f;
+            body.fontSizeMax = 22f;
+
+            Button previousButton = AddButton(panel, "TutorialPreviousButton", "Previous", "\u4e0a\u4e00\u9875", "F\u00f6reg\u00e5ende", new Vector2(-142f, -108f), new Vector2(210f, 46f));
+            Button nextButton = AddButton(panel, "TutorialNextButton", "Next", "\u4e0b\u4e00\u9875", "N\u00e4sta", new Vector2(142f, -108f), new Vector2(210f, 46f));
+            Button backButton = AddButton(panel, "TutorialBackButton", "Back", "\u8fd4\u56de", "Tillbaka", new Vector2(80f, -176f), new Vector2(210f, 46f));
+            Button cancelButton = AddButton(panel, "TutorialCancelButton", "Close", "\u5173\u95ed", "St\u00e4ng", new Vector2(310f, -176f), new Vector2(210f, 46f));
+
+            VRTutorialMenuView view = panel.GetComponent<VRTutorialMenuView>();
+            if (view == null)
+            {
+                view = panel.gameObject.AddComponent<VRTutorialMenuView>();
+            }
+
+            SerializedObject viewObject = new SerializedObject(view);
+            Set(viewObject, "systemMenu", systemMenu);
+            Set(viewObject, "titleText", title);
+            Set(viewObject, "bodyText", body);
+            Set(viewObject, "pageCounterText", counter);
+            Set(viewObject, "previousButton", previousButton);
+            Set(viewObject, "nextButton", nextButton);
+            Set(viewObject, "backButton", backButton);
+            Set(viewObject, "cancelButton", cancelButton);
+            SetTutorialPages(viewObject);
+            viewObject.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static Button EnsureMainButtonLayout(Transform mainPanel, out Button restartButton)
+        {
+            Button settingsButton = Find<Button>(mainPanel, "SettingsButton");
+            Button tutorialButton = Find<Button>(mainPanel, "TutorialButton");
+            if (tutorialButton == null)
+            {
+                tutorialButton = AddButton((RectTransform)mainPanel, "TutorialButton", "Tutorial", "\u6559\u7a0b", "Tutorial", new Vector2(0f, 18f), new Vector2(360f, 58f));
+            }
+
+            restartButton = EnsureMainRestartButton(mainPanel);
+            Button cancelButton = Find<Button>(mainPanel, "CancelButton");
+            Button exitButton = Find<Button>(mainPanel, "ExitButton");
+
+            SetButtonPosition(settingsButton, new Vector2(0f, 92f), new Vector2(360f, 58f));
+            SetButtonPosition(tutorialButton, new Vector2(0f, 22f), new Vector2(360f, 58f));
+            SetButtonPosition(restartButton, new Vector2(0f, -48f), new Vector2(360f, 58f));
+            SetButtonPosition(cancelButton, new Vector2(0f, -118f), new Vector2(360f, 58f));
+            SetButtonPosition(exitButton, new Vector2(0f, -188f), new Vector2(360f, 58f));
+            return tutorialButton;
+        }
+
         private static Button EnsureMainRestartButton(Transform mainPanel)
         {
             Button existing = Find<Button>(mainPanel, "RestartButton");
@@ -196,13 +257,36 @@ namespace Wonderland.UI.Editor
                 return existing;
             }
 
-            RectTransform exit = Find<RectTransform>(mainPanel, "ExitButton");
-            if (exit != null)
+            existing = Find<Button>(mainPanel, "Button_Restart");
+            if (existing != null)
             {
-                exit.anchoredPosition = new Vector2(0f, -156f);
+                return existing;
             }
 
-            return AddButton((RectTransform)mainPanel, "RestartButton", "Restart", "\u91cd\u542f", "Starta om", new Vector2(0f, -88f), new Vector2(360f, 58f));
+            Debug.LogWarning("[VRSystemMenuHierarchyBaker] Existing restart button was not found. Leaving restartButton unassigned instead of creating a duplicate.");
+            return null;
+        }
+
+        private static void SetButtonPosition(Button button, Vector2 position, Vector2 size)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            RectTransform rect = button.GetComponent<RectTransform>();
+            if (rect == null)
+            {
+                return;
+            }
+
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+            TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+            if (label != null)
+            {
+                label.rectTransform.sizeDelta = size;
+            }
         }
 
         private static RectTransform CreatePage(string name, Transform parent)
@@ -216,6 +300,36 @@ namespace Wonderland.UI.Editor
             rect.anchoredPosition = Vector2.zero;
             rect.sizeDelta = new Vector2(640f, 420f);
             return rect;
+        }
+
+        private static RectTransform CreateMenuPanel(string name, Transform parent)
+        {
+            GameObject go = new GameObject(name, typeof(RectTransform));
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(720f, 480f);
+            return rect;
+        }
+
+        private static TMP_Text AddRawText(RectTransform parent, string name, string value, float fontSize, Vector2 position, Vector2 size, TextAlignmentOptions alignment, Color color)
+        {
+            GameObject go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+
+            TMP_Text text = go.GetComponent<TMP_Text>();
+            text.text = value;
+            text.fontSize = fontSize;
+            text.alignment = alignment;
+            text.color = color;
+            text.raycastTarget = false;
+            return text;
         }
 
         private static TMP_Text AddText(RectTransform parent, string name, string english, string chinese, string swedish, float fontSize, Vector2 position, Vector2 size, TextAlignmentOptions alignment)
@@ -390,6 +504,87 @@ namespace Wonderland.UI.Editor
             if (property != null)
             {
                 property.vector3Value = value;
+            }
+        }
+
+        private static void SetTutorialPages(SerializedObject viewObject)
+        {
+            SerializedProperty pages = viewObject.FindProperty("pages");
+            if (pages == null)
+            {
+                return;
+            }
+
+            string[,] content =
+            {
+                {
+                    "Quick Start",
+                    "Move with the left stick. Turn with the right stick. Hold right B to recenter. Use the right stick button to change scale.",
+                    "\u5feb\u901f\u5f00\u59cb",
+                    "\u5de6\u6447\u6746\u79fb\u52a8\u3002\u53f3\u6447\u6746\u8f6c\u5411\u3002\u957f\u6309\u53f3\u624b B \u952e\u91cd\u65b0\u5bf9\u6b63\u3002\u7528\u53f3\u6447\u6746\u6309\u952e\u5207\u6362\u7f29\u653e\u3002",
+                    "Snabbstart",
+                    "R\u00f6r dig med v\u00e4nster spak. Vrid med h\u00f6ger spak. H\u00e5ll h\u00f6ger B f\u00f6r att centrera. Anv\u00e4nd h\u00f6ger spakknapp f\u00f6r skala."
+                },
+                {
+                    "Notice Boards",
+                    "Every park area has a notice board. Point the right controller at the board and press the right index trigger to open local story, controls, and hints.",
+                    "\u516c\u544a\u724c",
+                    "\u6bcf\u4e2a\u56ed\u533a\u90fd\u6709\u516c\u544a\u724c\u3002\u7528\u53f3\u624b\u63a7\u5236\u5668\u6307\u5411\u516c\u544a\u724c\uff0c\u6309\u53f3\u624b\u98df\u6307\u952e\u6253\u5f00\u672c\u533a\u57df\u7684\u6545\u4e8b\u3001\u64cd\u4f5c\u548c\u63d0\u793a\u3002",
+                    "Anslagstavlor",
+                    "Varje omr\u00e5de har en anslagstavla. Peka med h\u00f6ger kontroll och tryck h\u00f6ger avtryckare f\u00f6r lokal ber\u00e4ttelse, kontroller och tips."
+                },
+                {
+                    "Human Entry",
+                    "Start here when you need orientation. The board summarizes basic movement, comfort, and where to go next.",
+                    "\u4eba\u7c7b\u5165\u53e3",
+                    "\u5982\u679c\u9700\u8981\u786e\u8ba4\u65b9\u5411\uff0c\u4ece\u8fd9\u91cc\u5f00\u59cb\u3002\u516c\u544a\u724c\u4f1a\u6c47\u603b\u57fa\u7840\u79fb\u52a8\u3001\u8212\u9002\u8bbe\u7f6e\u548c\u4e0b\u4e00\u6b65\u53bb\u54ea\u91cc\u3002",
+                    "M\u00e4nsklig entr\u00e9",
+                    "B\u00f6rja h\u00e4r n\u00e4r du vill orientera dig. Tavlan sammanfattar r\u00f6relse, komfort och n\u00e4sta plats."
+                },
+                {
+                    "Flower Field",
+                    "Use the right index trigger on flowers, butterflies, and the board. This area is best explored slowly and up close.",
+                    "\u82b1\u7530",
+                    "\u5bf9\u82b1\u6735\u3001\u8774\u8776\u548c\u516c\u544a\u724c\u6309\u53f3\u624b\u98df\u6307\u952e\u4e92\u52a8\u3002\u8fd9\u4e2a\u533a\u57df\u9002\u5408\u6162\u6162\u770b\u3001\u8d70\u8fd1\u770b\u3002",
+                    "Blomster\u00e4ng",
+                    "Anv\u00e4nd h\u00f6ger avtryckare p\u00e5 blommor, fj\u00e4rilar och tavlan. Utforska l\u00e5ngsamt och n\u00e4ra."
+                },
+                {
+                    "Lotus Pond",
+                    "Look for quiet interaction points around the water. The board explains the pond activity and audio cues.",
+                    "\u8377\u82b1\u6c60",
+                    "\u5728\u6c34\u8fb9\u5bfb\u627e\u5b89\u9759\u7684\u4e92\u52a8\u70b9\u3002\u516c\u544a\u724c\u4f1a\u8bf4\u660e\u8377\u82b1\u6c60\u7684\u4f53\u9a8c\u548c\u58f0\u97f3\u63d0\u793a\u3002",
+                    "Lotusdamm",
+                    "Leta efter lugna interaktioner vid vattnet. Tavlan f\u00f6rklarar dammens aktivitet och ljudsignaler."
+                },
+                {
+                    "Cat Route",
+                    "Read the board before riding. It explains mount controls, comfort expectations, and how to stop safely.",
+                    "\u732b\u8def\u7ebf",
+                    "\u9a91\u4e58\u524d\u5148\u9605\u8bfb\u516c\u544a\u724c\u3002\u5b83\u4f1a\u8bf4\u660e\u5750\u9a91\u64cd\u4f5c\u3001\u8212\u9002\u9884\u671f\u548c\u5b89\u5168\u505c\u4e0b\u7684\u65b9\u6cd5\u3002",
+                    "Kattrutt",
+                    "L\u00e4s tavlan f\u00f6re ridning. Den f\u00f6rklarar kontroller, komfort och hur du stannar s\u00e4kert."
+                },
+                {
+                    "Fireworks Clearing",
+                    "The board gives timing and interaction notes. Keep the menu button in mind if you want to adjust comfort or audio.",
+                    "\u70df\u82b1\u7a7a\u5730",
+                    "\u516c\u544a\u724c\u4f1a\u63d0\u4f9b\u65f6\u673a\u548c\u4e92\u52a8\u8bf4\u660e\u3002\u5982\u679c\u8981\u8c03\u6574\u8212\u9002\u5ea6\u6216\u97f3\u91cf\uff0c\u8bb0\u5f97\u6309\u83dc\u5355\u952e\u3002",
+                    "Fyrverkerigl\u00e4nta",
+                    "Tavlan ger timing och interaktionstips. Anv\u00e4nd menyknappen om du vill justera komfort eller ljud."
+                }
+            };
+
+            pages.arraySize = content.GetLength(0);
+            for (int i = 0; i < content.GetLength(0); i++)
+            {
+                SerializedProperty page = pages.GetArrayElementAtIndex(i);
+                page.FindPropertyRelative("englishTitle").stringValue = content[i, 0];
+                page.FindPropertyRelative("englishBody").stringValue = content[i, 1];
+                page.FindPropertyRelative("chineseTitle").stringValue = content[i, 2];
+                page.FindPropertyRelative("chineseBody").stringValue = content[i, 3];
+                page.FindPropertyRelative("swedishTitle").stringValue = content[i, 4];
+                page.FindPropertyRelative("swedishBody").stringValue = content[i, 5];
             }
         }
     }

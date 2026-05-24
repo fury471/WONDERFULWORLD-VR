@@ -5,7 +5,6 @@ namespace Wonderland.UI
 {
     public static class LocalizedUIFontProvider
     {
-        private const string ProjectCjkFontAssetResourcePath = "Fonts/WW_NotoSansCJKsc_Dynamic";
         private const string ProjectCjkFontResourcePath = "Fonts/NotoSansCJKsc-Regular";
 
         private static readonly (string family, string style)[] FontCandidates =
@@ -36,14 +35,6 @@ namespace Wonderland.UI
             }
 
             attemptedResolve = true;
-
-            TMP_FontAsset bundledAsset = Resources.Load<TMP_FontAsset>(ProjectCjkFontAssetResourcePath);
-            if (bundledAsset != null)
-            {
-                ConfigureFontAsset(bundledAsset, "WW_NotoSansCJKsc_Dynamic");
-                cachedFont = bundledAsset;
-                return cachedFont;
-            }
 
             Font bundledFont = Resources.Load<Font>(ProjectCjkFontResourcePath);
             if (bundledFont != null)
