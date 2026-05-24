@@ -206,6 +206,7 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private AudioClip chargedReleaseClip;
     [SerializeField] private float collectStartVolume = 0.35f;
     [SerializeField] private float releaseVolume = 0.7f;
+    [SerializeField, Min(0f)] private float releaseAudioFadeOutSeconds = 0.18f;
     [SerializeField] private bool enableReleaseLightFlash = true;
     [SerializeField] private Color releaseLightColor = new Color(1f, 0.72f, 0.34f, 1f);
     [SerializeField] private float releaseLightIntensity = 2.8f;
@@ -275,6 +276,12 @@ public class PetalPollenMagicController : MonoBehaviour
     private float releaseLightPeakIntensity;
     private float releaseLightPeakRange;
     private bool releaseLightActive;
+    private bool releaseAudioActive;
+    private bool releaseAudioFading;
+    private float releaseAudioFadeStartTime;
+    private float releaseAudioFadeStartVolume;
+    private float releaseAudioFadeDuration;
+    private bool renderedParticlesActive;
     private readonly RaycastHit[] questRayHits = new RaycastHit[12];
     private Transform authoredHandAnchor;
     private Transform questChargeAnchor;
@@ -305,6 +312,7 @@ public class PetalPollenMagicController : MonoBehaviour
     private void OnDisable()
     {
         collectAction?.action?.Disable();
+        StopReleaseAudio(true);
     }
 
     private void Update()
@@ -322,6 +330,7 @@ public class PetalPollenMagicController : MonoBehaviour
         UpdateMagicParticles();
         UpdateQuestReleaseLock();
         UpdateReleaseLightFeedback();
+        UpdateReleaseAudioFade();
         RenderParticles();
     }
 
@@ -359,6 +368,7 @@ public class PetalPollenMagicController : MonoBehaviour
 
         isCollecting = true;
         releaseActive = false;
+        StopReleaseAudio(true);
         hasReleaseShowcasePose = false;
         collectStartTime = Time.time;
         spawnAccumulator = 0f;
@@ -390,15 +400,7 @@ public class PetalPollenMagicController : MonoBehaviour
         releaseOriginCenter = GetReleaseImpactCenter();
         PrepareAttractorSamples(activeReleaseMode, Mathf.Max(activeParticles.Count, GetReleaseDensitySampleCount(activeReleaseMode)));
         bool chargedRelease = holdSeconds >= chargedHoldSeconds;
-        AudioClip configuredReleaseClip = chargedRelease && chargedReleaseClip != null ? chargedReleaseClip : releaseClip;
-        PlayMagicClip(configuredReleaseClip, releaseVolume);
-        if (configuredReleaseClip == null)
-        {
-            WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.Play2D(
-                chargedRelease ? "WW_SFX_MagicChargedRelease" : "WW_SFX_MagicRelease",
-                volumeScale: 1f,
-                maxVoices: chargedRelease ? 1 : 3);
-        }
+        PlayReleaseAudio(chargedRelease);
 
         BeginReleaseLightFeedback(chargedRelease);
 
@@ -425,6 +427,7 @@ public class PetalPollenMagicController : MonoBehaviour
     {
         isCollecting = false;
         releaseActive = false;
+        StopReleaseAudio(true);
         hasReleaseShowcasePose = false;
         activeParticles.Clear();
         releaseCharge = 0f;
@@ -439,6 +442,7 @@ public class PetalPollenMagicController : MonoBehaviour
             petalOutput.Clear(true);
         }
 
+        renderedParticlesActive = false;
         if (releaseLight != null)
         {
             releaseLight.enabled = false;
@@ -991,6 +995,8 @@ public class PetalPollenMagicController : MonoBehaviour
         if (releaseActive && activeParticles.Count == 0 && Time.time - releaseStartTime > releaseDuration + releaseSettleSeconds)
         {
             releaseActive = false;
+            StopReleaseAudio(false);
+            ClearRenderedParticles();
         }
     }
 
@@ -1717,6 +1723,91 @@ public class PetalPollenMagicController : MonoBehaviour
         magicAudioSource.PlayOneShot(clip, Mathf.Clamp01(volume));
     }
 
+    private void PlayReleaseAudio(bool chargedRelease)
+    {
+        StopReleaseAudio(true);
+        EnsureMagicAudioSource();
+
+        AudioClip configuredReleaseClip = chargedRelease && chargedReleaseClip != null ? chargedReleaseClip : releaseClip;
+        if (configuredReleaseClip != null)
+        {
+            magicAudioSource.clip = configuredReleaseClip;
+            magicAudioSource.loop = false;
+            magicAudioSource.volume = Mathf.Clamp01(releaseVolume);
+            magicAudioSource.pitch = 1f;
+            magicAudioSource.Play();
+            releaseAudioActive = true;
+            releaseAudioFading = false;
+            return;
+        }
+
+        string cueName = chargedRelease ? "WW_SFX_MagicChargedRelease" : "WW_SFX_MagicRelease";
+        WonderfulWorld.Audio.WonderlandAudioCue cue = WonderfulWorld.Audio.WonderlandRuntimeAudioLibrary.LoadCue(cueName);
+        if (cue == null)
+        {
+            return;
+        }
+
+        cue.ApplyTo(magicAudioSource, assignClip: true);
+        if (magicAudioSource.clip == null)
+        {
+            return;
+        }
+
+        magicAudioSource.loop = false;
+        magicAudioSource.playOnAwake = false;
+        magicAudioSource.spatialBlend = 0f;
+        magicAudioSource.volume = cue.ResolveVolume(releaseVolume);
+        magicAudioSource.pitch = cue.ResolvePitch();
+        magicAudioSource.Play();
+        releaseAudioActive = true;
+        releaseAudioFading = false;
+    }
+
+    private void StopReleaseAudio(bool immediate)
+    {
+        if (magicAudioSource == null || !releaseAudioActive)
+        {
+            releaseAudioActive = false;
+            releaseAudioFading = false;
+            return;
+        }
+
+        if (immediate || releaseAudioFadeOutSeconds <= 0f || !magicAudioSource.isPlaying)
+        {
+            magicAudioSource.Stop();
+            magicAudioSource.clip = null;
+            releaseAudioActive = false;
+            releaseAudioFading = false;
+            return;
+        }
+
+        releaseAudioFading = true;
+        releaseAudioFadeStartTime = Time.time;
+        releaseAudioFadeStartVolume = magicAudioSource.volume;
+        releaseAudioFadeDuration = Mathf.Max(0.01f, releaseAudioFadeOutSeconds);
+    }
+
+    private void UpdateReleaseAudioFade()
+    {
+        if (!releaseAudioFading || magicAudioSource == null)
+        {
+            return;
+        }
+
+        float t = Mathf.Clamp01((Time.time - releaseAudioFadeStartTime) / releaseAudioFadeDuration);
+        magicAudioSource.volume = Mathf.Lerp(releaseAudioFadeStartVolume, 0f, Smoother01(t));
+        if (t < 1f)
+        {
+            return;
+        }
+
+        magicAudioSource.Stop();
+        magicAudioSource.clip = null;
+        releaseAudioActive = false;
+        releaseAudioFading = false;
+    }
+
     private void EnsureMagicAudioSource()
     {
         if (magicAudioSource != null)
@@ -1835,7 +1926,13 @@ public class PetalPollenMagicController : MonoBehaviour
 
         int totalPollenCount = pollenCount + releaseShockwaveCount + releaseDensityCount + releaseAfterglowCount;
         int totalPetalCount = petalCount;
+        if (totalPollenCount == 0 && totalPetalCount == 0)
+        {
+            ClearRenderedParticles();
+            return;
+        }
 
+        renderedParticlesActive = true;
         EnsureBufferSize(totalPollenCount);
         EnsurePetalBufferSize(totalPetalCount);
 
@@ -2260,6 +2357,30 @@ public class PetalPollenMagicController : MonoBehaviour
         {
             renderer.trailMaterial = renderer.sharedMaterial;
         }
+    }
+
+    private void ClearRenderedParticles()
+    {
+        if (!renderedParticlesActive)
+        {
+            return;
+        }
+
+        if (particleOutput != null)
+        {
+            particleOutput.SetParticles(particleBuffer, 0);
+            particleOutput.Clear(true);
+            particleOutput.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+
+        if (petalOutput != null)
+        {
+            petalOutput.SetParticles(petalBuffer, 0);
+            petalOutput.Clear(true);
+            petalOutput.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+
+        renderedParticlesActive = false;
     }
 
     private Color ResolveColor(MagicParticle magic)

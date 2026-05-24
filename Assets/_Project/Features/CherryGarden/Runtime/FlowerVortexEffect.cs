@@ -11,8 +11,9 @@ public class FlowerVortexEffect : MonoBehaviour
     [SerializeField] private GameObject petalPrefab;
 
     [Header("Petal Pool")]
-    [SerializeField, Min(1)] private int petalCount = 1200;
+    [SerializeField, Min(1)] private int petalCount = 1500;
     [SerializeField, Min(1)] private int maxPetalCount = 1800;
+    [SerializeField, Min(1)] private int minimumPlaybackPetalCount = 1500;
     [SerializeField] private bool playOnStart = false;
     [SerializeField] private bool loopEffect = false;
     [SerializeField] private bool holdStaticBloomAfterPlay = true;
@@ -73,12 +74,15 @@ public class FlowerVortexEffect : MonoBehaviour
 
     private void Awake()
     {
+        ApplyPetalBudgetFloor();
         petalCount = Mathf.Clamp(petalCount, 1, maxPetalCount);
     }
 
     private void OnValidate()
     {
         maxPetalCount = Mathf.Max(1, maxPetalCount);
+        minimumPlaybackPetalCount = Mathf.Clamp(minimumPlaybackPetalCount, 1, maxPetalCount);
+        ApplyPetalBudgetFloor();
         petalCount = Mathf.Clamp(petalCount, 1, maxPetalCount);
         delayBeforeStart = Mathf.Max(0f, delayBeforeStart);
         spiralDuration = Mathf.Max(0.01f, spiralDuration);
@@ -483,6 +487,11 @@ public class FlowerVortexEffect : MonoBehaviour
                 filter.sharedMesh = uvMeshes[Random.Range(0, uvMeshes.Length)];
             }
         }
+    }
+
+    private void ApplyPetalBudgetFloor()
+    {
+        petalCount = Mathf.Max(petalCount, Mathf.Min(minimumPlaybackPetalCount, maxPetalCount));
     }
 
     private bool ShouldSimulate()
