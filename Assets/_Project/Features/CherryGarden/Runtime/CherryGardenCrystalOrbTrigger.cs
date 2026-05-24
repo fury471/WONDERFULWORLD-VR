@@ -20,7 +20,7 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
     [SerializeField] private Vector3 treeRelativeOffset = new Vector3(0f, 2.35f, 0f);
     [SerializeField] private Color orbColor = new Color(1f, 0.72f, 0.84f, 0.9f);
     [SerializeField] private Color emissionColor = new Color(1f, 0.36f, 0.66f, 1f);
-    [SerializeField, Min(0f)] private float emissionIntensity = 0.48f;
+    [SerializeField, Min(0f)] private float emissionIntensity = 0.62f;
     [SerializeField, Min(0f)] private float pointLightIntensity = 0.24f;
     [SerializeField, Min(0.1f)] private float pointLightRange = 4.8f;
     [SerializeField] private Vector2 textureDriftSpeed = new Vector2(0.018f, 0.032f);
@@ -29,6 +29,12 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
     [SerializeField, Min(0f)] private float shakeFrequency = 58f;
     [SerializeField, Min(0f)] private float collapseLightBoost = 1.35f;
     [SerializeField] private bool createOrbOnStart = true;
+
+    [Header("Growth Audio")]
+    [SerializeField] private string growthLoopCueName = "WW_SFX_GrowthRustle";
+    [SerializeField] private bool useProceduralEarthGrowthAudio = true;
+    [SerializeField, Range(0f, 2f)] private float growthLoopVolumeScale = 1.1f;
+    [SerializeField, Min(0f)] private float growthLoopFadeOutSeconds = 0.32f;
 
     [Header("Interaction")]
     [SerializeField] private Camera playerCamera;
@@ -46,6 +52,9 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
     private Material orbMaterial;
     private Material haloMaterial;
     private Light orbLight;
+    private AudioSource growthAudioSource;
+    private Coroutine growthAudioRoutine;
+    private static AudioClip proceduralEarthGrowthClip;
     private QuestInteractableFeedback interactionFeedback;
     private bool activated;
     private bool hovering;
@@ -66,6 +75,14 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (growthAudioRoutine != null)
+        {
+            StopCoroutine(growthAudioRoutine);
+            growthAudioRoutine = null;
+        }
+
+        StopGrowthAudio(true);
+
         if (orbMaterial != null)
         {
             Destroy(orbMaterial);
@@ -173,12 +190,13 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
         orbRoot.transform.localScale = Vector3.one * (orbRadius * 2f);
         baseOrbScale = orbRoot.transform.localScale;
         baseOrbPosition = orbRoot.transform.position;
+        CrystalStoneOrbStyle.ApplyMesh(orbRoot.GetComponent<MeshFilter>());
 
         Texture2D texture = Resources.Load<Texture2D>(string.IsNullOrWhiteSpace(textureResourcePath)
             ? DefaultTextureResourcePath
             : textureResourcePath);
 
-        orbMaterial = CreateOrbMaterial(texture, orbColor, false);
+        orbMaterial = CreateOrbMaterial(texture, orbColor, false, 1.15f);
         Renderer orbRenderer = orbRoot.GetComponent<Renderer>();
         if (orbRenderer != null)
         {
@@ -186,16 +204,17 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
         }
 
         GameObject halo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        halo.name = "CherryGarden_CrystalOrbGlow";
+        halo.name = "CherryGarden_CrystalOrbHighlightVeins";
         halo.transform.SetParent(orbRoot.transform, false);
-        halo.transform.localScale = Vector3.one * 1.18f;
+        halo.transform.localScale = Vector3.one * 1.06f;
+        CrystalStoneOrbStyle.ApplyMesh(halo.GetComponent<MeshFilter>());
         Collider haloCollider = halo.GetComponent<Collider>();
         if (haloCollider != null)
         {
             Destroy(haloCollider);
         }
 
-        haloMaterial = CreateOrbMaterial(texture, new Color(1f, 0.44f, 0.75f, 0.22f), true);
+        haloMaterial = CreateOrbMaterial(texture, new Color(1f, 0.78f, 0.94f, 0.52f), true, 2.85f);
         Renderer haloRenderer = halo.GetComponent<Renderer>();
         if (haloRenderer != null)
         {
@@ -215,78 +234,20 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
         orbColliders = orbRoot.GetComponentsInChildren<Collider>(true);
     }
 
-    private Material CreateOrbMaterial(Texture texture, Color color, bool additive)
+    private Material CreateOrbMaterial(Texture texture, Color color, bool additive, float emissionMultiplier = 1f)
     {
-        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
-        if (shader == null)
-        {
-            shader = Shader.Find("Universal Render Pipeline/Unlit");
-        }
-
-        if (shader == null)
-        {
-            shader = Shader.Find("Sprites/Default");
-        }
-
-        Material material = new Material(shader);
-        material.name = additive ? "M_CherryGarden_CrystalOrb_Glow_Runtime" : "M_CherryGarden_CrystalOrb_Runtime";
-        material.renderQueue = additive ? 3050 : 3000;
-        material.SetOverrideTag("RenderType", "Transparent");
-
-        if (texture != null)
-        {
-            if (material.HasProperty("_BaseMap"))
-            {
-                material.SetTexture("_BaseMap", texture);
-            }
-
-            if (material.HasProperty("_MainTex"))
-            {
-                material.SetTexture("_MainTex", texture);
-            }
-        }
-
-        SetMaterialColor(material, color, emissionIntensity);
-        if (material.HasProperty("_Surface"))
-        {
-            material.SetFloat("_Surface", 1f);
-        }
-
-        if (material.HasProperty("_Blend"))
-        {
-            material.SetFloat("_Blend", additive ? 1f : 0f);
-        }
-
-        material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
-        material.SetFloat("_DstBlend", additive ? (float)BlendMode.One : (float)BlendMode.OneMinusSrcAlpha);
-        material.SetFloat("_ZWrite", 0f);
-        material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-        material.EnableKeyword("_ALPHABLEND_ON");
-        material.EnableKeyword("_EMISSION");
-        return material;
+        return CrystalStoneOrbStyle.CreateMaterial(
+            texture,
+            color,
+            emissionColor,
+            emissionIntensity * emissionMultiplier,
+            additive,
+            additive ? "M_CherryGarden_CrystalOrb_Glow_Runtime" : "M_CherryGarden_CrystalOrb_Runtime");
     }
 
     private void SetMaterialColor(Material material, Color color, float emissionMultiplier)
     {
-        if (material == null)
-        {
-            return;
-        }
-
-        if (material.HasProperty("_BaseColor"))
-        {
-            material.SetColor("_BaseColor", color);
-        }
-
-        if (material.HasProperty("_Color"))
-        {
-            material.SetColor("_Color", color);
-        }
-
-        if (material.HasProperty("_EmissionColor"))
-        {
-            material.SetColor("_EmissionColor", emissionColor * emissionMultiplier);
-        }
+        CrystalStoneOrbStyle.SetMaterialColor(material, color, emissionColor, emissionMultiplier);
     }
 
     private Vector3 ResolveOrbPosition()
@@ -473,9 +434,160 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
     {
         yield return CollapseOrb();
         Vector3 growthPosition = treeGrowthController != null ? treeGrowthController.transform.position : ResolveOrbPosition();
-        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_GrowthRustle", growthPosition, volumeScale: 1f, maxVoices: 4);
+        if (growthAudioRoutine != null)
+        {
+            StopCoroutine(growthAudioRoutine);
+        }
+
+        growthAudioRoutine = StartCoroutine(PlayGrowthAudioForTree(growthPosition));
         treeGrowthController?.PlayGrowthOnce();
         flowerVortexEffect?.PlayOnce();
+    }
+
+    private IEnumerator PlayGrowthAudioForTree(Vector3 growthPosition)
+    {
+        float startDelay = treeGrowthController != null ? treeGrowthController.GrowthStartDelay : 0f;
+        if (startDelay > 0f)
+        {
+            yield return new WaitForSeconds(startDelay);
+        }
+
+        float activeDuration = treeGrowthController != null
+            ? treeGrowthController.ActiveGrowthDuration
+            : Mathf.Max(0.01f, flowerVortexEffect != null ? flowerVortexEffect.TotalEffectDuration : 6f);
+
+        WonderfulWorld.Audio.WonderlandAudioCue cue = WonderfulWorld.Audio.WonderlandRuntimeAudioLibrary.LoadCue(growthLoopCueName);
+        AudioClip clip = useProceduralEarthGrowthAudio ? GetProceduralEarthGrowthClip() : (cue != null ? cue.PickClip() : null);
+        if (clip == null)
+        {
+            growthAudioRoutine = null;
+            yield break;
+        }
+
+        EnsureGrowthAudioSource(growthPosition);
+        if (cue != null)
+        {
+            cue.ApplyTo(growthAudioSource, assignClip: false);
+        }
+
+        growthAudioSource.clip = clip;
+        growthAudioSource.loop = true;
+        growthAudioSource.playOnAwake = false;
+        growthAudioSource.pitch = cue != null && !useProceduralEarthGrowthAudio ? cue.ResolvePitch() : 1f;
+        growthAudioSource.volume = cue != null
+            ? cue.ResolveVolume(growthLoopVolumeScale)
+            : Mathf.Clamp01(growthLoopVolumeScale);
+        growthAudioSource.time = 0f;
+        growthAudioSource.Play();
+
+        yield return new WaitForSeconds(Mathf.Max(0.01f, activeDuration));
+        yield return FadeOutGrowthAudio();
+        growthAudioRoutine = null;
+    }
+
+    private void EnsureGrowthAudioSource(Vector3 position)
+    {
+        if (growthAudioSource == null)
+        {
+            GameObject audioObject = new GameObject("CherryGarden_TreeGrowthAudio");
+            audioObject.transform.SetParent(transform, true);
+            growthAudioSource = audioObject.AddComponent<AudioSource>();
+        }
+
+        growthAudioSource.transform.position = position;
+        growthAudioSource.spatialBlend = 1f;
+        growthAudioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+    }
+
+    private IEnumerator FadeOutGrowthAudio()
+    {
+        if (growthAudioSource == null)
+        {
+            yield break;
+        }
+
+        float duration = Mathf.Max(0f, growthLoopFadeOutSeconds);
+        float startVolume = growthAudioSource.volume;
+        if (duration > 0f)
+        {
+            float elapsed = 0f;
+            while (elapsed < duration && growthAudioSource != null)
+            {
+                elapsed += Time.deltaTime;
+                growthAudioSource.volume = Mathf.Lerp(startVolume, 0f, Mathf.Clamp01(elapsed / duration));
+                yield return null;
+            }
+        }
+
+        StopGrowthAudio(true);
+    }
+
+    private void StopGrowthAudio(bool immediate)
+    {
+        if (growthAudioSource == null)
+        {
+            return;
+        }
+
+        if (immediate)
+        {
+            growthAudioSource.Stop();
+            growthAudioSource.clip = null;
+            growthAudioSource.volume = 0f;
+        }
+    }
+
+    private static AudioClip GetProceduralEarthGrowthClip()
+    {
+        if (proceduralEarthGrowthClip != null)
+        {
+            return proceduralEarthGrowthClip;
+        }
+
+        const int sampleRate = 44100;
+        const float lengthSeconds = 2.8f;
+        int samples = Mathf.CeilToInt(sampleRate * lengthSeconds);
+        float[] data = new float[samples];
+        float lowpass = 0f;
+
+        for (int i = 0; i < samples; i++)
+        {
+            float t = i / (float)sampleRate;
+            float loopT = t / lengthSeconds;
+            float loopEnvelope = 0.84f + Mathf.Sin(loopT * Mathf.PI * 2f) * 0.16f;
+            float rumble = Mathf.Sin(t * Mathf.PI * 2f * 43f)
+                + Mathf.Sin(t * Mathf.PI * 2f * 71f) * 0.45f
+                + Mathf.Sin(t * Mathf.PI * 2f * 118f) * 0.2f;
+
+            float noise = DeterministicSignedNoise(i);
+            lowpass = Mathf.Lerp(lowpass, noise, 0.075f);
+            float grain = lowpass * (0.18f + 0.1f * Mathf.Sin(t * Mathf.PI * 2f * 3.7f));
+            float cracks = ResolveCrackBurst(t, 0.34f)
+                + ResolveCrackBurst(t, 1.18f) * 0.7f
+                + ResolveCrackBurst(t, 2.04f) * 0.55f;
+
+            data[i] = Mathf.Clamp((rumble * 0.11f + grain + cracks * noise * 0.28f) * loopEnvelope, -0.85f, 0.85f);
+        }
+
+        proceduralEarthGrowthClip = AudioClip.Create("CherryGarden_ProceduralEarthGrowthLoop", samples, 1, sampleRate, false);
+        proceduralEarthGrowthClip.SetData(data, 0);
+        return proceduralEarthGrowthClip;
+    }
+
+    private static float ResolveCrackBurst(float time, float center)
+    {
+        float distance = Mathf.Abs(time - center);
+        if (distance > 0.16f)
+        {
+            return 0f;
+        }
+
+        return Mathf.Pow(1f - distance / 0.16f, 2.6f);
+    }
+
+    private static float DeterministicSignedNoise(int index)
+    {
+        return Mathf.Repeat(Mathf.Sin(index * 12.9898f) * 43758.5453f, 1f) * 2f - 1f;
     }
 
     private IEnumerator CollapseOrb()
@@ -517,8 +629,8 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
 
         if (haloMaterial != null)
         {
-            Color color = new Color(1f, 0.44f, 0.75f, Mathf.Lerp(0.16f, 0f, collapse));
-            SetMaterialColor(haloMaterial, color, emissionIntensity * (1f + energySpike) * lightPulse);
+            Color color = new Color(1f, 0.78f, 0.94f, Mathf.Lerp(0.42f, 0f, collapse));
+            SetMaterialColor(haloMaterial, color, emissionIntensity * 2.85f * (1f + energySpike) * lightPulse);
         }
 
         if (orbLight != null)
@@ -568,5 +680,229 @@ public static class CherryGardenCrystalOrbBootstrap
         GameObject triggerRoot = new GameObject("CherryGarden_CrystalOrbTrigger");
         CherryGardenCrystalOrbTrigger trigger = triggerRoot.AddComponent<CherryGardenCrystalOrbTrigger>();
         trigger.Configure(treeGrowth, flowerVortex);
+    }
+}
+
+public static class CrystalStoneOrbStyle
+{
+    private const string SharedTextureResourcePath = "CherryGarden/CrystalOrbTexture";
+
+    private static Mesh sharedMesh;
+
+    public static Texture2D LoadSharedTexture()
+    {
+        return Resources.Load<Texture2D>(SharedTextureResourcePath);
+    }
+
+    public static void ApplyMesh(MeshFilter meshFilter)
+    {
+        if (meshFilter == null)
+        {
+            return;
+        }
+
+        meshFilter.sharedMesh = GetSharedMesh();
+    }
+
+    public static Material CreateMaterial(
+        Texture texture,
+        Color baseColor,
+        Color emissionColor,
+        float emissionIntensity,
+        bool additive,
+        string materialName)
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null)
+        {
+            shader = Shader.Find("Universal Render Pipeline/Unlit");
+        }
+
+        if (shader == null)
+        {
+            shader = Shader.Find("Sprites/Default");
+        }
+
+        Material material = new Material(shader);
+        material.name = materialName;
+        material.renderQueue = additive ? 3050 : 3000;
+        material.SetOverrideTag("RenderType", "Transparent");
+
+        if (texture != null)
+        {
+            if (material.HasProperty("_BaseMap"))
+            {
+                material.SetTexture("_BaseMap", texture);
+            }
+
+            if (material.HasProperty("_MainTex"))
+            {
+                material.SetTexture("_MainTex", texture);
+            }
+
+            if (material.HasProperty("_EmissionMap"))
+            {
+                material.SetTexture("_EmissionMap", texture);
+            }
+        }
+
+        SetMaterialColor(material, baseColor, emissionColor, emissionIntensity);
+
+        if (material.HasProperty("_Surface"))
+        {
+            material.SetFloat("_Surface", 1f);
+        }
+
+        if (material.HasProperty("_Blend"))
+        {
+            material.SetFloat("_Blend", additive ? 1f : 0f);
+        }
+
+        if (material.HasProperty("_Smoothness"))
+        {
+            material.SetFloat("_Smoothness", additive ? 0.35f : 0.94f);
+        }
+
+        if (material.HasProperty("_Metallic"))
+        {
+            material.SetFloat("_Metallic", 0f);
+        }
+
+        if (material.HasProperty("_SpecColor"))
+        {
+            material.SetColor("_SpecColor", new Color(1f, 0.9f, 0.96f, 1f));
+        }
+
+        if (material.HasProperty("_EnvironmentReflections"))
+        {
+            material.SetFloat("_EnvironmentReflections", 1f);
+        }
+
+        if (material.HasProperty("_SpecularHighlights"))
+        {
+            material.SetFloat("_SpecularHighlights", 1f);
+        }
+
+        material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+        material.SetFloat("_DstBlend", additive ? (float)BlendMode.One : (float)BlendMode.OneMinusSrcAlpha);
+        material.SetFloat("_ZWrite", 0f);
+        material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        material.EnableKeyword("_ALPHABLEND_ON");
+        material.EnableKeyword("_EMISSION");
+        material.EnableKeyword("_EMISSION_MAP");
+        return material;
+    }
+
+    public static void SetMaterialColor(Material material, Color baseColor, Color emissionColor, float emissionIntensity)
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        if (material.HasProperty("_BaseColor"))
+        {
+            material.SetColor("_BaseColor", baseColor);
+        }
+
+        if (material.HasProperty("_Color"))
+        {
+            material.SetColor("_Color", baseColor);
+        }
+
+        if (material.HasProperty("_EmissionColor"))
+        {
+            material.SetColor("_EmissionColor", emissionColor * emissionIntensity);
+        }
+    }
+
+    private static Mesh GetSharedMesh()
+    {
+        if (sharedMesh != null)
+        {
+            return sharedMesh;
+        }
+
+        float t = (1f + Mathf.Sqrt(5f)) * 0.5f;
+        Vector3[] baseVertices =
+        {
+            new Vector3(-1f, t, 0f),
+            new Vector3(1f, t, 0f),
+            new Vector3(-1f, -t, 0f),
+            new Vector3(1f, -t, 0f),
+            new Vector3(0f, -1f, t),
+            new Vector3(0f, 1f, t),
+            new Vector3(0f, -1f, -t),
+            new Vector3(0f, 1f, -t),
+            new Vector3(t, 0f, -1f),
+            new Vector3(t, 0f, 1f),
+            new Vector3(-t, 0f, -1f),
+            new Vector3(-t, 0f, 1f),
+        };
+
+        float[] radialOffsets =
+        {
+            1f, 0.94f, 1.03f, 0.98f,
+            0.95f, 1.04f, 0.97f, 1.02f,
+            0.96f, 1.05f, 0.93f, 1.01f,
+        };
+
+        for (int i = 0; i < baseVertices.Length; i++)
+        {
+            baseVertices[i] = Vector3.Scale(baseVertices[i].normalized * radialOffsets[i], new Vector3(0.96f, 1.06f, 1.01f));
+        }
+
+        float maxMagnitude = 0f;
+        for (int i = 0; i < baseVertices.Length; i++)
+        {
+            maxMagnitude = Mathf.Max(maxMagnitude, baseVertices[i].magnitude);
+        }
+
+        for (int i = 0; i < baseVertices.Length; i++)
+        {
+            baseVertices[i] = baseVertices[i] / maxMagnitude * 0.5f;
+        }
+
+        int[] baseTriangles =
+        {
+            0, 11, 5,
+            0, 5, 1,
+            0, 1, 7,
+            0, 7, 10,
+            0, 10, 11,
+            1, 5, 9,
+            5, 11, 4,
+            11, 10, 2,
+            10, 7, 6,
+            7, 1, 8,
+            3, 9, 4,
+            3, 4, 2,
+            3, 2, 6,
+            3, 6, 8,
+            3, 8, 9,
+            4, 9, 5,
+            2, 4, 11,
+            6, 2, 10,
+            8, 6, 7,
+            9, 8, 1,
+        };
+
+        Vector3[] facetedVertices = new Vector3[baseTriangles.Length];
+        int[] facetedTriangles = new int[baseTriangles.Length];
+        for (int i = 0; i < baseTriangles.Length; i++)
+        {
+            facetedVertices[i] = baseVertices[baseTriangles[i]];
+            facetedTriangles[i] = i;
+        }
+
+        sharedMesh = new Mesh
+        {
+            name = "WW_CrystalStoneOrb_FacetedMesh",
+            vertices = facetedVertices,
+            triangles = facetedTriangles,
+            bounds = new Bounds(Vector3.zero, Vector3.one)
+        };
+        sharedMesh.RecalculateNormals();
+        return sharedMesh;
     }
 }

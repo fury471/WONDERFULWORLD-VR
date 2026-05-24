@@ -34,6 +34,8 @@ public class TreeGrowthController : MonoBehaviour
     private bool isPlaying;
 
     public float TotalGrowthDuration => startDelay + barkRoughDuration + knotDuration + barkDuration + treeCrownDuration;
+    public float GrowthStartDelay => startDelay;
+    public float ActiveGrowthDuration => barkRoughDuration + knotDuration + barkDuration + treeCrownDuration;
     public bool IsPlaying => isPlaying;
 
     private void Awake()
