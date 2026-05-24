@@ -124,7 +124,7 @@ namespace WonderfulWorld.Features.Fireworks
 
             if (playerCamera == null)
             {
-                playerCamera = Camera.main;
+                playerCamera = QuestInteractionUtils.FindHeadCamera();
             }
 
             deviceColliders = GetComponentsInChildren<Collider>(true);
@@ -236,7 +236,7 @@ namespace WonderfulWorld.Features.Fireworks
                 return true;
             }
 
-            playerCamera = Camera.main;
+            playerCamera = QuestInteractionUtils.FindHeadCamera();
             if (playerCamera != null)
             {
                 Transform cameraTransform = playerCamera.transform;

@@ -72,13 +72,15 @@ Shader "Wonderland/Vegetation/Ground Petal Detail URP"
                 half fogFactor : TEXCOORD1;
                 half3 normalWS : TEXCOORD2;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             Varyings vert(Attributes input)
             {
-                Varyings output;
+                Varyings output = (Varyings)0;
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
                 float3 flatPositionOS = float3(input.positionOS.x, _GroundOffset, input.positionOS.y);
                 VertexPositionInputs vertexInput = GetVertexPositionInputs(flatPositionOS);
@@ -91,7 +93,7 @@ Shader "Wonderland/Vegetation/Ground Petal Detail URP"
 
             half4 frag(Varyings input) : SV_Target
             {
-                UNITY_SETUP_INSTANCE_ID(input);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
                 half4 tex = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
                 clip(tex.a - 0.01h);

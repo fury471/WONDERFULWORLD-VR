@@ -117,6 +117,9 @@ namespace ButterflyHouse.Butterflies
         private float _flockingCooldownEndTime = 0f; // When the butterfly can re-enter a flock
         private Vector3 _flockVelocity = Vector3.zero;
         private readonly List<Butterfly> _nearbyButterflies = new List<Butterfly>();
+
+        // Reusable buffer for OverlapSphereNonAlloc — avoids the Collider[] allocation on every landing scan.
+        private static readonly Collider[] _landingTargetBuffer = new Collider[16];
         
         // Territory exploration parameters
         private Vector3 _currentTerritoryPosition;
@@ -131,6 +134,21 @@ namespace ButterflyHouse.Butterflies
         private Vector3 _lastPosition;
         private float _stuckTimer = 0f;
         private const float STUCK_THRESHOLD = 0.01f; // Movement less than this in 1 second = stuck
+
+        // Throttling — running expensive checks every frame for every butterfly is the dominant CPU cost.
+        // Flocking neighbour scan is O(N) per butterfly per check → O(N²) per frame.
+        // Throttle to once per ~0.25s (still well below human perception for swarm formation).
+        private const float FLOCK_CHECK_INTERVAL = 0.25f;
+        private float _flockCheckTimer;
+        private bool _cachedShouldFlock;
+        private Vector3 _cachedFlockDir;
+
+        // Visuals (color/flap/wave/emission) only need to update a few times per second.
+        private const float VISUALS_UPDATE_INTERVAL = 0.1f;
+        private float _visualsUpdateTimer;
+
+        // Cached transform reference (transform property accessor is slower than caching).
+        private Transform _cachedTransform;
         
         public State CurrentState => _currentState;
         public ButterflyArchetype Archetype => _archetype;
@@ -140,6 +158,8 @@ namespace ButterflyHouse.Butterflies
         
         private void Awake()
         {
+            _cachedTransform = transform;
+
             if (visualController == null)
                 visualController = GetComponent<ButterflyVisualController>();
             
@@ -425,23 +445,29 @@ namespace ButterflyHouse.Butterflies
                 case State.Emerging:
                     // Scale handled in coroutine
                     break;
-                
+
                 case State.Flying:
                     UpdateFlying();
                     CheckForLandingTargets();
                     break;
-                
+
                 case State.Landing:
                     UpdateLanding();
                     break;
-                
+
                 case State.Dissipating:
                     // Handled in coroutine
                     break;
             }
-            
-            // Update visual parameters based on age
-            UpdateVisualsFromAge();
+
+            // Throttle visual property block writes — these are ~per-frame shader writes
+            // and the perceptual change between consecutive frames is imperceptible.
+            _visualsUpdateTimer += Time.deltaTime;
+            if (_visualsUpdateTimer >= VISUALS_UPDATE_INTERVAL)
+            {
+                _visualsUpdateTimer = 0f;
+                UpdateVisualsFromAge();
+            }
         }
         
         private void UpdateState()
@@ -469,23 +495,24 @@ namespace ButterflyHouse.Butterflies
                     Debug.LogError($"[Butterfly] {gameObject.name}: Cannot update flying - archetype is null!");
                 return;
             }
-            
+
             float t = Time.time;
             float speed = _archetype.flightSpeedCurve.Evaluate(_normalizedAge);
-            
+            Vector3 myPos = _cachedTransform.position;
+
             // Calculate individual flight path
             // If seeking new territory, override with territory-seeking direction
             Vector3 individualDir;
             if (_seekingNewTerritory && enableTerritoryExploration)
             {
                 // Seek new territory - move directly toward target
-                Vector3 toTarget = (_newTerritoryTarget - transform.position);
+                Vector3 toTarget = (_newTerritoryTarget - myPos);
                 float distanceToTarget = toTarget.magnitude;
                 
                 if (distanceToTarget < territoryReachedDistance)
                 {
                     // Reached new territory - reset territory tracking
-                    _currentTerritoryPosition = transform.position;
+                    _currentTerritoryPosition = myPos;
                     _timeInCurrentTerritory = 0f;
                     _seekingNewTerritory = false;
                     _newTerritoryTarget = Vector3.zero;
@@ -538,25 +565,38 @@ namespace ButterflyHouse.Butterflies
             if (enableFlocking && _currentState == State.Flying)
             {
                 // Cannot flock while seeking new territory
-                bool canFlock = (!enableFlockingCooldown || Time.time >= _flockingCooldownEndTime) 
+                bool canFlock = (!enableFlockingCooldown || Time.time >= _flockingCooldownEndTime)
                                 && !_seekingNewTerritory;
-                
+
                 if (canFlock)
                 {
-                    shouldFlock = CheckForFlocking();
-                    
-                    // Check for breaking out of flock first
-                    if (_isInFlock)
+                    // Throttle the expensive neighbour scan (O(N) per butterfly). Reuse cached
+                    // result between checks — flocks form/dissolve smoothly so a 0.25s update
+                    // is visually indistinguishable from per-frame.
+                    _flockCheckTimer += Time.deltaTime;
+                    if (_flockCheckTimer >= FLOCK_CHECK_INTERVAL)
                     {
-                        CheckForBreakOut();
-                        
-                        // Re-check if we should still flock after breakout check
-                        shouldFlock = CheckForFlocking() && _isInFlock;
+                        _flockCheckTimer = 0f;
+                        _cachedShouldFlock = CheckForFlocking();
+                        if (_isInFlock)
+                        {
+                            CheckForBreakOut();
+                            _cachedShouldFlock = _cachedShouldFlock && _isInFlock;
+                        }
+                        if (_cachedShouldFlock || _isInFlock)
+                        {
+                            _cachedFlockDir = CalculateFlockingDirection();
+                        }
+                        else
+                        {
+                            _cachedFlockDir = Vector3.zero;
+                        }
                     }
-                    
+                    shouldFlock = _cachedShouldFlock;
+
                     if (shouldFlock || _isInFlock)
                     {
-                        flockDir = CalculateFlockingDirection();
+                        flockDir = _cachedFlockDir;
                         
                         // Only use flock direction if it's valid (not zero)
                         if (flockDir.sqrMagnitude > 0.01f)
@@ -633,7 +673,7 @@ namespace ButterflyHouse.Butterflies
             }
             
             // Constrain to flight radius
-            Vector3 toFocal = transform.position - _focalPoint;
+            Vector3 toFocal = myPos - _focalPoint;
             float distance = toFocal.magnitude;
             if (distance > _archetype.maxFlightRadius)
             {
@@ -659,7 +699,7 @@ namespace ButterflyHouse.Butterflies
             // Constrain to bounding box with surface avoidance
             if (ButterflyManager.Instance != null && ButterflyManager.Instance.UseBoundingBox)
             {
-                Vector3 position = transform.position;
+                Vector3 position = myPos;
                 float steerStrength;
                 Vector3 boundarySteer = ButterflyManager.Instance.GetBoundarySteerDirection(position, out steerStrength);
                 
@@ -734,21 +774,21 @@ namespace ButterflyHouse.Butterflies
             }
             
             // Apply movement
-            Vector3 newPosition = transform.position + _velocity * Time.deltaTime;
-            
+            Vector3 newPosition = myPos + _velocity * Time.deltaTime;
+
             // Clamp to bounding box if enabled
             if (ButterflyManager.Instance != null && ButterflyManager.Instance.UseBoundingBox)
             {
                 newPosition = ButterflyManager.Instance.ClampToBounds(newPosition);
             }
-            
-            transform.position = newPosition;
-            
+
+            _cachedTransform.position = newPosition;
+
             // Update rotation to face movement direction
             if (_velocity.sqrMagnitude > 0.01f)
             {
                 Quaternion targetRotation = Quaternion.LookRotation(_velocity);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * _archetype.turnSpeed);
+                _cachedTransform.rotation = Quaternion.Slerp(_cachedTransform.rotation, targetRotation, Time.deltaTime * _archetype.turnSpeed);
             }
         }
         
@@ -803,9 +843,10 @@ namespace ButterflyHouse.Butterflies
                 return;
             
             _territoryCheckTimer = 0f;
-            
+
             // Check if still in current territory
-            float distanceToTerritory = Vector3.Distance(transform.position, _currentTerritoryPosition);
+            Vector3 nowPos = _cachedTransform.position;
+            float distanceToTerritory = Vector3.Distance(nowPos, _currentTerritoryPosition);
             
             if (distanceToTerritory <= territoryCheckRadius)
             {
@@ -832,7 +873,7 @@ namespace ButterflyHouse.Butterflies
             else
             {
                 // Moved to different area - reset territory tracking
-                _currentTerritoryPosition = transform.position;
+                _currentTerritoryPosition = nowPos;
                 _timeInCurrentTerritory = 0f;
                 
                 // If we were seeking new territory and have moved far enough, we've reached it
@@ -913,7 +954,7 @@ namespace ButterflyHouse.Butterflies
             }
             
             _nearbyButterflies.Clear();
-            
+
             // Find nearby butterflies
             var allButterflies = ButterflyManager.Instance.GetActiveButterflies();
             if (allButterflies == null)
@@ -925,18 +966,21 @@ namespace ButterflyHouse.Butterflies
                 }
                 return false;
             }
-            
-            foreach (var other in allButterflies)
+
+            // sqrMagnitude avoids the sqrt() inside Vector3.Distance — the hottest cost in this O(N²) scan.
+            Vector3 selfPos = _cachedTransform.position;
+            float radiusSqr = flockDetectionRadius * flockDetectionRadius;
+            int count = allButterflies.Count;
+            for (int i = 0; i < count; i++)
             {
+                var other = allButterflies[i];
                 if (other == this || other == null)
                     continue;
-                
-                // Only consider butterflies that are flying (not emerging, landing, or dissipating)
                 if (other._currentState != State.Flying)
                     continue;
-                
-                float distance = Vector3.Distance(transform.position, other.transform.position);
-                if (distance <= flockDetectionRadius)
+
+                Vector3 delta = other._cachedTransform.position - selfPos;
+                if (delta.sqrMagnitude <= radiusSqr)
                 {
                     _nearbyButterflies.Add(other);
                 }
@@ -959,37 +1003,43 @@ namespace ButterflyHouse.Butterflies
         {
             if (_nearbyButterflies.Count == 0)
                 return Vector3.zero;
-            
+
+            Vector3 myPos = _cachedTransform.position;
             Vector3 cohesion = Vector3.zero;
             Vector3 alignment = Vector3.zero;
             Vector3 separation = Vector3.zero;
             int separationCount = 0;
-            
-            foreach (var neighbor in _nearbyButterflies)
+            float separationDistSqr = flockSeparationDistance * flockSeparationDistance;
+
+            int count = _nearbyButterflies.Count;
+            for (int i = 0; i < count; i++)
             {
+                var neighbor = _nearbyButterflies[i];
                 if (neighbor == null || neighbor == this) continue;
-                
-                Vector3 toNeighbor = neighbor.transform.position - transform.position;
-                float distance = toNeighbor.magnitude;
-                
+
+                Vector3 neighborPos = neighbor._cachedTransform.position;
+                Vector3 toNeighbor = neighborPos - myPos;
+                float distSqr = toNeighbor.sqrMagnitude;
+
                 // Cohesion: Move towards center of nearby butterflies
-                cohesion += neighbor.transform.position;
-                
+                cohesion += neighborPos;
+
                 // Alignment: Align with velocity of nearby butterflies
                 alignment += neighbor._velocity;
-                
-                // Separation: Avoid getting too close to neighbors
-                if (distance < flockSeparationDistance && distance > 0.01f)
+
+                // Separation: Avoid getting too close to neighbors (use sqr to skip sqrt unless needed)
+                if (distSqr < separationDistSqr && distSqr > 0.0001f)
                 {
+                    float distance = Mathf.Sqrt(distSqr);
                     separation -= toNeighbor.normalized / distance;
                     separationCount++;
                 }
             }
-            
+
             // Average cohesion
             if (_nearbyButterflies.Count > 0)
             {
-                cohesion = (cohesion / _nearbyButterflies.Count) - transform.position;
+                cohesion = (cohesion / _nearbyButterflies.Count) - myPos;
                 cohesion = cohesion.normalized;
             }
             
@@ -1108,8 +1158,8 @@ namespace ButterflyHouse.Butterflies
             // Random chance to seek landing target (unless seeking final landing)
             if (!_seekingFinalLanding && Random.value > seekChance) return;
             
-            Collider[] nearbyTargets = Physics.OverlapSphere(transform.position, landingRadius, landingTargetLayer);
-            
+            int hitCount = Physics.OverlapSphereNonAlloc(_cachedTransform.position, landingRadius, _landingTargetBuffer, landingTargetLayer);
+
             // Prioritize targets based on state
             // - Seeking final landing: prefer flowers, fruits, or plants (must land before dying)
             // - Low energy: prefer flowers or fruits
@@ -1119,9 +1169,10 @@ namespace ButterflyHouse.Butterflies
             Interaction.LandingTarget flowerTarget = null;
             Interaction.LandingTarget plantTarget = null;
             Interaction.LandingTarget otherTarget = null;
-            
-            foreach (var target in nearbyTargets)
+
+            for (int i = 0; i < hitCount; i++)
             {
+                var target = _landingTargetBuffer[i];
                 var landingTarget = target.GetComponent<Interaction.LandingTarget>();
                 if (landingTarget == null || !landingTarget.IsAvailable) continue;
                 
@@ -1243,18 +1294,20 @@ namespace ButterflyHouse.Butterflies
                 _currentState = State.Flying;
                 return;
             }
-            
-            Vector3 targetPos = _currentLandingTarget.transform.position + _currentLandingTarget.transform.TransformVector(_landingOffset);
-            Vector3 toTarget = targetPos - transform.position;
-            
+
+            Transform targetTr = _currentLandingTarget.transform;
+            Vector3 targetPos = targetTr.position + targetTr.TransformVector(_landingOffset);
+            Vector3 myPos = _cachedTransform.position;
+            Vector3 toTarget = targetPos - myPos;
+
             // Smoothly move to landing position
-            transform.position = Vector3.Lerp(transform.position, targetPos, Time.deltaTime * 2f);
-            
+            _cachedTransform.position = Vector3.Lerp(myPos, targetPos, Time.deltaTime * 2f);
+
             // Orient towards landing target
             if (toTarget.sqrMagnitude > 0.01f)
             {
                 Quaternion targetRotation = Quaternion.LookRotation(toTarget);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 3f);
+                _cachedTransform.rotation = Quaternion.Slerp(_cachedTransform.rotation, targetRotation, Time.deltaTime * 3f);
             }
             
             // Check if landed (close enough)

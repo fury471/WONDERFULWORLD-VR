@@ -23,6 +23,20 @@ namespace ButterflyHouse.Flowers
         private MaterialPropertyBlock _mpb;
         private Flower.FlowerStage _currentStage = Flower.FlowerStage.Bud;
         private float _nectarPulseValue = 0f;
+
+        // Cached shader property IDs and presence flags. Set in Awake from the serialized property names.
+        private int _baseColorId;
+        private int _emissionId;
+        private int _petalOpenId;
+        private int _nectarPulseId;
+        private static readonly int _emissionFallbackId = Shader.PropertyToID("_Emission");
+        private static readonly int _colorFallbackId = Shader.PropertyToID("_Color");
+        private bool _hasBaseColor;
+        private bool _hasEmission;
+        private bool _hasPetalOpen;
+        private bool _hasNectarPulse;
+        private bool _hasEmissionFallback;
+        private bool _hasColorFallback;
         
         [Header("Stage Colors")]
         [SerializeField] private Color budColor = new Color(0.8f, 0.9f, 0.5f, 1f); // Light green-yellow
@@ -34,47 +48,56 @@ namespace ButterflyHouse.Flowers
         {
             if (flowerRenderer == null)
                 flowerRenderer = GetComponent<Renderer>();
-            
+
             _mpb = new MaterialPropertyBlock();
-            
+
+            _baseColorId = Shader.PropertyToID(baseColorProperty);
+            _emissionId = Shader.PropertyToID(emissionProperty);
+            _petalOpenId = Shader.PropertyToID(petalOpenProperty);
+            _nectarPulseId = Shader.PropertyToID(nectarPulseProperty);
+            if (flowerRenderer != null && flowerRenderer.sharedMaterial != null)
+            {
+                var mat = flowerRenderer.sharedMaterial;
+                _hasBaseColor = mat.HasProperty(_baseColorId);
+                _hasEmission = mat.HasProperty(_emissionId);
+                _hasPetalOpen = mat.HasProperty(_petalOpenId);
+                _hasNectarPulse = mat.HasProperty(_nectarPulseId);
+                _hasEmissionFallback = mat.HasProperty(_emissionFallbackId);
+                _hasColorFallback = mat.HasProperty(_colorFallbackId);
+            }
+
             if (pollinationBurst == null)
                 pollinationBurst = GetComponentInChildren<ParticleSystem>();
         }
-        
+
         private void Update()
         {
             // Decay nectar pulse
-            if (_nectarPulseValue > 0f)
+            if (_nectarPulseValue > 0f && _hasNectarPulse)
             {
                 _nectarPulseValue = Mathf.Max(0f, _nectarPulseValue - Time.deltaTime * pulseDecaySpeed);
-                
+
                 flowerRenderer.GetPropertyBlock(_mpb);
-                if (flowerRenderer.sharedMaterial != null && flowerRenderer.sharedMaterial.HasProperty(nectarPulseProperty))
-                {
-                    _mpb.SetFloat(nectarPulseProperty, _nectarPulseValue);
-                }
+                _mpb.SetFloat(_nectarPulseId, _nectarPulseValue);
                 flowerRenderer.SetPropertyBlock(_mpb);
             }
-            
+
             // Update petal breathing/pulsing for Radiant and Meta stages
-            if (_currentStage == Flower.FlowerStage.Radiant || _currentStage == Flower.FlowerStage.Meta)
+            if (_hasPetalOpen && (_currentStage == Flower.FlowerStage.Radiant || _currentStage == Flower.FlowerStage.Meta))
             {
                 UpdatePetalBreathing();
             }
         }
-        
+
         private void UpdatePetalBreathing()
         {
             float breathingPhase = Time.time * 2f; // Breathing frequency
             float breathingAmplitude = _currentStage == Flower.FlowerStage.Meta ? 0.2f : 0.1f;
             float petalOpenVariation = Mathf.Sin(breathingPhase) * breathingAmplitude;
-            
+
             flowerRenderer.GetPropertyBlock(_mpb);
             float basePetalOpen = GetBasePetalOpen(_currentStage);
-            if (flowerRenderer.sharedMaterial != null && flowerRenderer.sharedMaterial.HasProperty(petalOpenProperty))
-            {
-                _mpb.SetFloat(petalOpenProperty, basePetalOpen + petalOpenVariation);
-            }
+            _mpb.SetFloat(_petalOpenId, basePetalOpen + petalOpenVariation);
             flowerRenderer.SetPropertyBlock(_mpb);
         }
         
@@ -163,63 +186,52 @@ namespace ButterflyHouse.Flowers
         public void SetColor(Color color)
         {
             if (flowerRenderer == null) return;
-            
+
             flowerRenderer.GetPropertyBlock(_mpb);
-            if (flowerRenderer.sharedMaterial != null)
-            {
-                if (flowerRenderer.sharedMaterial.HasProperty(baseColorProperty))
-                    _mpb.SetColor(baseColorProperty, color);
-                else if (flowerRenderer.sharedMaterial.HasProperty("_Color"))
-                    _mpb.SetColor("_Color", color);
-            }
+            if (_hasBaseColor)
+                _mpb.SetColor(_baseColorId, color);
+            else if (_hasColorFallback)
+                _mpb.SetColor(_colorFallbackId, color);
             flowerRenderer.SetPropertyBlock(_mpb);
         }
-        
+
         /// <summary>
         /// Set petal open amount (0 = closed, 1 = fully open).
         /// </summary>
         public void SetPetalOpen(float value)
         {
-            if (flowerRenderer == null) return;
-            
+            if (flowerRenderer == null || !_hasPetalOpen) return;
+
             flowerRenderer.GetPropertyBlock(_mpb);
-            if (flowerRenderer.sharedMaterial != null && flowerRenderer.sharedMaterial.HasProperty(petalOpenProperty))
-            {
-                _mpb.SetFloat(petalOpenProperty, value);
-            }
+            _mpb.SetFloat(_petalOpenId, value);
             flowerRenderer.SetPropertyBlock(_mpb);
         }
-        
+
         /// <summary>
         /// Set emission strength (0-1).
         /// </summary>
         public void SetEmission(float value)
         {
             if (flowerRenderer == null) return;
-            
+
             flowerRenderer.GetPropertyBlock(_mpb);
-            if (flowerRenderer.sharedMaterial != null)
-            {
-                if (flowerRenderer.sharedMaterial.HasProperty(emissionProperty))
-                    _mpb.SetFloat(emissionProperty, value);
-                else if (flowerRenderer.sharedMaterial.HasProperty("_Emission"))
-                    _mpb.SetFloat("_Emission", value);
-            }
+            if (_hasEmission)
+                _mpb.SetFloat(_emissionId, value);
+            else if (_hasEmissionFallback)
+                _mpb.SetFloat(_emissionFallbackId, value);
             flowerRenderer.SetPropertyBlock(_mpb);
         }
-        
+
         /// <summary>
         /// Called when butterfly sips nectar (subtle pulse).
         /// </summary>
         public void OnNectarSipped()
         {
             _nectarPulseValue = 1f;
-            
+
+            if (flowerRenderer == null || !_hasNectarPulse) return;
             flowerRenderer.GetPropertyBlock(_mpb);
-            if (flowerRenderer.sharedMaterial != null && flowerRenderer.sharedMaterial.HasProperty(nectarPulseProperty))
-            {
-                _mpb.SetFloat(nectarPulseProperty, _nectarPulseValue);
-            }
+            _mpb.SetFloat(_nectarPulseId, _nectarPulseValue);
             flowerRenderer.SetPropertyBlock(_mpb);
         }
         

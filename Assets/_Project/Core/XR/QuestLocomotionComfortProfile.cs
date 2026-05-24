@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -16,8 +15,28 @@ using UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets;
 [DisallowMultipleComponent]
 public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 {
+    public static event System.Action<bool, float, float> ComfortVignetteChanged;
+
+    public enum MovementMode
+    {
+        Teleport,
+        Smooth
+    }
+
+    public enum TurnMode
+    {
+        Snap,
+        Smooth
+    }
+
     private const int DefaultTeleportSurfaceMask = (1 << 0) | (1 << 3);
     private const int DefaultTeleportRaycastMask = unchecked((int)0x80000009);
+
+    [Header("User Locomotion Preferences")]
+    [SerializeField] private MovementMode movementMode = MovementMode.Teleport;
+    [SerializeField] private TurnMode turnMode = TurnMode.Snap;
+    [SerializeField, Min(0.1f)] private float smoothMoveSpeed = 1.6f;
+    [SerializeField, Min(1f)] private float smoothTurnSpeed = 45f;
 
     [Header("Controller ownership")]
     [SerializeField] private ControllerInputActionManager leftController = null;
@@ -64,16 +83,100 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     [SerializeField] private bool configureSceneVignettes = true;
     [SerializeField, Range(0.2f, 1f)] private float teleportAperture = 0.52f;
     [SerializeField, Range(0.2f, 1f)] private float turnAperture = 0.58f;
+    [SerializeField, Range(0.2f, 1f)] private float smoothMoveAperture = 0.58f;
+    [SerializeField, Range(0.2f, 1f)] private float smoothTurnAperture = 0.62f;
+    [SerializeField] private bool comfortVignetteEnabled = true;
+    [SerializeField, Range(0f, 1f)] private float comfortVignetteStrength = 0.5f;
     [SerializeField, Range(0f, 1f)] private float feathering = 0.30f;
     [SerializeField, Min(0f)] private float easeInTime = 0.10f;
     [SerializeField, Min(0f)] private float easeOutTime = 0.20f;
     [SerializeField, Min(0f)] private float easeOutDelayTime = 0.06f;
 
-    private readonly List<LocomotionVignetteProvider> vignetteProviders = new List<LocomotionVignetteProvider>(3);
+    private LocomotionVignetteProvider teleportVignetteProvider;
+    private LocomotionVignetteProvider snapTurnVignetteProvider;
+    private LocomotionVignetteProvider continuousMoveVignetteProvider;
+    private LocomotionVignetteProvider continuousTurnVignetteProvider;
 
     private int lastInstalledTeleportAreaCount;
+    private float suppressRightHandTurnUntil;
+    private bool runtimeLocomotionLocked;
 
     public int lastTeleportSurfaceInstallCount => lastInstalledTeleportAreaCount;
+
+    public MovementMode CurrentMovementMode => movementMode;
+    public TurnMode CurrentTurnMode => turnMode;
+    public float SmoothMoveSpeed => smoothMoveSpeed;
+    public float SmoothTurnSpeed => smoothTurnSpeed;
+    public bool ComfortVignetteEnabled => comfortVignetteEnabled;
+    public float ComfortVignetteStrength => comfortVignetteStrength;
+    public float ComfortVignetteAperture => ComfortToVignetteAperture(comfortVignetteStrength);
+    public bool RuntimeLocomotionLocked => runtimeLocomotionLocked;
+
+    public static float ComfortToVignetteAperture(float comfort01)
+    {
+        return Mathf.Lerp(0.85f, 0.45f, Mathf.Clamp01(comfort01));
+    }
+
+    public void SetMovementMode(MovementMode mode)
+    {
+        movementMode = mode;
+        ApplyProfile();
+    }
+
+    public void SetTurnMode(TurnMode mode)
+    {
+        turnMode = mode;
+        ApplyProfile();
+    }
+
+    public void SetSmoothMoveSpeed(float speed)
+    {
+        smoothMoveSpeed = Mathf.Max(0.1f, speed);
+        ApplyProfile();
+    }
+
+    public void SetSmoothTurnSpeed(float degreesPerSecond)
+    {
+        smoothTurnSpeed = Mathf.Max(1f, degreesPerSecond);
+        ApplyProfile();
+    }
+
+    public void SetComfortVignetteEnabled(bool enabled)
+    {
+        comfortVignetteEnabled = enabled;
+        ApplyProfile();
+        NotifyComfortVignetteChanged();
+    }
+
+    public void SetVignetteComfort(float comfort01)
+    {
+        comfortVignetteStrength = Mathf.Clamp01(comfort01);
+        float aperture = ComfortToVignetteAperture(comfortVignetteStrength);
+        teleportAperture = aperture;
+        turnAperture = aperture;
+        smoothMoveAperture = aperture;
+        smoothTurnAperture = aperture;
+        ApplyProfile();
+        NotifyComfortVignetteChanged();
+    }
+
+    public void SuppressRightHandTurn(float seconds)
+    {
+        suppressRightHandTurnUntil = Mathf.Max(suppressRightHandTurnUntil, Time.time + Mathf.Max(0f, seconds));
+        EnforceInputOwnership();
+    }
+
+    public void SetRuntimeLocomotionLocked(bool locked)
+    {
+        if (runtimeLocomotionLocked == locked)
+        {
+            EnforceInputOwnership();
+            return;
+        }
+
+        runtimeLocomotionLocked = locked;
+        ApplyProfile();
+    }
 
     private void Reset()
     {
@@ -82,6 +185,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void OnValidate()
     {
+        comfortVignetteStrength = Mathf.Clamp01(comfortVignetteStrength);
         AutoWireReferences();
     }
 
@@ -104,6 +208,11 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     private void OnDisable()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    private void NotifyComfortVignetteChanged()
+    {
+        ComfortVignetteChanged?.Invoke(comfortVignetteEnabled, comfortVignetteStrength, ComfortVignetteAperture);
     }
 
     private void LateUpdate()
@@ -241,9 +350,11 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void ConfigureControllerOwnership()
     {
+        bool locomotionAllowed = !runtimeLocomotionLocked;
+
         if (leftController != null)
         {
-            leftController.smoothMotionEnabled = false;
+            leftController.smoothMotionEnabled = locomotionAllowed && movementMode == MovementMode.Smooth;
             leftController.smoothTurnEnabled = false;
         }
         else
@@ -254,7 +365,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
         if (rightController != null)
         {
             rightController.smoothMotionEnabled = false;
-            rightController.smoothTurnEnabled = false;
+            rightController.smoothTurnEnabled = locomotionAllowed && turnMode == TurnMode.Smooth;
         }
         else
         {
@@ -277,9 +388,11 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void ConfigureLocomotionProviders()
     {
+        bool locomotionAllowed = !runtimeLocomotionLocked;
+
         if (teleportationProvider != null)
         {
-            teleportationProvider.enabled = true;
+            teleportationProvider.enabled = locomotionAllowed && movementMode == MovementMode.Teleport;
             teleportationProvider.delayTime = teleportDelayTime;
         }
         else
@@ -289,7 +402,8 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
         if (continuousMove != null)
         {
-            continuousMove.enabled = false;
+            continuousMove.enabled = locomotionAllowed && movementMode == MovementMode.Smooth;
+            continuousMove.moveSpeed = smoothMoveSpeed;
             continuousMove.enableStrafe = false;
             continuousMove.enableFly = false;
         }
@@ -300,8 +414,8 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
         if (continuousTurn != null)
         {
-            continuousTurn.enabled = false;
-            continuousTurn.turnSpeed = 45f;
+            continuousTurn.enabled = locomotionAllowed && turnMode == TurnMode.Smooth;
+            continuousTurn.turnSpeed = smoothTurnSpeed;
             continuousTurn.enableTurnLeftRight = true;
             continuousTurn.enableTurnAround = false;
         }
@@ -312,7 +426,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
         if (snapTurn != null)
         {
-            snapTurn.enabled = true;
+            snapTurn.enabled = locomotionAllowed && turnMode == TurnMode.Snap;
             snapTurn.turnAmount = snapTurnAmount;
             snapTurn.debounceTime = snapTurnDebounceTime;
             snapTurn.delayTime = snapTurnDelayTime;
@@ -343,13 +457,30 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void EnforceInputOwnership()
     {
-        SetActionEnabled(leftMoveAction, false);
+        if (runtimeLocomotionLocked)
+        {
+            SetActionEnabled(leftTeleportModeAction, false);
+            SetActionEnabled(leftTeleportCancelAction, false);
+            SetActionEnabled(leftMoveAction, false);
+            SetActionEnabled(leftContinuousTurnAction, false);
+            SetActionEnabled(leftSnapTurnAction, false);
+            SetActionEnabled(rightTeleportModeAction, false);
+            SetActionEnabled(rightTeleportCancelAction, false);
+            SetActionEnabled(rightContinuousMoveAction, false);
+            SetActionEnabled(rightContinuousTurnAction, false);
+            return;
+        }
+
+        SetActionEnabled(leftTeleportModeAction, movementMode == MovementMode.Teleport);
+        SetActionEnabled(leftTeleportCancelAction, movementMode == MovementMode.Teleport);
+        SetActionEnabled(leftMoveAction, movementMode == MovementMode.Smooth);
         SetActionEnabled(leftContinuousTurnAction, false);
         SetActionEnabled(leftSnapTurnAction, false);
         SetActionEnabled(rightTeleportModeAction, false);
         SetActionEnabled(rightTeleportCancelAction, false);
         SetActionEnabled(rightContinuousMoveAction, false);
-        SetActionEnabled(rightContinuousTurnAction, false);
+        bool rightTurnSuppressed = Time.time < suppressRightHandTurnUntil;
+        SetActionEnabled(rightContinuousTurnAction, turnMode == TurnMode.Smooth && !rightTurnSuppressed);
     }
 
     private bool TryInstallTeleportArea(Collider surfaceCollider)
@@ -427,8 +558,10 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
             return false;
         }
 
-        var parentInteractable = surfaceCollider.GetComponentInParent<XRBaseInteractable>();
-        if (parentInteractable != null && parentInteractable.gameObject != surfaceCollider.gameObject)
+        // GetComponentInParent walks self -> parents, so this also catches an interactable
+        // sitting on the same GameObject as the collider, which would otherwise end up
+        // sharing the collider with the TeleportationArea we are about to add.
+        if (surfaceCollider.GetComponentInParent<XRBaseInteractable>() != null)
         {
             return true;
         }
@@ -465,6 +598,16 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void ConfigureTunnelingVignettes()
     {
+        // Reuse persistent provider instances. The XRI TunnelingVignetteController
+        // keeps an internal record list keyed by provider reference, and that list is
+        // not cleared when locomotionVignetteProviders is cleared. If we created new
+        // instances each time, the controller would accumulate orphan records pinned
+        // at the old apertureSize and the on-screen vignette would never go away.
+        EnsureVignetteProvider(ref teleportVignetteProvider, teleportationProvider, teleportAperture, true);
+        EnsureVignetteProvider(ref snapTurnVignetteProvider, snapTurn, turnAperture, true);
+        EnsureVignetteProvider(ref continuousMoveVignetteProvider, continuousMove, smoothMoveAperture, false);
+        EnsureVignetteProvider(ref continuousTurnVignetteProvider, continuousTurn, smoothTurnAperture, false);
+
 #if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
         var vignettes = FindObjectsByType<TunnelingVignetteController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 #else
@@ -481,49 +624,85 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
             }
 
             vignette.locomotionVignetteProviders.Clear();
-            vignetteProviders.Clear();
 
-            AddVignetteProvider(vignetteProviders, teleportationProvider, teleportAperture, true);
-            AddVignetteProvider(vignetteProviders, snapTurn, turnAperture, true);
-
-            for (int providerIndex = 0; providerIndex < vignetteProviders.Count; providerIndex++)
+            if (comfortVignetteEnabled)
             {
-                vignette.locomotionVignetteProviders.Add(vignetteProviders[providerIndex]);
+                AddIfNotNull(vignette, teleportVignetteProvider);
+                AddIfNotNull(vignette, snapTurnVignetteProvider);
+                AddIfNotNull(vignette, continuousMoveVignetteProvider);
+                AddIfNotNull(vignette, continuousTurnVignetteProvider);
+            }
+            else
+            {
+                // Vignette turned off in settings. Removing providers from the list
+                // alone is not enough — any record still in the controller stays in
+                // EasingIn at its previous aperture. Explicitly end each provider so
+                // the controller transitions the record to EasingOut and the visual
+                // vignette actually fades back to no-effect.
+                EndIfNotNull(vignette, teleportVignetteProvider);
+                EndIfNotNull(vignette, snapTurnVignetteProvider);
+                EndIfNotNull(vignette, continuousMoveVignetteProvider);
+                EndIfNotNull(vignette, continuousTurnVignetteProvider);
             }
         }
     }
 
-    private void AddVignetteProvider(
-        List<LocomotionVignetteProvider> providers,
-        LocomotionProvider provider,
+    private void EnsureVignetteProvider(
+        ref LocomotionVignetteProvider vignetteProvider,
+        LocomotionProvider locomotionProvider,
         float aperture,
         bool lockEaseIn)
     {
-        if (provider == null)
+        if (locomotionProvider == null)
         {
+            vignetteProvider = null;
             return;
         }
 
-        var vignetteProvider = new LocomotionVignetteProvider
+        if (vignetteProvider == null)
         {
-            locomotionProvider = provider,
-            enabled = true,
-            overrideDefaultParameters = true,
-            overrideParameters = new VignetteParameters
+            vignetteProvider = new LocomotionVignetteProvider
             {
-                apertureSize = aperture,
-                featheringEffect = feathering,
-                easeInTime = easeInTime,
-                easeOutTime = easeOutTime,
-                easeInTimeLock = lockEaseIn,
-                easeOutDelayTime = easeOutDelayTime,
-                vignetteColor = Color.black,
-                vignetteColorBlend = Color.black,
-                apertureVerticalPosition = 0f,
-            },
-        };
+                overrideParameters = new VignetteParameters(),
+            };
+        }
 
-        providers.Add(vignetteProvider);
+        vignetteProvider.locomotionProvider = locomotionProvider;
+        vignetteProvider.enabled = true;
+        vignetteProvider.overrideDefaultParameters = true;
+
+        var parameters = vignetteProvider.overrideParameters;
+        if (parameters == null)
+        {
+            parameters = new VignetteParameters();
+            vignetteProvider.overrideParameters = parameters;
+        }
+
+        parameters.apertureSize = aperture;
+        parameters.featheringEffect = feathering;
+        parameters.easeInTime = easeInTime;
+        parameters.easeOutTime = easeOutTime;
+        parameters.easeInTimeLock = lockEaseIn;
+        parameters.easeOutDelayTime = easeOutDelayTime;
+        parameters.vignetteColor = Color.black;
+        parameters.vignetteColorBlend = Color.black;
+        parameters.apertureVerticalPosition = 0f;
+    }
+
+    private static void AddIfNotNull(TunnelingVignetteController vignette, LocomotionVignetteProvider provider)
+    {
+        if (provider != null)
+        {
+            vignette.locomotionVignetteProviders.Add(provider);
+        }
+    }
+
+    private static void EndIfNotNull(TunnelingVignetteController vignette, LocomotionVignetteProvider provider)
+    {
+        if (provider != null)
+        {
+            vignette.EndTunnelingVignette(provider);
+        }
     }
 
     private static bool ContainsToken(string value, string token)

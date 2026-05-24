@@ -1,6 +1,13 @@
-测试步骤
-1.靠近花朵
-2.长按手柄左按键trigger花瓣掉落
-3.松开随机生成形状
-3.继续长按继续花瓣掉落
-5.离开花朵区域花瓣粒子消失
+# Xuanyuan Sandbox Notes
+
+This sandbox scene was used for petal and pollen interaction testing.
+
+Test flow:
+
+1. Approach the flower.
+2. Hold the left controller trigger to start petal release.
+3. Release the trigger to generate a random shape.
+4. Hold again to continue releasing petals.
+5. Leave the flower zone and confirm the petal particles disappear.
+
+Sandbox content is not production documentation and should not be referenced by the production scene unless it is promoted into `Assets/_Project/Features`.

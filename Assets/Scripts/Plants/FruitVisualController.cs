@@ -13,9 +13,19 @@ namespace ButterflyHouse.Plants
         [SerializeField] private Renderer fruitRenderer;
         [SerializeField] private string baseColorProperty = "_BaseColor";
         [SerializeField] private string emissionProperty = "_EmissionStrength";
-        
+
         private MaterialPropertyBlock _mpb;
         private FruitGrowthSystem.FruitStage _currentStage = FruitGrowthSystem.FruitStage.Seed;
+
+        // Cached shader property IDs — string→ID lookup on every property write is wasted CPU.
+        private int _baseColorId;
+        private int _emissionId;
+        private int _emissionFallbackId;
+        private int _colorFallbackId;
+        private bool _hasBaseColor;
+        private bool _hasEmission;
+        private bool _hasEmissionFallback;
+        private bool _hasColorFallback;
         
         [Header("Stage Colors")]
         [SerializeField] private Color seedColor = new Color(1f, 1f, 1f, 0.5f); // White, low brightness
@@ -32,10 +42,26 @@ namespace ButterflyHouse.Plants
         {
             if (fruitRenderer == null)
                 fruitRenderer = GetComponent<Renderer>();
-            
+
             _mpb = new MaterialPropertyBlock();
+
+            // Resolve shader property IDs once. HasProperty(string) does a slow lookup;
+            // resolving by id is constant-time and the result is cached.
+            _baseColorId = Shader.PropertyToID(baseColorProperty);
+            _emissionId = Shader.PropertyToID(emissionProperty);
+            _emissionFallbackId = Shader.PropertyToID("_Emission");
+            _colorFallbackId = Shader.PropertyToID("_Color");
+
+            if (fruitRenderer != null && fruitRenderer.sharedMaterial != null)
+            {
+                var mat = fruitRenderer.sharedMaterial;
+                _hasBaseColor = mat.HasProperty(_baseColorId);
+                _hasEmission = mat.HasProperty(_emissionId);
+                _hasEmissionFallback = mat.HasProperty(_emissionFallbackId);
+                _hasColorFallback = mat.HasProperty(_colorFallbackId);
+            }
         }
-        
+
         private void Update()
         {
             // Pulse visuals based on stage
@@ -77,15 +103,12 @@ namespace ButterflyHouse.Plants
         public void SetEmission(float value)
         {
             if (fruitRenderer == null) return;
-            
+
             fruitRenderer.GetPropertyBlock(_mpb);
-            if (fruitRenderer.sharedMaterial != null)
-            {
-                if (fruitRenderer.sharedMaterial.HasProperty(emissionProperty))
-                    _mpb.SetFloat(emissionProperty, value);
-                else if (fruitRenderer.sharedMaterial.HasProperty("_Emission"))
-                    _mpb.SetFloat("_Emission", value);
-            }
+            if (_hasEmission)
+                _mpb.SetFloat(_emissionId, value);
+            else if (_hasEmissionFallback)
+                _mpb.SetFloat(_emissionFallbackId, value);
             fruitRenderer.SetPropertyBlock(_mpb);
         }
         
@@ -147,15 +170,12 @@ namespace ButterflyHouse.Plants
         public void SetColor(Color color)
         {
             if (fruitRenderer == null) return;
-            
+
             fruitRenderer.GetPropertyBlock(_mpb);
-            if (fruitRenderer.sharedMaterial != null)
-            {
-                if (fruitRenderer.sharedMaterial.HasProperty(baseColorProperty))
-                    _mpb.SetColor(baseColorProperty, color);
-                else if (fruitRenderer.sharedMaterial.HasProperty("_Color"))
-                    _mpb.SetColor("_Color", color);
-            }
+            if (_hasBaseColor)
+                _mpb.SetColor(_baseColorId, color);
+            else if (_hasColorFallback)
+                _mpb.SetColor(_colorFallbackId, color);
             fruitRenderer.SetPropertyBlock(_mpb);
         }
         

@@ -2,8 +2,10 @@ using UnityEngine;
 
 public class SimpleBreathingFeedback : MonoBehaviour
 {
+    private const float CameraRetrySeconds = 0.5f;
+
     [Header("Debug")]
-    public bool enableDebugLog = true;
+    [SerializeField] private bool enableDebugLog;
 
     [Header("Dependencies")]
     public Transform playerCamera;
@@ -15,27 +17,28 @@ public class SimpleBreathingFeedback : MonoBehaviour
     
     private Vector3 initialScale;
     private float debugLogTimer = 0f;
+    private float nextCameraRetryTime;
 
     private bool isCompleted = false; 
 
     private void Start() 
     {
         initialScale = transform.localScale;
-        // --- AUTOMATIC CAMERA LINK ---
-        if (playerCamera == null)
-        {
-            GameObject mainCam = GameObject.FindGameObjectWithTag("MainCamera");
-            if (mainCam != null)
-            {
-                playerCamera = mainCam.transform;
-                if (enableDebugLog) Debug.Log($"[Breathing] Linked to Camera: {mainCam.name}");
-            }
-        }
+        ResolvePlayerCamera();
     }
 
     private void Update()
     {
-        if (isCompleted || playerCamera == null) return;
+        if (isCompleted) return;
+
+        if (playerCamera == null)
+        {
+            ResolvePlayerCamera();
+            if (playerCamera == null)
+            {
+                return;
+            }
+        }
 
         Vector3 directionToObject = (transform.position - playerCamera.position).normalized;
         float lookAlignment = Vector3.Dot(playerCamera.forward, directionToObject);
@@ -68,5 +71,25 @@ public class SimpleBreathingFeedback : MonoBehaviour
     {
         isCompleted = true; 
         transform.localScale = initialScale; 
+    }
+
+    private void ResolvePlayerCamera()
+    {
+        if (playerCamera != null)
+        {
+            return;
+        }
+
+        if (Application.isPlaying && Time.unscaledTime < nextCameraRetryTime)
+        {
+            return;
+        }
+
+        nextCameraRetryTime = Time.unscaledTime + CameraRetrySeconds;
+        playerCamera = QuestInteractionUtils.FindHeadTransform();
+        if (playerCamera != null && enableDebugLog)
+        {
+            Debug.Log($"[Breathing] Linked to Camera: {playerCamera.name}");
+        }
     }
 }

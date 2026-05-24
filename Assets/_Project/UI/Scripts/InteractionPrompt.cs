@@ -1,11 +1,11 @@
-using UnityEngine;
 using TMPro;
+using UnityEngine;
 
 public class InteractionPrompt : MonoBehaviour
 {
     [Header("UI")]
-    [SerializeField] private GameObject uiRoot;   // 你的Canvas或TMP根节点
-    [SerializeField] private TMP_Text promptText; // 那行文字
+    [SerializeField] private GameObject uiRoot;
+    [SerializeField] private TMP_Text promptText;
 
     [Header("Show Rules")]
     [SerializeField] private bool usePlayerTag = true;
@@ -23,57 +23,92 @@ public class InteractionPrompt : MonoBehaviour
 
     private Vector3 baseLocalPos;
     private int insideCount;
+    private Transform cachedCamera;
 
     private void Awake()
     {
-        if (uiRoot != null) uiRoot.SetActive(false);
+        if (uiRoot != null)
+        {
+            uiRoot.SetActive(false);
+        }
+
         baseLocalPos = transform.localPosition;
+        cachedCamera = QuestInteractionUtils.FindHeadTransform();
     }
 
     public void SetText(string text)
     {
-        if (promptText != null) promptText.text = text;
+        if (promptText != null)
+        {
+            promptText.text = text;
+        }
     }
 
     private void LateUpdate()
     {
         if (floatUpDown)
         {
-            var p = baseLocalPos;
-            p.y += Mathf.Sin(Time.time * floatSpeed) * floatAmplitude;
-            transform.localPosition = p;
+            Vector3 position = baseLocalPos;
+            position.y += Mathf.Sin(Time.time * floatSpeed) * floatAmplitude;
+            transform.localPosition = position;
         }
 
-        if (faceCamera)
+        if (!faceCamera)
         {
-            var cam = Camera.main != null ? Camera.main.transform : null;
-            if (cam != null)
-            {
-                var lookPos = cam.position;
-                lookPos.y = transform.position.y + yOffset;
-                transform.LookAt(lookPos);
-                transform.Rotate(0f, 180f, 0f);
-            }
+            return;
         }
+
+        if (cachedCamera == null)
+        {
+            cachedCamera = QuestInteractionUtils.FindHeadTransform();
+        }
+
+        if (cachedCamera == null)
+        {
+            return;
+        }
+
+        Vector3 lookPosition = cachedCamera.position;
+        lookPosition.y = transform.position.y + yOffset;
+        transform.LookAt(lookPosition);
+        transform.Rotate(0f, 180f, 0f);
     }
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!IsPlayer(other)) return;
+        if (!IsPlayer(other))
+        {
+            return;
+        }
+
         insideCount++;
-        if (uiRoot != null) uiRoot.SetActive(true);
+        if (uiRoot != null)
+        {
+            uiRoot.SetActive(true);
+        }
     }
 
     private void OnTriggerExit(Collider other)
     {
-        if (!IsPlayer(other)) return;
+        if (!IsPlayer(other))
+        {
+            return;
+        }
+
         insideCount = Mathf.Max(0, insideCount - 1);
-        if (insideCount == 0 && uiRoot != null) uiRoot.SetActive(false);
+        if (insideCount == 0 && uiRoot != null)
+        {
+            uiRoot.SetActive(false);
+        }
     }
 
     private bool IsPlayer(Collider other)
     {
-        if (usePlayerTag) return other.CompareTag(playerTag);
+        if (usePlayerTag)
+        {
+            return other.CompareTag(playerTag);
+        }
+
         return (playerLayers.value & (1 << other.gameObject.layer)) != 0;
     }
 }

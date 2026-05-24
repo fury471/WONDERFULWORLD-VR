@@ -34,6 +34,8 @@ public class WashiLightController : MonoBehaviour
     private Vector4 tilingOffset = new(1f, 1f, 0f, 0f);
     private float intensitySeed;
     private float presenceSeed;
+    private bool hasPresenceState;
+    private bool lastPresenceState;
 
     private Material InstancedMaterial
     {
@@ -75,6 +77,11 @@ public class WashiLightController : MonoBehaviour
         bool isPresent = presenceAmount >= 1f || Mathf.PerlinNoise(Time.time / presenceRandomDuration, presenceSeed) < presenceAmount;
         material.SetFloat("_Intensity", intensity);
 
+        if (renderers == null || (hasPresenceState && isPresent == lastPresenceState))
+        {
+            return;
+        }
+
         for (int i = 0; i < renderers.Length; i++)
         {
             if (renderers[i] != null)
@@ -82,6 +89,9 @@ public class WashiLightController : MonoBehaviour
                 renderers[i].enabled = isPresent;
             }
         }
+
+        hasPresenceState = true;
+        lastPresenceState = isPresent;
     }
 
     [ContextMenu("Apply Texture")]

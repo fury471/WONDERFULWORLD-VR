@@ -49,7 +49,13 @@ namespace ButterflyHouse.Butterflies
         private Core.EcosystemStateController _stateController;
         private WaveformTier _targetTier;
         private float _evolutionProgress = 0f;
-        
+
+        // Evolution is driven by the ecosystem progression stage which changes very rarely.
+        // Re-rolling Random.value every frame is wasted CPU and also caused tier flickering.
+        // Re-evaluate target tier on a slow cadence; stage-change callbacks should drive most transitions.
+        private const float TIER_REEVAL_INTERVAL = 2.0f;
+        private float _tierReevalTimer;
+
         // Events
         public System.Action<WaveformTier> OnTierChanged;
         
@@ -76,15 +82,19 @@ namespace ButterflyHouse.Butterflies
         {
             if (evolveBasedOnStage && _stateController != null)
             {
-                WaveformTier newTargetTier = DetermineTargetTier();
-                
-                if (newTargetTier != _targetTier)
+                _tierReevalTimer += Time.deltaTime;
+                if (_tierReevalTimer >= TIER_REEVAL_INTERVAL)
                 {
-                    _targetTier = newTargetTier;
-                    EvolveToTier(_targetTier);
+                    _tierReevalTimer = 0f;
+                    WaveformTier newTargetTier = DetermineTargetTier();
+                    if (newTargetTier != _targetTier)
+                    {
+                        _targetTier = newTargetTier;
+                        EvolveToTier(_targetTier);
+                    }
                 }
             }
-            
+
             _evolutionProgress = Mathf.Min(1f, _evolutionProgress + Time.deltaTime);
 
             // Update visual form based on current tier

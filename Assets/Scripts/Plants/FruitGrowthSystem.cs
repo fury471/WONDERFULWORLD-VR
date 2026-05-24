@@ -36,19 +36,28 @@ namespace ButterflyHouse.Plants
         
         private GenerativeFruit _generativeFruit;
         private FruitVisualController _visualController;
-        
+
         // Events
         public System.Action<FruitStage> OnStageChanged;
-        
+
+        // Stage progression is gated on slow-moving ecosystem meters — every-frame polling is wasted work.
+        private const float PROGRESSION_CHECK_INTERVAL = 1.0f;
+        private float _progressionCheckTimer;
+
         private void Awake()
         {
             _generativeFruit = GetComponent<GenerativeFruit>();
             _visualController = GetComponent<FruitVisualController>();
         }
-        
+
         private void Update()
         {
-            CheckStageProgression();
+            _progressionCheckTimer += Time.deltaTime;
+            if (_progressionCheckTimer >= PROGRESSION_CHECK_INTERVAL)
+            {
+                _progressionCheckTimer = 0f;
+                CheckStageProgression();
+            }
             UpdateStageBehaviors();
         }
         

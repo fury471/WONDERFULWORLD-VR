@@ -21,7 +21,12 @@ namespace ButterflyHouse.Butterflies
         [SerializeField] private float timeSinceSpawn = 0f;
         
         private Butterfly _butterfly;
-        
+
+        // Energy decay is a slow continuous process — accumulate deltaTime and run the actual decay
+        // at a lower frequency. Saves N butterflies × per-frame branch / event-fire overhead.
+        private const float DECAY_TICK_INTERVAL = 0.25f;
+        private float _decayTickTimer;
+
         // Events
         public System.Action<float> OnEnergyChanged;
         public System.Action OnEnergyDepleted;
@@ -41,23 +46,28 @@ namespace ButterflyHouse.Butterflies
         private void Update()
         {
             timeSinceSpawn += Time.deltaTime;
-            
-            // Start energy decay after delay
-            if (timeSinceSpawn > energyDecayStartDelay && _butterfly != null && _butterfly.CurrentState == Butterfly.State.Flying)
+
+            // Only tick decay periodically — the delta is still equivalent because we multiply by elapsed time.
+            if (timeSinceSpawn <= energyDecayStartDelay) return;
+            if (_butterfly == null || _butterfly.CurrentState != Butterfly.State.Flying) return;
+
+            _decayTickTimer += Time.deltaTime;
+            if (_decayTickTimer < DECAY_TICK_INTERVAL) return;
+            float elapsed = _decayTickTimer;
+            _decayTickTimer = 0f;
+
+            float oldEnergy = currentEnergy;
+            currentEnergy = Mathf.Max(0f, currentEnergy - energyDecayRate * elapsed);
+
+            if (Mathf.Abs(currentEnergy - oldEnergy) > 0.01f)
             {
-                float oldEnergy = currentEnergy;
-                currentEnergy = Mathf.Max(0f, currentEnergy - energyDecayRate * Time.deltaTime);
-                
-                if (Mathf.Abs(currentEnergy - oldEnergy) > 0.01f)
-                {
-                    OnEnergyChanged?.Invoke(currentEnergy);
-                }
-                
-                // Check for energy depletion
-                if (oldEnergy > 0f && currentEnergy <= 0f)
-                {
-                    OnEnergyDepleted?.Invoke();
-                }
+                OnEnergyChanged?.Invoke(currentEnergy);
+            }
+
+            // Check for energy depletion
+            if (oldEnergy > 0f && currentEnergy <= 0f)
+            {
+                OnEnergyDepleted?.Invoke();
             }
         }
         

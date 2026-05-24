@@ -14,9 +14,9 @@ public class ParticleShapeSystem : MonoBehaviour
     }
     public enum lifeCycleType
     {
-        Init, // 默认值为 0
-        Active,    // 默认值为 1
-        nature,     // 默认值为 2
+        Init,      // Default value 0.
+        Active,    // Default value 1.
+        nature,    // Default value 2.
     }
 
     [Header("References")]
@@ -59,8 +59,8 @@ public class ParticleShapeSystem : MonoBehaviour
     public ShapeType CurrentShape => currentShape;
     private lifeCycleType currentLifeCycle = lifeCycleType.Init;
 
-    [SerializeField] private float jitterStrength = 0.02f; // 颤动幅度
-    [SerializeField] private float jitterSpeed = 5f;      // 颤动频率
+    [SerializeField] private float jitterStrength = 0.02f; // Jitter amplitude.
+    [SerializeField] private float jitterSpeed = 5f;      // Jitter frequency.
 
     [Header("Juice")]
     [SerializeField] private float globalPulseSpeed = 2f;
@@ -149,10 +149,10 @@ public class ParticleShapeSystem : MonoBehaviour
             displayParticleSystem.GetParticles(captureBuffer);
             for (int i = 0; i < count; i++)
             {
-                // 给初速度
+                // Give particles a small release velocity.
                 captureBuffer[i].velocity = new Vector3(
-                        UnityEngine.Random.Range(-0.8f, 0.8f), // 水平晃动
-                        UnityEngine.Random.Range(-0.2f, -0.5f), // 缓慢下落
+                        UnityEngine.Random.Range(-0.8f, 0.8f), // Horizontal drift.
+                        UnityEngine.Random.Range(-0.2f, -0.5f), // Slow downward fall.
                         UnityEngine.Random.Range(-0.8f, 0.8f)
                     );
             }
@@ -183,7 +183,7 @@ public class ParticleShapeSystem : MonoBehaviour
     
             main.simulationSpeed = 0.5f; 
             
-            // 如果所有粒子都自然消失了，可以回到 Init 状态
+            // Return to Init once all particles have naturally disappeared.
             if (displayParticleSystem.particleCount == 0)
             {
                 currentLifeCycle = lifeCycleType.Init;
@@ -206,8 +206,8 @@ public class ParticleShapeSystem : MonoBehaviour
         {
             Vector3 targetWorldPosition = GetTargetWorldPosition(targetLocalPositions[i]);
 
-            // 为每个粒子计算一个独特的随机偏移 (Perlin Noise 效果最平滑)
-            // 使用 i 作为种子偏移，确保每个粒子的抖动轨迹不同
+            // Give each particle a unique Perlin-noise jitter offset.
+            // Use the particle index as a seed offset so jitter paths differ.
             float offsetX = (Mathf.PerlinNoise(Time.time * jitterSpeed, i * 0.1f) - 0.5f) * jitterStrength;
             float offsetY = (Mathf.PerlinNoise(Time.time * jitterSpeed, i * 0.2f) - 0.5f) * jitterStrength;
             float offsetZ = (Mathf.PerlinNoise(Time.time * jitterSpeed, i * 0.3f) - 0.5f) * jitterStrength;
@@ -226,11 +226,11 @@ public class ParticleShapeSystem : MonoBehaviour
         {
             return localTargetPosition;
         }
-        // 计算全局脉动系数
-        // 使用 Sin 函数随时间产生 0.9 到 1.1 之间的缩放倍率
+        // Calculate a global pulse scale.
+        // Use sine over time to create a soft 0.9 to 1.1 scale multiplier.
         float pulse = 1f + Mathf.Sin(Time.time * globalPulseSpeed) * globalPulseAmplitude;
         
-        // 应用缩放
+        // Apply the pulse scale.
         Vector3 dynamicLocalPos = localTargetPosition * pulse;
         return currentShape == ShapeType.HoldCloud
             ? previewAnchor.GetHoldWorldPosition(dynamicLocalPos)
@@ -430,7 +430,7 @@ public class ParticleShapeSystem : MonoBehaviour
                 
             }
         }
-        // Debug.Log($"当前世界坐标列表的大小为: {currentWorldPositions.Count},{currentLifeCycle}");
+        // Debug.Log($"Current world position count: {currentWorldPositions.Count}, {currentLifeCycle}");
         if (!displayParticleSystem.isPlaying)
         {
             displayParticleSystem.Play();

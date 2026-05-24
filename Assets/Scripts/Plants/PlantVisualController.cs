@@ -26,28 +26,36 @@ namespace ButterflyHouse.Plants
         private float _oscillation = 0f;
         private Vector3 _pulseCenter;
         private float _pulseIntensity = 0f;
-        
+
+        // Cached shader property IDs — avoid per-frame string→hash lookups on every plant.
+        private int _oscillationId;
+        private int _pulseId;
+        private int _pulseCenterId;
+
         private void Awake()
         {
             if (plantRenderer == null)
                 plantRenderer = GetComponent<Renderer>();
-            
+
             _mpb = new MaterialPropertyBlock();
+            _oscillationId = Shader.PropertyToID(oscillationProperty);
+            _pulseId = Shader.PropertyToID(pulseProperty);
+            _pulseCenterId = Shader.PropertyToID(pulseCenterProperty);
         }
-        
+
         private void Update()
         {
             // Continuous breathing effect
             float breathing = Mathf.Sin(Time.time * breathingSpeed) * breathingAmplitude;
-            
+
             // Fade pulse over time
             _pulseIntensity = Mathf.Lerp(_pulseIntensity, 0f, Time.deltaTime * 2f);
-            
+
             // Update shader properties
             plantRenderer.GetPropertyBlock(_mpb);
-            _mpb.SetFloat(oscillationProperty, _oscillation + breathing);
-            _mpb.SetFloat(pulseProperty, _pulseIntensity);
-            _mpb.SetVector(pulseCenterProperty, _pulseCenter);
+            _mpb.SetFloat(_oscillationId, _oscillation + breathing);
+            _mpb.SetFloat(_pulseId, _pulseIntensity);
+            _mpb.SetVector(_pulseCenterId, _pulseCenter);
             plantRenderer.SetPropertyBlock(_mpb);
         }
         

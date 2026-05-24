@@ -89,6 +89,11 @@ public static class CherryGardenRegionBuilder
 
     private static GameObject FindRootObject(Scene scene, string rootName)
     {
+        if (!scene.IsValid() || !scene.isLoaded || string.IsNullOrWhiteSpace(rootName))
+        {
+            return null;
+        }
+
         GameObject[] roots = scene.GetRootGameObjects();
         for (int i = 0; i < roots.Length; i++)
         {

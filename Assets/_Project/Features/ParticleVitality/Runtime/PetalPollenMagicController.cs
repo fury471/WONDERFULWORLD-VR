@@ -41,6 +41,7 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private InputActionReference collectAction;
     [SerializeField] private List<PetalPollenSource> sources = new List<PetalPollenSource>();
     [SerializeField] private bool autoDiscoverSources = true;
+    [SerializeField, Min(0.1f)] private float sourceAutoDiscoveryRetrySeconds = 0.5f;
 
     [Header("Beginner Debug")]
     [SerializeField] private bool enableKeyboardFallback = true;
@@ -205,6 +206,7 @@ public class PetalPollenMagicController : MonoBehaviour
     [SerializeField] private AudioClip chargedReleaseClip;
     [SerializeField] private float collectStartVolume = 0.35f;
     [SerializeField] private float releaseVolume = 0.7f;
+    [SerializeField, Min(0f)] private float releaseAudioFadeOutSeconds = 0.18f;
     [SerializeField] private bool enableReleaseLightFlash = true;
     [SerializeField] private Color releaseLightColor = new Color(1f, 0.72f, 0.34f, 1f);
     [SerializeField] private float releaseLightIntensity = 2.8f;
@@ -274,17 +276,26 @@ public class PetalPollenMagicController : MonoBehaviour
     private float releaseLightPeakIntensity;
     private float releaseLightPeakRange;
     private bool releaseLightActive;
+    private bool releaseAudioActive;
+    private bool releaseAudioFading;
+    private float releaseAudioFadeStartTime;
+    private float releaseAudioFadeStartVolume;
+    private float releaseAudioFadeDuration;
+    private bool renderedParticlesActive;
     private readonly RaycastHit[] questRayHits = new RaycastHit[12];
     private Transform authoredHandAnchor;
     private Transform questChargeAnchor;
     private PetalPollenSource hoveredQuestSource;
     private PetalPollenSource pressedQuestSource;
+    private PetalPollenTrigger hoveredQuestTrigger;
+    private PetalPollenTrigger pressedQuestTrigger;
     private QuestInteractableFeedback hoveredQuestFeedback;
     private HapticImpulsePlayer rightHaptics;
     private bool questTriggerLastFrame;
     private bool questCollectActive;
     private bool questReleaseLockActive;
     private bool useViewFacingQuestShowcasePose;
+    private float nextSourceRefreshTime;
 
     private void Awake()
     {
@@ -301,6 +312,7 @@ public class PetalPollenMagicController : MonoBehaviour
     private void OnDisable()
     {
         collectAction?.action?.Disable();
+        StopReleaseAudio(true);
     }
 
     private void Update()
@@ -318,6 +330,7 @@ public class PetalPollenMagicController : MonoBehaviour
         UpdateMagicParticles();
         UpdateQuestReleaseLock();
         UpdateReleaseLightFeedback();
+        UpdateReleaseAudioFade();
         RenderParticles();
     }
 
@@ -355,11 +368,16 @@ public class PetalPollenMagicController : MonoBehaviour
 
         isCollecting = true;
         releaseActive = false;
+        StopReleaseAudio(true);
         hasReleaseShowcasePose = false;
         collectStartTime = Time.time;
         spawnAccumulator = 0f;
 
         PlayMagicClip(collectStartClip, collectStartVolume);
+        if (collectStartClip == null)
+        {
+            WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.Play2D("WW_SFX_MagicCollect", volumeScale: 1f, maxVoices: 3);
+        }
     }
 
     public void Release()
@@ -381,8 +399,10 @@ public class PetalPollenMagicController : MonoBehaviour
         CaptureReleaseShowcasePose(gatherCenter);
         releaseOriginCenter = GetReleaseImpactCenter();
         PrepareAttractorSamples(activeReleaseMode, Mathf.Max(activeParticles.Count, GetReleaseDensitySampleCount(activeReleaseMode)));
-        PlayMagicClip(holdSeconds >= chargedHoldSeconds && chargedReleaseClip != null ? chargedReleaseClip : releaseClip, releaseVolume);
-        BeginReleaseLightFeedback(holdSeconds >= chargedHoldSeconds);
+        bool chargedRelease = holdSeconds >= chargedHoldSeconds;
+        PlayReleaseAudio(chargedRelease);
+
+        BeginReleaseLightFeedback(chargedRelease);
 
         int releaseCount = Mathf.Max(1, activeParticles.Count - 1);
         for (int i = 0; i < activeParticles.Count; i++)
@@ -407,6 +427,7 @@ public class PetalPollenMagicController : MonoBehaviour
     {
         isCollecting = false;
         releaseActive = false;
+        StopReleaseAudio(true);
         hasReleaseShowcasePose = false;
         activeParticles.Clear();
         releaseCharge = 0f;
@@ -421,6 +442,7 @@ public class PetalPollenMagicController : MonoBehaviour
             petalOutput.Clear(true);
         }
 
+        renderedParticlesActive = false;
         if (releaseLight != null)
         {
             releaseLight.enabled = false;
@@ -430,6 +452,7 @@ public class PetalPollenMagicController : MonoBehaviour
         questReleaseLockActive = false;
         questCollectActive = false;
         pressedQuestSource = null;
+        pressedQuestTrigger = null;
         useViewFacingQuestShowcasePose = false;
         hasQuestEffectFrame = false;
         RestoreAuthoredHandAnchor();
@@ -495,17 +518,20 @@ public class PetalPollenMagicController : MonoBehaviour
             return;
         }
 
-        TryResolveQuestSource(new Ray(rightRayOrigin.position, rightRayOrigin.forward), out PetalPollenSource source);
+        TryResolveQuestSource(
+            new Ray(rightRayOrigin.position, rightRayOrigin.forward),
+            out PetalPollenSource source,
+            out PetalPollenTrigger trigger);
         QuestRayVisualLengthProfile.ReportHover(
             true,
             source != null,
-            source != null ? Vector3.Distance(rightRayOrigin.position, source.transform.position) : questRayDistance);
-        if (source == hoveredQuestSource)
+            source != null ? Vector3.Distance(rightRayOrigin.position, GetQuestTargetPosition(source, trigger)) : questRayDistance);
+        if (source == hoveredQuestSource && trigger == hoveredQuestTrigger)
         {
             if (hoveredQuestFeedback != null && source != null)
             {
                 hoveredQuestFeedback.SetHovered(true, rightHaptics);
-                source.SetInteractionFocus(1f);
+                SetQuestTargetFocus(source, trigger, 1f);
             }
 
             return;
@@ -513,14 +539,15 @@ public class PetalPollenMagicController : MonoBehaviour
 
         ClearQuestHover();
         hoveredQuestSource = source;
+        hoveredQuestTrigger = trigger;
         if (hoveredQuestSource == null)
         {
             return;
         }
 
-        hoveredQuestFeedback = EnsureQuestFeedback(hoveredQuestSource);
+        hoveredQuestFeedback = EnsureQuestFeedback(hoveredQuestSource, hoveredQuestTrigger);
         hoveredQuestFeedback?.SetHovered(true, rightHaptics);
-        hoveredQuestSource.SetInteractionFocus(1f);
+        SetQuestTargetFocus(hoveredQuestSource, hoveredQuestTrigger, 1f);
     }
 
     private bool UpdateQuestInput()
@@ -538,12 +565,13 @@ public class PetalPollenMagicController : MonoBehaviour
 
         if (pressedThisFrame)
         {
-            if (!CanStartQuestCollect(hoveredQuestSource))
+            if (!CanStartQuestCollect(hoveredQuestSource, hoveredQuestTrigger))
             {
                 return true;
             }
 
             pressedQuestSource = hoveredQuestSource;
+            pressedQuestTrigger = hoveredQuestTrigger;
             BeginCollect();
             questCollectActive = isCollecting;
             return true;
@@ -565,9 +593,10 @@ public class PetalPollenMagicController : MonoBehaviour
         return false;
     }
 
-    private bool TryResolveQuestSource(Ray ray, out PetalPollenSource source)
+    private bool TryResolveQuestSource(Ray ray, out PetalPollenSource source, out PetalPollenTrigger trigger)
     {
         source = null;
+        trigger = null;
         int hitCount = Physics.RaycastNonAlloc(
             ray,
             questRayHits,
@@ -589,10 +618,29 @@ public class PetalPollenMagicController : MonoBehaviour
                 continue;
             }
 
+            PetalPollenTrigger hitTrigger = hitCollider.GetComponentInParent<PetalPollenTrigger>();
+            if (hitTrigger != null)
+            {
+                if (!IsQuestTriggerNearEnough(hitTrigger))
+                {
+                    return false;
+                }
+
+                PetalPollenSource triggerSource = hitTrigger.PrimarySource;
+                if (triggerSource == null)
+                {
+                    continue;
+                }
+
+                source = triggerSource;
+                trigger = hitTrigger;
+                return true;
+            }
+
             PetalPollenSource hitSource = hitCollider.GetComponentInParent<PetalPollenSource>();
             if (hitSource == null)
             {
-                return false;
+                continue;
             }
 
             if (!IsQuestSourceNearEnough(hitSource))
@@ -607,21 +655,22 @@ public class PetalPollenMagicController : MonoBehaviour
         return false;
     }
 
-    private QuestInteractableFeedback EnsureQuestFeedback(PetalPollenSource source)
+    private QuestInteractableFeedback EnsureQuestFeedback(PetalPollenSource source, PetalPollenTrigger trigger)
     {
         if (source == null)
         {
             return null;
         }
 
-        QuestInteractableFeedback feedback = source.GetComponent<QuestInteractableFeedback>();
+        GameObject feedbackTarget = trigger != null ? trigger.gameObject : source.gameObject;
+        QuestInteractableFeedback feedback = feedbackTarget.GetComponent<QuestInteractableFeedback>();
         if (feedback == null)
         {
-            feedback = source.gameObject.AddComponent<QuestInteractableFeedback>();
+            feedback = feedbackTarget.AddComponent<QuestInteractableFeedback>();
         }
 
         feedback.Configure(questSourceOutlineColor, 0.035f);
-        feedback.SetInteractable(CanStartQuestCollect(source));
+        feedback.SetInteractable(CanStartQuestCollect(source, trigger));
         return feedback;
     }
 
@@ -634,6 +683,7 @@ public class PetalPollenMagicController : MonoBehaviour
 
         hoveredQuestFeedback = null;
         hoveredQuestSource = null;
+        hoveredQuestTrigger = null;
     }
 
     private bool CanShowQuestHover()
@@ -641,9 +691,9 @@ public class PetalPollenMagicController : MonoBehaviour
         return !isCollecting && !releaseActive && activeParticles.Count == 0 && !questReleaseLockActive;
     }
 
-    private bool CanStartQuestCollect(PetalPollenSource source)
+    private bool CanStartQuestCollect(PetalPollenSource source, PetalPollenTrigger trigger)
     {
-        return source != null && CanBeginCollect() && IsQuestSourceNearEnough(source);
+        return source != null && CanBeginCollect() && IsQuestTargetNearEnough(source, trigger);
     }
 
     private bool CanBeginCollect()
@@ -671,11 +721,60 @@ public class PetalPollenMagicController : MonoBehaviour
         Transform reference = playerHead != null ? playerHead : rightRayOrigin;
         if (reference == null)
         {
-            Camera mainCamera = Camera.main;
-            reference = mainCamera != null ? mainCamera.transform : transform;
+            reference = QuestInteractionUtils.FindHeadTransform();
+            if (reference == null)
+            {
+                reference = transform;
+            }
         }
 
         return Vector3.Distance(reference.position, source.transform.position) <= Mathf.Max(0.1f, questNearInteractDistance);
+    }
+
+    private bool IsQuestTriggerNearEnough(PetalPollenTrigger trigger)
+    {
+        if (trigger == null)
+        {
+            return false;
+        }
+
+        Transform reference = playerHead != null ? playerHead : rightRayOrigin;
+        if (reference == null)
+        {
+            reference = QuestInteractionUtils.FindHeadTransform();
+            if (reference == null)
+            {
+                reference = transform;
+            }
+        }
+
+        return Vector3.Distance(reference.position, trigger.InteractionPosition) <= Mathf.Max(0.1f, questNearInteractDistance);
+    }
+
+    private bool IsQuestTargetNearEnough(PetalPollenSource source, PetalPollenTrigger trigger)
+    {
+        return trigger != null ? IsQuestTriggerNearEnough(trigger) : IsQuestSourceNearEnough(source);
+    }
+
+    private Vector3 GetQuestTargetPosition(PetalPollenSource source, PetalPollenTrigger trigger)
+    {
+        if (trigger != null)
+        {
+            return trigger.InteractionPosition;
+        }
+
+        return source != null ? source.transform.position : transform.position;
+    }
+
+    private void SetQuestTargetFocus(PetalPollenSource source, PetalPollenTrigger trigger, float amount)
+    {
+        if (trigger != null)
+        {
+            trigger.SetInteractionFocus(amount);
+            return;
+        }
+
+        source?.SetInteractionFocus(amount);
     }
 
     private void PrepareQuestChargeAnchor()
@@ -799,17 +898,16 @@ public class PetalPollenMagicController : MonoBehaviour
 
         questReleaseLockActive = false;
         pressedQuestSource = null;
+        pressedQuestTrigger = null;
         RestoreAuthoredHandAnchor();
     }
 
-    private sealed class RaycastHitDistanceComparer : System.Collections.IComparer
+    private sealed class RaycastHitDistanceComparer : IComparer<RaycastHit>
     {
         public static readonly RaycastHitDistanceComparer Instance = new RaycastHitDistanceComparer();
 
-        public int Compare(object x, object y)
+        public int Compare(RaycastHit a, RaycastHit b)
         {
-            RaycastHit a = (RaycastHit)x;
-            RaycastHit b = (RaycastHit)y;
             return a.distance.CompareTo(b.distance);
         }
     }
@@ -897,6 +995,8 @@ public class PetalPollenMagicController : MonoBehaviour
         if (releaseActive && activeParticles.Count == 0 && Time.time - releaseStartTime > releaseDuration + releaseSettleSeconds)
         {
             releaseActive = false;
+            StopReleaseAudio(false);
+            ClearRenderedParticles();
         }
     }
 
@@ -1498,6 +1598,15 @@ public class PetalPollenMagicController : MonoBehaviour
     {
         RefreshSourcesIfNeeded();
 
+        if (pressedQuestTrigger != null && IsQuestTriggerNearEnough(pressedQuestTrigger))
+        {
+            PetalPollenSource triggerSource = pressedQuestTrigger.PickSource();
+            if (triggerSource != null)
+            {
+                return triggerSource;
+            }
+        }
+
         if (pressedQuestSource != null && sources.Contains(pressedQuestSource) && IsQuestSourceNearEnough(pressedQuestSource))
         {
             return pressedQuestSource;
@@ -1535,6 +1644,11 @@ public class PetalPollenMagicController : MonoBehaviour
         }
 
         RefreshSourcesIfNeeded();
+
+        if (pressedQuestTrigger != null && isCollecting)
+        {
+            pressedQuestTrigger.SetInteractionFocus(Mathf.Clamp01(collectingSourceFocusBoost));
+        }
 
         Vector3 handPosition = handAnchor != null ? handAnchor.position : transform.position;
         float radius = Mathf.Max(0.01f, sourceFocusRadius);
@@ -1584,6 +1698,15 @@ public class PetalPollenMagicController : MonoBehaviour
             }
         }
 
+        if (Application.isPlaying && Time.unscaledTime < nextSourceRefreshTime)
+        {
+            return;
+        }
+
+        nextSourceRefreshTime = Application.isPlaying
+            ? Time.unscaledTime + Mathf.Max(0.1f, sourceAutoDiscoveryRetrySeconds)
+            : 0f;
+
         sources.Clear();
         PetalPollenSource[] discovered = FindObjectsByType<PetalPollenSource>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         sources.AddRange(discovered);
@@ -1598,6 +1721,91 @@ public class PetalPollenMagicController : MonoBehaviour
 
         EnsureMagicAudioSource();
         magicAudioSource.PlayOneShot(clip, Mathf.Clamp01(volume));
+    }
+
+    private void PlayReleaseAudio(bool chargedRelease)
+    {
+        StopReleaseAudio(true);
+        EnsureMagicAudioSource();
+
+        AudioClip configuredReleaseClip = chargedRelease && chargedReleaseClip != null ? chargedReleaseClip : releaseClip;
+        if (configuredReleaseClip != null)
+        {
+            magicAudioSource.clip = configuredReleaseClip;
+            magicAudioSource.loop = false;
+            magicAudioSource.volume = Mathf.Clamp01(releaseVolume);
+            magicAudioSource.pitch = 1f;
+            magicAudioSource.Play();
+            releaseAudioActive = true;
+            releaseAudioFading = false;
+            return;
+        }
+
+        string cueName = chargedRelease ? "WW_SFX_MagicChargedRelease" : "WW_SFX_MagicRelease";
+        WonderfulWorld.Audio.WonderlandAudioCue cue = WonderfulWorld.Audio.WonderlandRuntimeAudioLibrary.LoadCue(cueName);
+        if (cue == null)
+        {
+            return;
+        }
+
+        cue.ApplyTo(magicAudioSource, assignClip: true);
+        if (magicAudioSource.clip == null)
+        {
+            return;
+        }
+
+        magicAudioSource.loop = false;
+        magicAudioSource.playOnAwake = false;
+        magicAudioSource.spatialBlend = 0f;
+        magicAudioSource.volume = cue.ResolveVolume(releaseVolume);
+        magicAudioSource.pitch = cue.ResolvePitch();
+        magicAudioSource.Play();
+        releaseAudioActive = true;
+        releaseAudioFading = false;
+    }
+
+    private void StopReleaseAudio(bool immediate)
+    {
+        if (magicAudioSource == null || !releaseAudioActive)
+        {
+            releaseAudioActive = false;
+            releaseAudioFading = false;
+            return;
+        }
+
+        if (immediate || releaseAudioFadeOutSeconds <= 0f || !magicAudioSource.isPlaying)
+        {
+            magicAudioSource.Stop();
+            magicAudioSource.clip = null;
+            releaseAudioActive = false;
+            releaseAudioFading = false;
+            return;
+        }
+
+        releaseAudioFading = true;
+        releaseAudioFadeStartTime = Time.time;
+        releaseAudioFadeStartVolume = magicAudioSource.volume;
+        releaseAudioFadeDuration = Mathf.Max(0.01f, releaseAudioFadeOutSeconds);
+    }
+
+    private void UpdateReleaseAudioFade()
+    {
+        if (!releaseAudioFading || magicAudioSource == null)
+        {
+            return;
+        }
+
+        float t = Mathf.Clamp01((Time.time - releaseAudioFadeStartTime) / releaseAudioFadeDuration);
+        magicAudioSource.volume = Mathf.Lerp(releaseAudioFadeStartVolume, 0f, Smoother01(t));
+        if (t < 1f)
+        {
+            return;
+        }
+
+        magicAudioSource.Stop();
+        magicAudioSource.clip = null;
+        releaseAudioActive = false;
+        releaseAudioFading = false;
     }
 
     private void EnsureMagicAudioSource()
@@ -1718,7 +1926,13 @@ public class PetalPollenMagicController : MonoBehaviour
 
         int totalPollenCount = pollenCount + releaseShockwaveCount + releaseDensityCount + releaseAfterglowCount;
         int totalPetalCount = petalCount;
+        if (totalPollenCount == 0 && totalPetalCount == 0)
+        {
+            ClearRenderedParticles();
+            return;
+        }
 
+        renderedParticlesActive = true;
         EnsureBufferSize(totalPollenCount);
         EnsurePetalBufferSize(totalPetalCount);
 
@@ -2143,6 +2357,30 @@ public class PetalPollenMagicController : MonoBehaviour
         {
             renderer.trailMaterial = renderer.sharedMaterial;
         }
+    }
+
+    private void ClearRenderedParticles()
+    {
+        if (!renderedParticlesActive)
+        {
+            return;
+        }
+
+        if (particleOutput != null)
+        {
+            particleOutput.SetParticles(particleBuffer, 0);
+            particleOutput.Clear(true);
+            particleOutput.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+
+        if (petalOutput != null)
+        {
+            petalOutput.SetParticles(petalBuffer, 0);
+            petalOutput.Clear(true);
+            petalOutput.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+
+        renderedParticlesActive = false;
     }
 
     private Color ResolveColor(MagicParticle magic)
@@ -2750,9 +2988,9 @@ public class PetalPollenMagicController : MonoBehaviour
             view = playerHead;
         }
 
-        if (view == null && Camera.main != null)
+        if (view == null)
         {
-            view = Camera.main.transform;
+            view = QuestInteractionUtils.FindHeadTransform();
         }
 
         if (view == null)

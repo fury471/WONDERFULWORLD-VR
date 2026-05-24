@@ -2,6 +2,8 @@ using UnityEngine;
 
 public class FloatingInteractionPrompt : MonoBehaviour
 {
+    private const float CameraRetrySeconds = 0.5f;
+
     [Header("Debug")]
     [Tooltip("Check this to print distance and gaze data to the Console")]
     public bool enableDebugLog;
@@ -30,32 +32,23 @@ public class FloatingInteractionPrompt : MonoBehaviour
     private bool isCompleted = false;
     private Vector3 baseLocalPos;
     private float debugLogTimer = 0f; // Used to throttle the log output
+    private float nextCameraRetryTime;
 
     private void Start()
     {
         if (promptCanvasGroup != null) promptCanvasGroup.alpha = 0f;
         baseLocalPos = transform.localPosition;
         
-        // If the Player Camera is not assigned in the Inspector (which is normal for prefabs)
-        if (playerCamera == null)
-        {
-            // Automatically find the object with the "MainCamera" tag from your screenshot
-            GameObject mainCam = GameObject.FindGameObjectWithTag("MainCamera");
-            
-            if (mainCam != null)
-            {
-                playerCamera = mainCam.transform;
-                if (enableDebugLog) Debug.Log($"[Prompt] Successfully linked to: {mainCam.name}");
-            }
-            else
-            {
-                Debug.LogError("[Prompt] Cannot find an object with the 'MainCamera' tag in the scene!");
-            }
-        }
+        ResolvePlayerCamera();
     }
 
     private void Update()
     {
+        if (playerCamera == null)
+        {
+            ResolvePlayerCamera();
+        }
+
         if (isCompleted || promptCanvasGroup == null || playerCamera == null)
         {
             if (enableDebugLog && playerCamera == null && Time.frameCount % 60 == 0) 
@@ -119,4 +112,24 @@ public class FloatingInteractionPrompt : MonoBehaviour
     }
 
     public void MarkAsCompleted() => isCompleted = true;
+
+    private void ResolvePlayerCamera()
+    {
+        if (playerCamera != null)
+        {
+            return;
+        }
+
+        if (Application.isPlaying && Time.unscaledTime < nextCameraRetryTime)
+        {
+            return;
+        }
+
+        nextCameraRetryTime = Time.unscaledTime + CameraRetrySeconds;
+        playerCamera = QuestInteractionUtils.FindHeadTransform();
+        if (enableDebugLog && playerCamera != null)
+        {
+            Debug.Log($"[Prompt] Successfully linked to: {playerCamera.name}");
+        }
+    }
 }

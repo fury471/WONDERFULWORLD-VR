@@ -5,6 +5,8 @@ using UnityEngine.InputSystem;
 using Unity.XR.CoreUtils;
 using UnityEngine.XR.Interaction.Toolkit.Inputs.Simulation;
 using UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion;
+using UnityEngine.XR.Interaction.Toolkit.Locomotion.Comfort;
 
 public class CatRideControllerV2 : MonoBehaviour
 {
@@ -51,6 +53,10 @@ public class CatRideControllerV2 : MonoBehaviour
     [SerializeField] private bool allowQuestTriggerDismount = false;
     [SerializeField] private Color questMountOutlineColor = new Color(1f, 0.66f, 0.28f, 0.64f);
 
+    [Header("Mounted UI Safety")]
+    [SerializeField] private bool ignoreMountCollidersForRaycastsWhileMounted = true;
+    [SerializeField] private int mountedRaycastIgnoreLayer = 2;
+
     [Header("Manual Ride")]
     [SerializeField] private float manualMoveSpeed = 4f;
     [SerializeField] private float manualTurnSpeed = 120f;
@@ -65,6 +71,17 @@ public class CatRideControllerV2 : MonoBehaviour
     [SerializeField] private bool enableKeyboardDebugControls = false;
     [SerializeField] private bool lockXRDeviceSimulatorDuringRide = true;
     [SerializeField] private float debugSimulatorRestoreDelay = 0.15f;
+
+    [Header("Ride Comfort")]
+    [SerializeField] private bool syncRideVignetteWithComfortProfile = true;
+    [SerializeField] private QuestLocomotionComfortProfile comfortProfile;
+    [SerializeField] private bool enableRideComfortVignette = true;
+    [SerializeField, Range(0.2f, 1f)] private float rideVignetteAperture = 0.58f;
+    [SerializeField, Range(0f, 1f)] private float rideVignetteFeathering = 0.30f;
+    [SerializeField, Min(0f)] private float rideVignetteEaseInTime = 0.10f;
+    [SerializeField, Min(0f)] private float rideVignetteEaseOutTime = 0.20f;
+    [SerializeField, Min(0f)] private float rideVignetteEaseOutDelayTime = 0.06f;
+    [SerializeField, Min(0f)] private float rideVignetteInputDeadzone = 0.08f;
 
     [Header("Auto Ride")]
     [SerializeField] private List<Transform> autoRoutePoints = new List<Transform>();
@@ -112,6 +129,8 @@ public class CatRideControllerV2 : MonoBehaviour
     private bool playerCharacterControllerWasEnabled;
     private bool playerCharacterControllerDetectCollisionsWasEnabled;
     private bool locomotionRootWasActive;
+    private LocomotionProvider[] lockedLocomotionProviders;
+    private bool[] lockedLocomotionProviderWasEnabled;
     private Transform rigOriginalParent;
     private int rigOriginalSiblingIndex = -1;
     private bool hasRigOriginalParent;
@@ -121,9 +140,6 @@ public class CatRideControllerV2 : MonoBehaviour
     private XROrigin xrOrigin;
     private XRDeviceSimulator xrDeviceSimulator;
     [SerializeField] private ScaleManager scaleManager;
-    private bool simulatorDeviceActionAssetWasEnabled;
-    private bool simulatorControllerActionAssetWasEnabled;
-    private bool simulatorHandActionAssetWasEnabled;
     private bool simulatorKeyboardXWasEnabled;
     private bool simulatorKeyboardYWasEnabled;
     private bool simulatorKeyboardZWasEnabled;
@@ -134,13 +150,21 @@ public class CatRideControllerV2 : MonoBehaviour
     private bool hasRideGroundNormal;
     private readonly RaycastHit[] questRayHits = new RaycastHit[16];
     private Collider[] questTargetColliders;
+    private GameObject[] mountedRaycastIgnoredObjects;
+    private int[] mountedRaycastOriginalLayers;
+    private bool mountCollidersAreIgnoredForRaycasts;
     private QuestInteractableFeedback questFeedback;
     private HapticImpulsePlayer questRightHaptics;
     private bool questHovering;
     private bool questTriggerLastFrame;
     private bool questPrimaryLastFrame;
+    private TunnelingVignetteController[] rideVignetteControllers;
+    private RideVignetteProvider rideVignetteProvider;
+    private bool rideVignetteActive;
 
     public bool IsRideActive => currentState != RideState.Idle;
+
+    public IReadOnlyList<Transform> AutoRoutePoints => autoRoutePoints;
 
 
     private int currentAutoIndex = 0;
@@ -150,8 +174,26 @@ public class CatRideControllerV2 : MonoBehaviour
 
     private void Awake()
     {
+        WonderfulWorld.Audio.WonderlandMountAudioAutoBinder.EnsureFootsteps(gameObject);
         CacheRigReferences();
         CacheQuestInteractionReferences();
+        CacheScaleManagerReference();
+        CacheRideVignetteReferences();
+        SyncRideVignetteFromComfortProfile();
+    }
+
+    private void OnEnable()
+    {
+        QuestLocomotionComfortProfile.ComfortVignetteChanged += HandleComfortVignetteChanged;
+        SyncRideVignetteFromComfortProfile();
+    }
+
+    private void OnDisable()
+    {
+        QuestLocomotionComfortProfile.ComfortVignetteChanged -= HandleComfortVignetteChanged;
+        SetComfortProfileLocomotionLocked(false);
+        SetMountCollidersIgnoredForRaycasts(false);
+        SetRideVignetteActive(false);
     }
 
     private void Update()
@@ -369,6 +411,88 @@ public class CatRideControllerV2 : MonoBehaviour
         return Vector3.Distance(playerPosition, mountPosition) <= Mathf.Max(remountDistance, questMountMaxDistance);
     }
 
+    private void SetMountCollidersIgnoredForRaycasts(bool ignored)
+    {
+        if (ignored && !ignoreMountCollidersForRaycastsWhileMounted)
+        {
+            return;
+        }
+
+        if (ignored)
+        {
+            if (mountCollidersAreIgnoredForRaycasts)
+            {
+                return;
+            }
+
+            Collider[] mountColliders = GetComponentsInChildren<Collider>(true);
+            var ignoredObjects = new List<GameObject>(mountColliders.Length);
+            var originalLayers = new List<int>(mountColliders.Length);
+            var seenObjects = new HashSet<GameObject>();
+
+            int ignoreLayer = LayerMask.NameToLayer("Ignore Raycast");
+            if (ignoreLayer < 0)
+            {
+                ignoreLayer = Mathf.Clamp(mountedRaycastIgnoreLayer, 0, 31);
+            }
+
+            Transform rigTransform = playerRigRoot != null ? playerRigRoot.transform : null;
+            for (int i = 0; i < mountColliders.Length; i++)
+            {
+                Collider targetCollider = mountColliders[i];
+                if (targetCollider == null)
+                {
+                    continue;
+                }
+
+                if (rigTransform != null && targetCollider.transform.IsChildOf(rigTransform))
+                {
+                    continue;
+                }
+
+                GameObject colliderObject = targetCollider.gameObject;
+                if (colliderObject == null || !seenObjects.Add(colliderObject))
+                {
+                    continue;
+                }
+
+                ignoredObjects.Add(colliderObject);
+                originalLayers.Add(colliderObject.layer);
+                colliderObject.layer = ignoreLayer;
+            }
+
+            mountedRaycastIgnoredObjects = ignoredObjects.ToArray();
+            mountedRaycastOriginalLayers = originalLayers.ToArray();
+            mountCollidersAreIgnoredForRaycasts = true;
+            return;
+        }
+
+        if (!mountCollidersAreIgnoredForRaycasts)
+        {
+            return;
+        }
+
+        if (mountedRaycastIgnoredObjects != null && mountedRaycastOriginalLayers != null)
+        {
+            int count = Mathf.Min(mountedRaycastIgnoredObjects.Length, mountedRaycastOriginalLayers.Length);
+            for (int i = 0; i < count; i++)
+            {
+                GameObject targetObject = mountedRaycastIgnoredObjects[i];
+                if (targetObject == null || mountedRaycastOriginalLayers[i] < 0)
+                {
+                    continue;
+                }
+
+                targetObject.layer = mountedRaycastOriginalLayers[i];
+            }
+        }
+
+        mountedRaycastIgnoredObjects = null;
+        mountedRaycastOriginalLayers = null;
+        mountCollidersAreIgnoredForRaycasts = false;
+        questTargetColliders = null;
+    }
+
     private void SetQuestHover(bool hover)
     {
         if (questHovering == hover)
@@ -408,6 +532,19 @@ public class CatRideControllerV2 : MonoBehaviour
         return actionReference.action.ReadValue<Vector2>();
     }
 
+    private static Vector2 ReadQuestAxisFallback(InputActionReference actionReference, bool rightHand)
+    {
+        Vector2 actionValue = ReadVector2(actionReference);
+        if (actionValue.sqrMagnitude > 0.0001f)
+        {
+            return actionValue;
+        }
+
+        return QuestInteractionUtils.TryReadPrimary2DAxis(rightHand, out Vector2 questValue)
+            ? questValue
+            : Vector2.zero;
+    }
+
     private void CacheRigReferences()
     {
         if (playerRigRoot != null)
@@ -435,6 +572,178 @@ public class CatRideControllerV2 : MonoBehaviour
             xrDeviceSimulator = xrDeviceSimulatorRoot.GetComponent<XRDeviceSimulator>();
         }
 
+    }
+
+    private void CacheScaleManagerReference()
+    {
+        if (scaleManager != null)
+        {
+            return;
+        }
+
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+        scaleManager = FindAnyObjectByType<ScaleManager>(FindObjectsInactive.Include);
+#else
+#pragma warning disable CS0618
+        scaleManager = FindObjectOfType<ScaleManager>(true);
+#pragma warning restore CS0618
+#endif
+    }
+
+    private void CacheComfortProfileReference()
+    {
+        if (comfortProfile != null)
+        {
+            return;
+        }
+
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+        comfortProfile = FindAnyObjectByType<QuestLocomotionComfortProfile>(FindObjectsInactive.Include);
+#else
+#pragma warning disable CS0618
+        comfortProfile = FindObjectOfType<QuestLocomotionComfortProfile>(true);
+#pragma warning restore CS0618
+#endif
+    }
+
+    private void SetComfortProfileLocomotionLocked(bool locked)
+    {
+        CacheComfortProfileReference();
+        if (comfortProfile != null)
+        {
+            comfortProfile.SetRuntimeLocomotionLocked(locked);
+        }
+    }
+
+    private void SyncRideVignetteFromComfortProfile()
+    {
+        if (!syncRideVignetteWithComfortProfile)
+        {
+            return;
+        }
+
+        CacheComfortProfileReference();
+
+        if (comfortProfile == null)
+        {
+            return;
+        }
+
+        ApplyRideVignetteSettings(comfortProfile.ComfortVignetteEnabled, comfortProfile.ComfortVignetteAperture);
+    }
+
+    private void HandleComfortVignetteChanged(bool enabled, float comfort01, float aperture)
+    {
+        if (!syncRideVignetteWithComfortProfile)
+        {
+            return;
+        }
+
+        ApplyRideVignetteSettings(enabled, aperture);
+    }
+
+    private void ApplyRideVignetteSettings(bool enabled, float aperture)
+    {
+        enableRideComfortVignette = enabled;
+        rideVignetteAperture = Mathf.Clamp(aperture, 0.2f, 1f);
+
+        if (rideVignetteProvider != null)
+        {
+            rideVignetteProvider.SetParameters(CreateRideVignetteParameters());
+        }
+
+        if (!enableRideComfortVignette)
+        {
+            SetRideVignetteActive(false);
+        }
+    }
+
+    private void CacheRideVignetteReferences()
+    {
+        if (rideVignetteProvider == null)
+        {
+            rideVignetteProvider = new RideVignetteProvider(CreateRideVignetteParameters());
+        }
+        else
+        {
+            rideVignetteProvider.SetParameters(CreateRideVignetteParameters());
+        }
+
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+        rideVignetteControllers = FindObjectsByType<TunnelingVignetteController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+#else
+#pragma warning disable CS0618
+        rideVignetteControllers = FindObjectsOfType<TunnelingVignetteController>(false);
+#pragma warning restore CS0618
+#endif
+    }
+
+    private VignetteParameters CreateRideVignetteParameters()
+    {
+        return new VignetteParameters
+        {
+            apertureSize = rideVignetteAperture,
+            featheringEffect = rideVignetteFeathering,
+            easeInTime = rideVignetteEaseInTime,
+            easeOutTime = rideVignetteEaseOutTime,
+            easeInTimeLock = false,
+            easeOutDelayTime = rideVignetteEaseOutDelayTime,
+            vignetteColor = Color.black,
+            vignetteColorBlend = Color.black,
+            apertureVerticalPosition = 0f,
+        };
+    }
+
+    private void SetRideVignetteActive(bool active)
+    {
+        if (!enableRideComfortVignette)
+        {
+            active = false;
+        }
+
+        if (rideVignetteProvider == null || rideVignetteControllers == null || rideVignetteControllers.Length == 0)
+        {
+            CacheRideVignetteReferences();
+        }
+
+        if (rideVignetteProvider == null || rideVignetteControllers == null)
+        {
+            rideVignetteActive = false;
+            return;
+        }
+
+        if (rideVignetteActive == active)
+        {
+            return;
+        }
+
+        for (int i = 0; i < rideVignetteControllers.Length; i++)
+        {
+            TunnelingVignetteController vignetteController = rideVignetteControllers[i];
+            if (vignetteController == null)
+            {
+                continue;
+            }
+
+            if (active)
+            {
+                if (!vignetteController.isActiveAndEnabled)
+                {
+                    continue;
+                }
+
+                vignetteController.BeginTunnelingVignette(rideVignetteProvider);
+            }
+            else
+            {
+                // Always queue the End even if the controller is momentarily disabled
+                // during a state transition — otherwise the provider's record stays
+                // pinned in EasingIn and the vignette is stuck after dismount.
+                vignetteController.EndTunnelingVignette(rideVignetteProvider);
+            }
+        }
+
+        rideVignetteActive = active;
     }
 
     private bool IsPlayerInsideMountZone()
@@ -471,6 +780,8 @@ public class CatRideControllerV2 : MonoBehaviour
 
     private bool CanMountInCurrentScale()
     {
+        CacheScaleManagerReference();
+
         if (scaleManager == null)
         {
             return false;
@@ -541,8 +852,10 @@ public class CatRideControllerV2 : MonoBehaviour
             if (locomotionRoot != null)
             {
                 locomotionRootWasActive = locomotionRoot.activeSelf;
-                locomotionRoot.SetActive(false);
+                SetLocomotionRootBehavioursLocked(true);
             }
+
+            SetComfortProfileLocomotionLocked(true);
 
             if (xrDeviceSimulator != null)
             {
@@ -559,48 +872,16 @@ public class CatRideControllerV2 : MonoBehaviour
 
             if (locomotionRoot != null)
             {
+                SetLocomotionRootBehavioursLocked(false);
                 locomotionRoot.SetActive(locomotionRootWasActive);
             }
+
+            SetComfortProfileLocomotionLocked(false);
 
             if (!lockXRDeviceSimulatorDuringRide)
             {
                 RestoreXRDeviceSimulatorInput();
             }
-        }
-    }
-
-    private static bool IsActionAssetEnabled(InputActionAsset actionAsset)
-    {
-        if (actionAsset == null)
-        {
-            return false;
-        }
-
-        foreach (InputActionMap actionMap in actionAsset.actionMaps)
-        {
-            if (actionMap.enabled)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static void SetActionAssetEnabled(InputActionAsset actionAsset, bool enabled)
-    {
-        if (actionAsset == null)
-        {
-            return;
-        }
-
-        if (enabled)
-        {
-            actionAsset.Enable();
-        }
-        else
-        {
-            actionAsset.Disable();
         }
     }
 
@@ -615,18 +896,7 @@ public class CatRideControllerV2 : MonoBehaviour
         simulatorKeyboardYWasEnabled = IsActionEnabled(xrDeviceSimulator.keyboardYTranslateAction);
         simulatorKeyboardZWasEnabled = IsActionEnabled(xrDeviceSimulator.keyboardZTranslateAction);
 
-        if (lockXRDeviceSimulatorDuringRide)
-        {
-            simulatorDeviceActionAssetWasEnabled = IsActionAssetEnabled(xrDeviceSimulator.deviceSimulatorActionAsset);
-            simulatorControllerActionAssetWasEnabled = IsActionAssetEnabled(xrDeviceSimulator.controllerActionAsset);
-            simulatorHandActionAssetWasEnabled = IsActionAssetEnabled(xrDeviceSimulator.handActionAsset);
-
-            SetActionAssetEnabled(xrDeviceSimulator.deviceSimulatorActionAsset, false);
-            SetActionAssetEnabled(xrDeviceSimulator.controllerActionAsset, false);
-            SetActionAssetEnabled(xrDeviceSimulator.handActionAsset, false);
-            return;
-        }
-
+        // Keep controller and hand action assets alive so XR ray/UI selection still works while mounted.
         SetActionEnabled(xrDeviceSimulator.keyboardXTranslateAction, false);
         SetActionEnabled(xrDeviceSimulator.keyboardYTranslateAction, false);
         SetActionEnabled(xrDeviceSimulator.keyboardZTranslateAction, false);
@@ -636,18 +906,6 @@ public class CatRideControllerV2 : MonoBehaviour
     {
         if (xrDeviceSimulator == null)
         {
-            return;
-        }
-
-        if (lockXRDeviceSimulatorDuringRide)
-        {
-            SetActionAssetEnabled(xrDeviceSimulator.deviceSimulatorActionAsset, simulatorDeviceActionAssetWasEnabled);
-            SetActionAssetEnabled(xrDeviceSimulator.controllerActionAsset, simulatorControllerActionAssetWasEnabled);
-            SetActionAssetEnabled(xrDeviceSimulator.handActionAsset, simulatorHandActionAssetWasEnabled);
-
-            SetActionEnabled(xrDeviceSimulator.keyboardXTranslateAction, simulatorKeyboardXWasEnabled);
-            SetActionEnabled(xrDeviceSimulator.keyboardYTranslateAction, simulatorKeyboardYWasEnabled);
-            SetActionEnabled(xrDeviceSimulator.keyboardZTranslateAction, simulatorKeyboardZWasEnabled);
             return;
         }
 
@@ -698,6 +956,8 @@ public class CatRideControllerV2 : MonoBehaviour
             return;
         }
 
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_MountTransition", transform.position, volumeScale: 1f, maxVoices: 3);
+        WonderfulWorld.Audio.WonderlandMountAudioAutoBinder.PlayVoice(gameObject, volumeScale: 0.85f, maxVoices: 2);
         stateRoutine = StartCoroutine(MountSequence());
     }
 
@@ -712,6 +972,7 @@ public class CatRideControllerV2 : MonoBehaviour
 
         CacheRigReferences();
         SetPlayerLocomotionLocked(true);
+        SetMountCollidersIgnoredForRaycasts(true);
 
         currentState = RideState.Mounting;
 
@@ -725,7 +986,7 @@ public class CatRideControllerV2 : MonoBehaviour
         Vector3 startLocalPosition = rig.localPosition;
         Quaternion startLocalRotation = rig.localRotation;
 
-        AlignMountedViewToSeatForward(rig);
+        AlignMountedViewToSeatForward(rig, false);
         SnapHeadToMountedViewAnchor(rig);
 
         Vector3 targetLocalPosition = rig.localPosition;
@@ -773,28 +1034,32 @@ public class CatRideControllerV2 : MonoBehaviour
         }
     }
 
-    private void AlignMountedViewToSeatForward(Transform rig)
+    private void AlignMountedViewToSeatForward(Transform rig, bool alignFromCurrentHeadYaw)
     {
         if (rig == null || seatAnchor == null)
         {
             return;
         }
 
-        if (trackedHeadTransform == null)
+        // During mount we align the neutral rig heading; during B-recenter we align the
+        // current HMD yaw, which gives the player an explicit way to re-square the view.
+        if (alignFromCurrentHeadYaw && trackedHeadTransform == null)
         {
             CacheRigReferences();
         }
 
-        Vector3 currentHeadForward = trackedHeadTransform != null ? trackedHeadTransform.forward : rig.forward;
-        currentHeadForward.y = 0f;
+        Vector3 currentRigForward = alignFromCurrentHeadYaw && trackedHeadTransform != null
+            ? trackedHeadTransform.forward
+            : rig.forward;
+        currentRigForward.y = 0f;
 
-        if (currentHeadForward.sqrMagnitude < 0.0001f)
+        if (currentRigForward.sqrMagnitude < 0.0001f)
         {
-            currentHeadForward = rig.forward;
-            currentHeadForward.y = 0f;
+            currentRigForward = Vector3.forward;
         }
 
-        Vector3 targetForward = seatAnchor.forward;
+        Transform targetAnchor = mountedViewAnchor != null ? mountedViewAnchor : seatAnchor;
+        Vector3 targetForward = targetAnchor != null ? targetAnchor.forward : seatAnchor.forward;
         targetForward.y = 0f;
 
         if (targetForward.sqrMagnitude < 0.0001f)
@@ -803,10 +1068,10 @@ public class CatRideControllerV2 : MonoBehaviour
             targetForward.y = 0f;
         }
 
-        currentHeadForward.Normalize();
+        currentRigForward.Normalize();
         targetForward.Normalize();
 
-        Quaternion yawDelta = Quaternion.FromToRotation(currentHeadForward, targetForward);
+        Quaternion yawDelta = Quaternion.FromToRotation(currentRigForward, targetForward);
         rig.rotation = yawDelta * rig.rotation;
     }
 
@@ -832,6 +1097,31 @@ public class CatRideControllerV2 : MonoBehaviour
         rig.position += worldDelta;
     }
 
+    /// <summary>
+    /// Re-aligns the rider's view to face along the mounted view anchor and re-snaps the head to the
+    /// mounted view anchor. Safe to call only while a ride is active; no-op otherwise.
+    /// Intended for the B-button "recenter" affordance during a ride.
+    /// </summary>
+    public bool RecenterMountedView()
+    {
+        if ((currentState != RideState.MountedManual && currentState != RideState.MountedAuto) || playerRigRoot == null)
+        {
+            return false;
+        }
+
+        Transform rig = playerRigRoot.transform;
+        AlignMountedViewToSeatForward(rig, true);
+        SnapHeadToMountedViewAnchor(rig);
+        Physics.SyncTransforms();
+
+        if (debugLogs)
+        {
+            Debug.Log("[CatRideControllerV2] Mounted view recentered.");
+        }
+
+        return true;
+    }
+
     private void StartDismount()
     {
         if ((currentState != RideState.MountedManual && currentState != RideState.MountedAuto) || stateRoutine != null)
@@ -839,6 +1129,8 @@ public class CatRideControllerV2 : MonoBehaviour
             return;
         }
 
+        SetRideVignetteActive(false);
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_MountTransition", transform.position, volumeScale: 0.9f, maxVoices: 3);
         stateRoutine = StartCoroutine(DismountSequence());
     }
 
@@ -846,6 +1138,8 @@ public class CatRideControllerV2 : MonoBehaviour
     {
         if (playerRigRoot == null)
         {
+            SetComfortProfileLocomotionLocked(false);
+            SetMountCollidersIgnoredForRaycasts(false);
             stateRoutine = null;
             yield break;
         }
@@ -945,6 +1239,7 @@ public class CatRideControllerV2 : MonoBehaviour
         currentAutoIndex = 0;
         currentState = RideState.Idle;
         hasRigOriginalParent = false;
+        SetMountCollidersIgnoredForRaycasts(false);
         UpdateKittyAnimation(0f, false);
         stateRoutine = null;
 
@@ -1318,8 +1613,8 @@ public class CatRideControllerV2 : MonoBehaviour
 
     private void HandleManualRide()
     {
-        Vector2 moveValue = ReadVector2(moveAction);
-        Vector2 turnValue = ReadVector2(turnAction);
+        Vector2 moveValue = ReadQuestAxisFallback(moveAction, false);
+        Vector2 turnValue = ReadQuestAxisFallback(turnAction, true);
 
         float moveInput = moveValue.y;
         float turnInput = turnValue.x;
@@ -1331,6 +1626,10 @@ public class CatRideControllerV2 : MonoBehaviour
             if (Keyboard.current.aKey.isPressed) turnInput -= 1f;
             if (Keyboard.current.dKey.isPressed) turnInput += 1f;
         }
+
+        bool rideMotionActive = Mathf.Abs(moveInput) > rideVignetteInputDeadzone ||
+                                Mathf.Abs(turnInput) > rideVignetteInputDeadzone;
+        SetRideVignetteActive(rideMotionActive);
 
         transform.Rotate(Vector3.up, turnInput * manualTurnSpeed * Time.deltaTime);
 
@@ -1369,6 +1668,7 @@ public class CatRideControllerV2 : MonoBehaviour
 
         currentAutoIndex = 0;
         currentState = RideState.MountedAuto;
+        SetRideVignetteActive(true);
 
         if (debugLogs)
         {
@@ -1385,6 +1685,8 @@ public class CatRideControllerV2 : MonoBehaviour
             FinishAutoRide();
             return;
         }
+
+        SetRideVignetteActive(true);
 
         Transform target = autoRoutePoints[currentAutoIndex];
         if (target == null)
@@ -1432,6 +1734,7 @@ public class CatRideControllerV2 : MonoBehaviour
 
     private void FinishAutoRide()
     {
+        SetRideVignetteActive(false);
         currentState = RideState.MountedManual;
         UpdateKittyAnimation(0f, false);
 
@@ -1573,6 +1876,72 @@ public class CatRideControllerV2 : MonoBehaviour
         a.y = 0f;
         b.y = 0f;
         return Vector3.Distance(a, b);
+    }
+
+    private sealed class RideVignetteProvider : ITunnelingVignetteProvider
+    {
+        public RideVignetteProvider(VignetteParameters parameters)
+        {
+            vignetteParameters = parameters;
+        }
+
+        public VignetteParameters vignetteParameters { get; private set; }
+
+        public void SetParameters(VignetteParameters parameters)
+        {
+            vignetteParameters = parameters;
+        }
+    }
+
+    private void SetLocomotionRootBehavioursLocked(bool locked)
+    {
+        if (locomotionRoot == null || !locomotionRootWasActive)
+        {
+            return;
+        }
+
+        if (locked)
+        {
+            // Only disable LocomotionProvider components themselves. Touching every
+            // Behaviour under locomotionRoot also disabled LocomotionMediator,
+            // XRBodyTransformer and any UI / ray-interactor components a project
+            // might park under the locomotion subtree, which broke menu interaction
+            // and tunneling-vignette updates while mounted.
+            lockedLocomotionProviders = locomotionRoot.GetComponentsInChildren<LocomotionProvider>(true);
+            lockedLocomotionProviderWasEnabled = new bool[lockedLocomotionProviders.Length];
+
+            for (int i = 0; i < lockedLocomotionProviders.Length; i++)
+            {
+                LocomotionProvider provider = lockedLocomotionProviders[i];
+                if (provider == null)
+                {
+                    continue;
+                }
+
+                lockedLocomotionProviderWasEnabled[i] = provider.enabled;
+                provider.enabled = false;
+            }
+
+            return;
+        }
+
+        if (lockedLocomotionProviders == null || lockedLocomotionProviderWasEnabled == null)
+        {
+            return;
+        }
+
+        int count = Mathf.Min(lockedLocomotionProviders.Length, lockedLocomotionProviderWasEnabled.Length);
+        for (int i = 0; i < count; i++)
+        {
+            LocomotionProvider provider = lockedLocomotionProviders[i];
+            if (provider != null)
+            {
+                provider.enabled = lockedLocomotionProviderWasEnabled[i];
+            }
+        }
+
+        lockedLocomotionProviders = null;
+        lockedLocomotionProviderWasEnabled = null;
     }
 
     private sealed class RaycastHitDistanceComparer : System.Collections.IComparer

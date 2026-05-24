@@ -259,7 +259,7 @@ public sealed class QuestSwingRideController : MonoBehaviour
 
         // 2) Place the rideAnchor at the (now rotated) seat position. If keepViewUpright is on,
         //    counter the swing rotation on the anchor so the rider's view stays level even as
-        //    the seat tilts — this prevents motion-sickness.
+        //    the seat tilts; this prevents motion sickness.
         Vector3 seatPosition = pivotPosition + swingRotation * (restSeatPosition - pivotPosition);
         Quaternion anchorRotation = keepViewUpright
             ? Quaternion.LookRotation(swingForward, Vector3.up)
@@ -451,20 +451,12 @@ public sealed class QuestSwingRideController : MonoBehaviour
 
         if (playerRigRoot == null)
         {
-            GameObject xrOrigin = GameObject.Find("WonderlandXROrigin");
-            if (xrOrigin != null)
-            {
-                playerRigRoot = xrOrigin.transform;
-            }
+            playerRigRoot = QuestInteractionUtils.FindInScene("WonderlandXROrigin");
         }
 
         if (playerHead == null)
         {
-            Camera mainCamera = Camera.main;
-            if (mainCamera != null)
-            {
-                playerHead = mainCamera.transform;
-            }
+            playerHead = QuestInteractionUtils.FindHeadTransform();
         }
 
         if (locomotionRoot == null && playerRigRoot != null)

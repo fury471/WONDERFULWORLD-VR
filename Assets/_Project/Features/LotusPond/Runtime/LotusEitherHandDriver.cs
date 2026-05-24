@@ -195,7 +195,7 @@ public class LotusEitherHandDriver : MonoBehaviour
 
     private void TryTriggerMouse()
     {
-        Camera mainCamera = Camera.main;
+        Camera mainCamera = QuestInteractionUtils.FindHeadCamera();
         if (mainCamera == null)
         {
             if (logDebugMessages)

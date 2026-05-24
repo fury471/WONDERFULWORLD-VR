@@ -2,10 +2,10 @@
 
 Each major mechanic should live in its own folder.
 
-Current demonstration direction:
+Current production direction:
 
 - systems should behave like discoverable attractions or environmental affordances inside an exploration-first magical park
-- route references in milestone docs are readability guides, not required mission sequencing
+- features should remain modular enough to profile, test, and tune independently before production scene integration
 
 ## How to use this folder
 
@@ -25,6 +25,7 @@ Current demonstration direction:
 - `Fireworks`
 - `Mounts`
 - `LotusPond`
+- `CherryGarden`
 
 ## Collaboration rule
 

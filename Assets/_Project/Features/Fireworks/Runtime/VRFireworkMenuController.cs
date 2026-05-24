@@ -40,10 +40,7 @@ namespace WonderfulWorld.Features.Fireworks
                 launchPad = FindFirstObjectByType<FireworkLaunchPad>();
             }
 
-            if (followCamera == null && Camera.main != null)
-            {
-                followCamera = Camera.main.transform;
-            }
+            ResolveFollowCamera();
 
             currentText = FireworkPointCloudGenerator.SanitizeText(defaultText);
             if (textInput != null && textInput.characterLimit > 0 && textInput.characterLimit < maxTextLength)
@@ -236,6 +233,11 @@ namespace WonderfulWorld.Features.Fireworks
 
         private void UpdateMenuPose(bool force = false)
         {
+            if (followCamera == null)
+            {
+                ResolveFollowCamera();
+            }
+
             if (followCamera == null || menuRoot == null)
             {
                 return;
@@ -257,6 +259,14 @@ namespace WonderfulWorld.Features.Fireworks
             float t = 1f - Mathf.Exp(-followSharpness * Time.deltaTime);
             menuTransform.position = Vector3.Lerp(menuTransform.position, targetPosition, t);
             menuTransform.rotation = Quaternion.Slerp(menuTransform.rotation, targetRotation, t);
+        }
+
+        private void ResolveFollowCamera()
+        {
+            if (followCamera == null)
+            {
+                followCamera = QuestInteractionUtils.FindHeadTransform();
+            }
         }
     }
 }

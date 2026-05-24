@@ -1,9 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs -0 grep -l \"guid: e9690ee69585a4bb995dae4947014a5e\")",
-      "Bash(awk 'NR>=2945 && NR<=2960 {print NR\": \"$0}' Assets/_Project/World/Persistent/World_WonderlandPark.unity)",
-      "Bash(awk 'NR>=3105 && NR<=3130 {print NR\": \"$0}' Assets/_Project/World/Persistent/World_WonderlandPark.unity)"
+      "Bash(awk '/guid: 21b9b6ecf9ec4a8bb7f85b8a8f8d5c4d/{flag=1} flag{print NR\": \"$0; if\\(/^---/\\){flag=0}}' Assets/_Project/Core/XR/WonderlandXROrigin.prefab)",
+      "Read(//c/Program Files/Unity/Hub/Editor//**)",
+      "Read(//c/Program Files/Unity Hub/**)",
+      "Bash(xargs grep -l \"UniversalRenderPipelineAsset\\\\|m_RendererList\")",
+      "Bash(xargs grep -l \"UniversalRendererData\\\\|UniversalAdditionalCameraData\\\\|RenderFeature\\\\|m_RendererFeatures\\\\|ScriptableRendererData\")"
     ]
   }
 }

@@ -52,6 +52,8 @@ public sealed class QuestHapticsInteractionProfile : MonoBehaviour
     private readonly Dictionary<IXRHoverInteractor, HoverCandidate> hoverCandidates = new Dictionary<IXRHoverInteractor, HoverCandidate>(8);
     private readonly Dictionary<int, float> lastStableHoverPulseTimes = new Dictionary<int, float>(16);
     private readonly Dictionary<int, float> lastStableHoverPulseByInteractor = new Dictionary<int, float>(8);
+    private readonly List<IXRHoverInteractor> hoverKeysToRemove = new List<IXRHoverInteractor>(4);
+    private readonly List<IXRHoverInteractor> hoverKeysToUpdate = new List<IXRHoverInteractor>(4);
 
     private bool hoverSubscriptionsDirty = true;
 
@@ -287,8 +289,8 @@ public sealed class QuestHapticsInteractionProfile : MonoBehaviour
             return;
 
         float now = Time.unscaledTime;
-        List<IXRHoverInteractor> keysToRemove = null;
-        List<IXRHoverInteractor> keysToUpdate = null;
+        hoverKeysToRemove.Clear();
+        hoverKeysToUpdate.Clear();
 
         foreach (KeyValuePair<IXRHoverInteractor, HoverCandidate> entry in hoverCandidates)
         {
@@ -298,13 +300,13 @@ public sealed class QuestHapticsInteractionProfile : MonoBehaviour
                 candidate.interactable == null || (candidate.interactable is UnityEngine.Object interactableObject && interactableObject == null) ||
                 candidate.hapticPlayer == null)
             {
-                AddKey(ref keysToRemove, interactor);
+                hoverKeysToRemove.Add(interactor);
                 continue;
             }
 
             if (!CanPulseForStableHover(interactor, candidate.interactable) || !interactor.IsHovering(candidate.interactable))
             {
-                AddKey(ref keysToRemove, interactor);
+                hoverKeysToRemove.Add(interactor);
                 continue;
             }
 
@@ -315,7 +317,7 @@ public sealed class QuestHapticsInteractionProfile : MonoBehaviour
             if (lastStableHoverPulseTimes.TryGetValue(cooldownKey, out float lastPulseTime) &&
                 now - lastPulseTime < sameHoverTargetCooldown)
             {
-                AddKey(ref keysToUpdate, interactor);
+                hoverKeysToUpdate.Add(interactor);
                 continue;
             }
 
@@ -331,14 +333,14 @@ public sealed class QuestHapticsInteractionProfile : MonoBehaviour
             lastStableHoverPulseByInteractor[interactorId] = now;
             candidate.pulsed = true;
 
-            AddKey(ref keysToUpdate, interactor);
+            hoverKeysToUpdate.Add(interactor);
         }
 
-        if (keysToUpdate != null)
+        if (hoverKeysToUpdate.Count > 0)
         {
-            for (int i = 0; i < keysToUpdate.Count; i++)
+            for (int i = 0; i < hoverKeysToUpdate.Count; i++)
             {
-                IXRHoverInteractor interactor = keysToUpdate[i];
+                IXRHoverInteractor interactor = hoverKeysToUpdate[i];
                 if (interactor != null && hoverCandidates.TryGetValue(interactor, out HoverCandidate candidate))
                 {
                     candidate.pulsed = true;
@@ -347,11 +349,11 @@ public sealed class QuestHapticsInteractionProfile : MonoBehaviour
             }
         }
 
-        if (keysToRemove == null)
+        if (hoverKeysToRemove.Count == 0)
             return;
 
-        for (int i = 0; i < keysToRemove.Count; i++)
-            hoverCandidates.Remove(keysToRemove[i]);
+        for (int i = 0; i < hoverKeysToRemove.Count; i++)
+            hoverCandidates.Remove(hoverKeysToRemove[i]);
     }
 
     private bool CanPulseForStableHover(IXRHoverInteractor interactor, IXRHoverInteractable interactable)
@@ -448,14 +450,6 @@ public sealed class QuestHapticsInteractionProfile : MonoBehaviour
         data.amplitude = Mathf.Clamp01(amplitude);
         data.duration = Mathf.Max(0f, duration);
         data.frequency = DefaultFrequency;
-    }
-
-    private static void AddKey(ref List<IXRHoverInteractor> keys, IXRHoverInteractor interactor)
-    {
-        if (keys == null)
-            keys = new List<IXRHoverInteractor>(4);
-
-        keys.Add(interactor);
     }
 
     private static int MakeCooldownKey(IXRHoverInteractor interactor, IXRHoverInteractable interactable)

@@ -35,6 +35,7 @@ Shader "WonderfulWorld/Water/Soft Splash URP"
             #pragma fragment frag
             #pragma multi_compile_particles
             #pragma multi_compile_fog
+            #pragma multi_compile_instancing
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
@@ -52,6 +53,7 @@ Shader "WonderfulWorld/Water/Soft Splash URP"
                 float4 positionOS : POSITION;
                 float4 color : COLOR;
                 float2 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -60,6 +62,8 @@ Shader "WonderfulWorld/Water/Soft Splash URP"
                 float4 color : COLOR;
                 float2 uv : TEXCOORD0;
                 half fogFactor : TEXCOORD1;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             float Hash21(float2 p)
@@ -82,7 +86,10 @@ Shader "WonderfulWorld/Water/Soft Splash URP"
 
             Varyings vert(Attributes input)
             {
-                Varyings output;
+                Varyings output = (Varyings)0;
+                UNITY_SETUP_INSTANCE_ID(input);
+                UNITY_TRANSFER_INSTANCE_ID(input, output);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
                 VertexPositionInputs vertexInput = GetVertexPositionInputs(input.positionOS.xyz);
                 output.positionCS = vertexInput.positionCS;
                 output.uv = input.uv;
@@ -93,6 +100,7 @@ Shader "WonderfulWorld/Water/Soft Splash URP"
 
             half4 frag(Varyings input) : SV_Target
             {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
                 float2 centered = input.uv * 2.0 - 1.0;
                 float r = length(centered);
                 float angle = atan2(centered.y, centered.x);

@@ -4,23 +4,22 @@ using UnityEngine.SceneManagement;
 using UnityEngine.XR.Interaction.Toolkit.Interactors.Visuals;
 
 /// <summary>
-/// Globally re-tunes every <see cref="CurveVisualController"/> in the scene so the controller
-/// ray is short and subtle by default and only extends out when an interactable is hovered.
+/// Globally re-tunes every <see cref="CurveVisualController"/> in the scene so controller rays
+/// stay short by default and extend only when an interactable is hovered.
 ///
 /// Defaults are chosen for a Quest-style "feels alive" experience:
-///   • Idle line length: 0.18 m (just a hint that the controller has a pointer)
-///   • Max extension: 6 m (clamped so empty-space hits never look like a tunnel of light)
-///   • Smooth extend / retract animation (~0.12 s) so the line breathes in and out
+///   - Idle line length: 0.18 m.
+///   - Max extension: 6 m.
+///   - Smooth extend and retract animation around 0.12 s.
 ///
-/// Features that want to override behaviour for a single frame can call
-/// <see cref="ReportHover"/> with the hit distance — the profile clamps the line to that
-/// distance + padding so the visual lands right on the object.
-///
-/// The profile is auto-spawned after the first scene load and lives across scenes.
+/// Feature scripts can call <see cref="ReportHover"/> with the hit distance. The profile clamps
+/// the line to that distance plus padding so the visual lands on the object.
 /// </summary>
 [DefaultExecutionOrder(9000)]
 public sealed class QuestRayVisualLengthProfile : MonoBehaviour
 {
+    private const float MinimumRescanInterval = 0.5f;
+
     [Header("Length")]
     [Tooltip("Hard ceiling on how far the ray can ever extend, even when hovering something far away. Keep this short to avoid a 'laser sword' look.")]
     [SerializeField] private float maxInteractionRayDistance = 6f;
@@ -38,8 +37,8 @@ public sealed class QuestRayVisualLengthProfile : MonoBehaviour
     [SerializeField] private float extensionRate = 16f;
 
     [Header("Scan")]
-    [Tooltip("Re-scan the scene for CurveVisualControllers this often. Short interval catches controllers that spawn later.")]
-    [SerializeField] private float rescanInterval = 0.25f;
+    [Tooltip("Re-scan the scene for CurveVisualControllers this often. Scene loads still force an immediate scan.")]
+    [SerializeField] private float rescanInterval = 1.25f;
     [SerializeField] private bool includeInactive = true;
     [SerializeField] private bool logScanOnce = false;
 
@@ -52,10 +51,6 @@ public sealed class QuestRayVisualLengthProfile : MonoBehaviour
     private float nextRefreshTime;
     private bool didLogScan;
 
-    /// <summary>
-    /// Feature scripts call this each frame they detect a custom interactable hit (something the
-    /// XRI provider doesn't know about). The profile uses the reported distance to size the line.
-    /// </summary>
     public static void ReportHover(bool rightHand, bool hovering, float distance)
     {
         if (!hovering)
@@ -103,8 +98,6 @@ public sealed class QuestRayVisualLengthProfile : MonoBehaviour
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        // Force a rescan immediately so a freshly-loaded XR rig gets tuned on its first frame
-        // instead of waiting up to a rescanInterval.
         nextRefreshTime = 0f;
         RefreshCache();
         ApplyProfile();
@@ -114,7 +107,7 @@ public sealed class QuestRayVisualLengthProfile : MonoBehaviour
     {
         if (Time.unscaledTime >= nextRefreshTime)
         {
-            nextRefreshTime = Time.unscaledTime + Mathf.Max(0.05f, rescanInterval);
+            nextRefreshTime = Time.unscaledTime + Mathf.Max(MinimumRescanInterval, rescanInterval);
             RefreshCache();
         }
 
@@ -148,6 +141,10 @@ public sealed class QuestRayVisualLengthProfile : MonoBehaviour
 
     private void ApplyProfile()
     {
+        float idle = ResolveIdleLength();
+        float maxLength = Mathf.Max(1f, maxInteractionRayDistance);
+        float padding = Mathf.Max(0f, interactableLengthPadding);
+
         for (int i = 0; i < cachedCurveVisuals.Count; i++)
         {
             CurveVisualController visual = cachedCurveVisuals[i];
@@ -156,31 +153,27 @@ public sealed class QuestRayVisualLengthProfile : MonoBehaviour
                 continue;
             }
 
-            ResolveTargetState(visual, out float targetLength, out bool reportedCustomHover, out bool providerHasInteractiveHit);
+            ResolveTargetState(visual, idle, maxLength, padding, out float targetLength, out bool reportedCustomHover, out bool providerHasInteractiveHit);
 
-            float idle = ResolveIdleLength();
             visual.restingVisualLineLength = idle;
             visual.maxVisualCurveDistance = targetLength;
             visual.lineDynamicsMode = LineDynamicsMode.RetractOnHitLoss;
             visual.retractDelay = Mathf.Max(0f, retractDelay);
             visual.retractDuration = Mathf.Max(0f, retractDuration);
             visual.extensionRate = Mathf.Clamp(extensionRate, 0f, 30f);
-            // Stop the line from extending into empty space — empty hits should keep it short.
-            // The only exception is when a feature explicitly reported a custom hover but the
-            // XRI provider hasn't caught up; in that one-frame case we let the line extend so the
-            // visual still reaches the custom hit point.
             visual.extendLineToEmptyHit = reportedCustomHover && !providerHasInteractiveHit;
         }
     }
 
-    private void ResolveTargetState(
+    private static void ResolveTargetState(
         CurveVisualController visual,
+        float idleLength,
+        float maxLength,
+        float padding,
         out float targetLength,
         out bool reportedCustomHover,
         out bool providerHasInteractiveHit)
     {
-        float maxLength = Mathf.Max(1f, maxInteractionRayDistance);
-        float idleLength = ResolveIdleLength();
         targetLength = idleLength;
         reportedCustomHover = false;
         providerHasInteractiveHit = false;
@@ -195,29 +188,24 @@ public sealed class QuestRayVisualLengthProfile : MonoBehaviour
         bool leftHand = IsLeftHand(lineVisualObject);
         int frame = Time.frameCount;
 
-        // Allow a one-frame lag tolerance so the line stays extended even if the feature is one
-        // frame behind the visual update tick.
-        bool rightFresh = rightHand && (frame - rightHoverFrame) <= 1 && rightHoverFrame >= 0;
-        bool leftFresh = leftHand && (frame - leftHoverFrame) <= 1 && leftHoverFrame >= 0;
+        bool rightFresh = rightHand && rightHoverFrame >= 0 && (frame - rightHoverFrame) <= 1;
+        bool leftFresh = leftHand && leftHoverFrame >= 0 && (frame - leftHoverFrame) <= 1;
 
         if (rightFresh)
         {
             reportedCustomHover = true;
-            targetLength = Mathf.Clamp(rightHoverDistance + Mathf.Max(0f, interactableLengthPadding), idleLength, maxLength);
+            targetLength = Mathf.Clamp(rightHoverDistance + padding, idleLength, maxLength);
         }
         else if (leftFresh)
         {
             reportedCustomHover = true;
-            targetLength = Mathf.Clamp(leftHoverDistance + Mathf.Max(0f, interactableLengthPadding), idleLength, maxLength);
+            targetLength = Mathf.Clamp(leftHoverDistance + padding, idleLength, maxLength);
         }
 
         if (TryResolveProviderInteractiveDistance(visual, out float providerDistance))
         {
             providerHasInteractiveHit = true;
-            targetLength = Mathf.Clamp(
-                Mathf.Max(targetLength, providerDistance + Mathf.Max(0f, interactableLengthPadding)),
-                idleLength,
-                maxLength);
+            targetLength = Mathf.Clamp(Mathf.Max(targetLength, providerDistance + padding), idleLength, maxLength);
         }
     }
 
@@ -245,8 +233,6 @@ public sealed class QuestRayVisualLengthProfile : MonoBehaviour
             visual.snapToSelectedAttachIfAvailable,
             visual.snapToSnapVolumeIfAvailable);
 
-        // Only treat real interactable hits as "extend" triggers — empty raycast hits should
-        // leave the line short. That's the entire point of this profile.
         bool interactiveEndpoint = endpointType == EndPointType.ValidCastHit
             || endpointType == EndPointType.AttachPoint
             || endpointType == EndPointType.UI;
@@ -281,7 +267,7 @@ public sealed class QuestRayVisualLengthProfile : MonoBehaviour
         Transform current = candidate != null ? candidate.transform : null;
         while (current != null)
         {
-            if (current.name.ToLowerInvariant().Contains(token))
+            if (ContainsOrdinalIgnoreCase(current.name, token))
             {
                 return true;
             }
@@ -294,16 +280,11 @@ public sealed class QuestRayVisualLengthProfile : MonoBehaviour
 
     private static bool ShouldSkip(GameObject candidate)
     {
-        if (candidate == null)
-        {
-            return true;
-        }
-
-        Transform current = candidate.transform;
+        Transform current = candidate != null ? candidate.transform : null;
         while (current != null)
         {
-            string lowerName = current.name.ToLowerInvariant();
-            if (lowerName.Contains("teleport") || lowerName.Contains("gaze"))
+            if (ContainsOrdinalIgnoreCase(current.name, "teleport") ||
+                ContainsOrdinalIgnoreCase(current.name, "gaze"))
             {
                 return true;
             }
@@ -311,6 +292,13 @@ public sealed class QuestRayVisualLengthProfile : MonoBehaviour
             current = current.parent;
         }
 
-        return false;
+        return candidate == null;
+    }
+
+    private static bool ContainsOrdinalIgnoreCase(string value, string token)
+    {
+        return !string.IsNullOrEmpty(value) &&
+               !string.IsNullOrEmpty(token) &&
+               value.IndexOf(token, System.StringComparison.OrdinalIgnoreCase) >= 0;
     }
 }

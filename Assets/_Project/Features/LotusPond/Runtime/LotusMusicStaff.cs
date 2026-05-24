@@ -33,6 +33,7 @@ public class LotusMusicStaff : MonoBehaviour
     private List<GameObject> pool = new List<GameObject>();
     private Dictionary<int, GameObject> noteMap = new Dictionary<int, GameObject>();
     private Dictionary<GameObject, Coroutine> activeCoroutines = new Dictionary<GameObject, Coroutine>();
+    private readonly List<int> keysToRemove = new List<int>(16);
     private Coroutine transitionCoroutine;
 
     private float GetYPosition(int noteId)
@@ -77,7 +78,7 @@ public class LotusMusicStaff : MonoBehaviour
         int startOffset = -5;
         int endOffset = 5;
 
-        List<int> keysToRemove = new List<int>();
+        keysToRemove.Clear();
         foreach (var index in noteMap.Keys)
         {
             if (index < currentStep + startOffset || index > currentStep + endOffset)

@@ -458,7 +458,7 @@ public sealed class CherryGardenToonOutlineController : MonoBehaviour
 
         if (cachedCamera == null)
         {
-            cachedCamera = Camera.main;
+            cachedCamera = QuestInteractionUtils.FindHeadCamera();
         }
 
         if (cachedCamera == null)

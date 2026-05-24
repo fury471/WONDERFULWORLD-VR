@@ -36,8 +36,11 @@ public class MountController : MonoBehaviour
     private bool hasCachedCameraOffsetY = false;
     private Transform trackedHeadTransform;
 
+    public bool IsRideActive => currentState != MountState.Idle;
+
     private void Awake()
     {
+        WonderfulWorld.Audio.WonderlandMountAudioAutoBinder.EnsureFootsteps(gameObject);
         CacheRigReferences();
     }
 
@@ -168,6 +171,8 @@ public class MountController : MonoBehaviour
             stateRoutine = null;
         }
 
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_MountTransition", transform.position, volumeScale: 1f, maxVoices: 3);
+        WonderfulWorld.Audio.WonderlandMountAudioAutoBinder.PlayVoice(gameObject, volumeScale: 0.85f, maxVoices: 2);
         stateRoutine = StartCoroutine(MountSequence());
     }
 
@@ -253,6 +258,7 @@ public class MountController : MonoBehaviour
             stateRoutine = null;
         }
 
+        WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.PlayAt("WW_SFX_MountTransition", transform.position, volumeScale: 0.9f, maxVoices: 3);
         stateRoutine = StartCoroutine(DismountSequence());
     }
 

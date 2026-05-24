@@ -85,7 +85,7 @@ public sealed class CatRideV2Bootstrap : MonoBehaviour
 
     private void WireUpControllerReferences(CatRideControllerV2 controller)
     {
-        GameObject rig = !string.IsNullOrEmpty(xrOriginName) ? GameObject.Find(xrOriginName) : null;
+        Transform rig = !string.IsNullOrEmpty(xrOriginName) ? QuestInteractionUtils.FindInScene(xrOriginName) : null;
         if (rig == null)
         {
             return;
@@ -93,15 +93,15 @@ public sealed class CatRideV2Bootstrap : MonoBehaviour
 
         // Use reflection to set private serialized fields without expanding the V2 controller's
         // public surface. This keeps the bootstrap a non-invasive addition.
-        SetPrivateField(controller, "playerRigRoot", rig);
+        SetPrivateField(controller, "playerRigRoot", rig.gameObject);
 
-        Transform locomotion = FindChildRecursive(rig.transform, locomotionChildName);
+        Transform locomotion = FindChildRecursive(rig, locomotionChildName);
         if (locomotion != null)
         {
             SetPrivateField(controller, "locomotionRoot", locomotion.gameObject);
         }
 
-        Transform deviceSim = FindChildRecursive(rig.transform, deviceSimulatorChildName);
+        Transform deviceSim = FindChildRecursive(rig, deviceSimulatorChildName);
         if (deviceSim != null)
         {
             SetPrivateField(controller, "xrDeviceSimulatorRoot", deviceSim.gameObject);
