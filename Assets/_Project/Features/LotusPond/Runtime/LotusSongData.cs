@@ -5,6 +5,6 @@ using System.Collections.Generic;
 public class LotusSongData : ScriptableObject 
 {
     public string songName;
-    [Tooltip("ID sequence（0=A, 1=B, 2=C...）")]
+    [Tooltip("ID sequence (0=A, 1=B, 2=C...)")]
     public List<int> sequence; 
 }

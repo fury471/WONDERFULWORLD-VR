@@ -85,6 +85,14 @@ Current runtime lookup status:
 - Remaining `FindObject*` calls are mostly startup/bootstrap discovery paths or periodic system-level cache refreshes; inspect them with Profiler markers if CPU spikes remain.
 - Do not reintroduce per-frame global object searches when adding new interactions. Prefer serialized references, feature-local bootstrap wiring, or `QuestInteractionUtils` cached helpers.
 
+Recent spike-reduction pass:
+
+- `QuestRayVisualLengthProfile` now scans for XRI curve visuals at a lower cadence and avoids per-frame lowercase string allocations while resolving hand ownership.
+- `RecenterController` throttles missing-reference rediscovery instead of attempting global searches every frame.
+- `QuestHapticsInteractionProfile` reuses hover update scratch lists instead of allocating temporary lists during stable-hover haptic pulses.
+- `PCVRPerformanceBootstrap` reuses the refresh-rate reflection argument buffer during the startup refresh-rate request window.
+- `LotusMusicStaff` reuses its note-removal scratch list when the score display refreshes.
+
 ## Black Flicker Triage
 
 If black blocks or flicker appear in the headset, check these first:

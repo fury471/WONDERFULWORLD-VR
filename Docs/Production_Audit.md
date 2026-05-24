@@ -81,6 +81,7 @@ Completed in the current closeout pass:
 - Runtime XR camera, controller ray, and haptics lookup paths are centralized through `QuestInteractionUtils` with scene-aware caching and retry throttling.
 - High-frequency interaction scripts no longer call `Camera.main`, `GameObject.Find`, or tag-based camera lookup directly.
 - Growth seed targeting uses non-alloc raycasts for the known high-frequency hover and placement checks.
+- XR ray profile scans, recenter reference recovery, haptic hover pulses, PCVR refresh-rate requests, and lotus score refreshes have been adjusted to reduce periodic CPU and GC spikes.
 - PC VR frame pacing guardrails are applied through `PCVRPerformanceBootstrap` before scene load.
 - Scale shift character controller step offset is clamped before resizing and before re-enabling the controller.
 

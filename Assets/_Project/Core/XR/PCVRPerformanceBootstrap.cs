@@ -24,6 +24,7 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
         null,
         new[] { typeof(float) },
         null);
+    private static readonly object[] refreshRateRequestArgs = new object[1];
 
     private static bool initialized;
     private static bool logged;
@@ -210,7 +211,8 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
             return false;
         }
 
-        object result = requestDisplayRefreshRateMethod.Invoke(display, new object[] { refreshRate });
+        refreshRateRequestArgs[0] = refreshRate;
+        object result = requestDisplayRefreshRateMethod.Invoke(display, refreshRateRequestArgs);
         return result is bool requested && requested;
     }
 }

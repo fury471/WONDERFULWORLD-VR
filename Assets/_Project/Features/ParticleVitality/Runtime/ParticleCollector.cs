@@ -104,7 +104,7 @@ public class ParticleCollector : MonoBehaviour
         
         if (isActive && IsWithinCollectRange )
         {
-            // 只有当它还没播放时，才调用 Play()，避免每一帧都重复触发
+            // Play only once when collection starts so the effect is not retriggered every frame.
             float holdDuration = Time.time - absorbHoldStartTime;
             float t = Mathf.Clamp01(holdDuration / absorbBuildupSeconds);
             var emission = absorbParticleSystem.emission;
@@ -125,7 +125,7 @@ public class ParticleCollector : MonoBehaviour
         }
         else
         {
-            // 只有当它正在播放时，才调用 Stop()
+            // Stop only while the effect is currently playing.
             if (absorbParticleSystem.isPlaying)
             {
                 absorbParticleSystem.Stop(false, ParticleSystemStopBehavior.StopEmitting);

@@ -551,8 +551,11 @@ public class ScaleManager : MonoBehaviour
         ApplyMoveSpeed(profile.moveSpeedMultiplier);
         ApplyInteractionDistance(profile.interactionDistanceMultiplier);
         ApplyCharacterController(controllerHeightMultiplier, controllerRadiusMultiplier);
-        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
+        // Sync transforms BEFORE re-enabling the CC. set_enabled validates stepOffset
+        // against scaled extents, and we want PhysX to see the new lossyScale already
+        // applied to avoid validation against stale (pre-scale-change) state.
         Physics.SyncTransforms();
+        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
         RestoreScalePoseAnchor(preScaleAnchor);
 
         if (logDebug)
@@ -697,14 +700,19 @@ public class ScaleManager : MonoBehaviour
         float localHeight = Mathf.Max(MinCharacterControllerHeight, baseControllerHeight * localHeightMultiplier);
         float localRadius = Mathf.Max(0f, baseControllerRadius * localRadiusMultiplier);
 
-        float preResizeMaxStepOffset = GetMaxAllowedStepOffset(
-            characterController.height,
-            characterController.radius,
-            currentLossyScale);
-        characterController.stepOffset = Mathf.Clamp(characterController.stepOffset, 0f, preResizeMaxStepOffset);
+        // Zero stepOffset before resizing — 0 is unconditionally valid against any
+        // positive height/radius/lossy, so neither set_height nor set_radius can trip
+        // Unity's "stepOffset > height" or "stepOffset > scaled extent" checks.
+        characterController.stepOffset = 0f;
         characterController.height = localHeight;
         characterController.radius = localRadius;
 
+        // Scale stepOffset by the WORLD-space size change (heightMultiplier), not the
+        // local one. The local height stays constant in unified-rig mode while lossy
+        // shrinks, so localHeightMultiplier would leave stepOffset pinned at its base
+        // value (0.5) while the scaled extent shrinks toward it — putting us right at
+        // Unity's validation threshold. heightMultiplier keeps the ratio of stepOffset
+        // to scaled capsule extent constant across all scales.
         float targetStepOffset = baseControllerStepOffset * Mathf.Max(0f, heightMultiplier);
         float maxAllowedStepOffset = GetMaxAllowedStepOffset(localHeight, localRadius, currentLossyScale);
         characterController.stepOffset = Mathf.Clamp(targetStepOffset, 0f, maxAllowedStepOffset);
@@ -816,8 +824,10 @@ public class ScaleManager : MonoBehaviour
 
         bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
         scaleRoot.position += delta;
-        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
+        // Same ordering rule as ApplyScaleImmediate: sync before re-enable so PhysX
+        // validates set_enabled against the moved position, not the pre-move one.
         Physics.SyncTransforms();
+        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
     }
 
     private bool SetCharacterControllerEnabled(bool enabled)
@@ -865,11 +875,18 @@ public class ScaleManager : MonoBehaviour
 
     private static float GetMaxAllowedStepOffset(float controllerHeight, float controllerRadius, Vector3 controllerLossyScale)
     {
-        float localHeightLimit = Mathf.Max(0f, controllerHeight - CharacterControllerStepOffsetEpsilon);
-        float scaledHeight = Mathf.Max(0f, controllerHeight * Mathf.Abs(controllerLossyScale.y));
-        float scaledRadius = Mathf.Max(0f, controllerRadius * GetHorizontalScale(controllerLossyScale));
-        float scaledColliderLimit = Mathf.Max(0f, scaledHeight + scaledRadius * 2f - CharacterControllerStepOffsetEpsilon);
-        return Mathf.Min(localHeightLimit, scaledColliderLimit);
+        // Unity validates stepOffset at multiple sites (set_stepOffset, set_height,
+        // set_enabled) and empirically uses a stricter bound than the documented
+        // "scaledHeight + 2*scaledRadius" — likely accounting for skinWidth and
+        // floating-point slack. Use a 15% relative margin on the world-scaled extent
+        // to stay clear of all checks. Also satisfy the raw local check
+        // (stepOffset <= height) since both bounds apply to the same stored value.
+        float scaleY = Mathf.Max(0.0001f, Mathf.Abs(controllerLossyScale.y));
+        float scaleH = GetHorizontalScale(controllerLossyScale);
+        float scaledExtent = controllerHeight * scaleY + 2f * controllerRadius * scaleH;
+        float safeScaledLimit = scaledExtent * 0.85f;
+        float safeLocalLimit = Mathf.Max(0f, controllerHeight - CharacterControllerStepOffsetEpsilon);
+        return Mathf.Max(0f, Mathf.Min(safeScaledLimit, safeLocalLimit));
     }
 
     private Transform ResolveXrCameraOffsetTransform()

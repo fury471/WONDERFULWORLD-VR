@@ -9,7 +9,7 @@ public class LotusNoteTrigger : MonoBehaviour
     public event System.Action<LotusNoteTrigger> NoteActivationStarted;
     public event System.Action<LotusNoteTrigger> NoteTriggered;
     [Header("Unity Events (Editor Only)")]
-    // 2. 添加 UnityEvent，它会在 Inspector 面板显示面板
+    // Exposed in the Inspector for optional editor wiring.
     public UnityEvent onTriggered;
 
     public float CooldownSeconds => cooldownSeconds;
@@ -180,7 +180,7 @@ public class LotusNoteTrigger : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             Vector2 randomPoint = Random.insideUnitCircle * spawnRadius;
-            Vector3 localPos = new Vector3(randomPoint.x, 0.01f, randomPoint.y); // Y微抬防止穿模
+            Vector3 localPos = new Vector3(randomPoint.x, 0.01f, randomPoint.y); // Slight Y lift prevents clipping.
 
             GameObject drop = Instantiate(waterDropPrefab, transform);
             drop.transform.localPosition = localPos;

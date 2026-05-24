@@ -9,6 +9,8 @@ using UnityEngine.XR.Interaction.Toolkit.Locomotion.Gravity;
 [DisallowMultipleComponent]
 public sealed class RecenterController : MonoBehaviour
 {
+    private const float ReferenceRefreshSeconds = 0.5f;
+
     [Header("Targets")]
     [SerializeField] private XROrigin xrOrigin;
     [SerializeField] private Camera targetCamera;
@@ -22,7 +24,7 @@ public sealed class RecenterController : MonoBehaviour
     [Tooltip("Also snap player position to the anchor. When false (default) the player is only reoriented in place.")]
     [SerializeField] private bool snapToAnchorPosition = false;
 
-    [Header("Input — Right B (secondaryButton)")]
+    [Header("Input - Right B (secondaryButton)")]
     [SerializeField] private InputActionReference recenterAction;
     [SerializeField] private bool useRightSecondaryButton = true;
     [SerializeField, Min(0f)] private float holdSecondsToConfirm = 0.4f;
@@ -66,6 +68,7 @@ public sealed class RecenterController : MonoBehaviour
     private bool confirmFired;
     private bool isRecentering;
     private bool requireReleaseBeforeNextPress;
+    private float nextReferenceRefreshTime;
     private readonly RaycastHit[] groundHits = new RaycastHit[12];
 
     private void Awake()
@@ -145,7 +148,7 @@ public sealed class RecenterController : MonoBehaviour
 
     public void RequestRecenter()
     {
-        CacheReferences();
+        CacheReferences(force: true);
 
         if (isRecentering || !CanRecenterNow())
         {
@@ -159,7 +162,7 @@ public sealed class RecenterController : MonoBehaviour
     private IEnumerator RecenterRoutine()
     {
         isRecentering = true;
-        CacheReferences();
+        CacheReferences(force: true);
 
         CatRideControllerV2 activeRide = routeToMountWhileRiding ? GetActiveRide() : null;
 
@@ -530,8 +533,13 @@ public sealed class RecenterController : MonoBehaviour
         return cachedScaleManager != null && cachedScaleManager.IsTransitioning;
     }
 
-    private void CacheReferences()
+    private void CacheReferences(bool force = false)
     {
+        if (!force && !ShouldRefreshReferences())
+        {
+            return;
+        }
+
         if (xrOrigin == null)
         {
             xrOrigin = GetComponentInParent<XROrigin>(true);
@@ -643,6 +651,39 @@ public sealed class RecenterController : MonoBehaviour
 #pragma warning restore CS0618
 #endif
         }
+    }
+
+    private bool ShouldRefreshReferences()
+    {
+        bool needsRefresh =
+            xrOrigin == null ||
+            targetCamera == null ||
+            transitionController == null ||
+            characterController == null ||
+            gravityProvider == null ||
+            rightControllerOrigin == null ||
+            rightHaptics == null ||
+            cachedRideControllers == null ||
+            cachedRideControllers.Length == 0 ||
+            cachedScaleManager == null;
+
+        if (!needsRefresh)
+        {
+            return false;
+        }
+
+        if (!Application.isPlaying)
+        {
+            return true;
+        }
+
+        if (Time.unscaledTime < nextReferenceRefreshTime)
+        {
+            return false;
+        }
+
+        nextReferenceRefreshTime = Time.unscaledTime + ReferenceRefreshSeconds;
+        return true;
     }
 
     private void AutoAssignReferences()
