@@ -39,6 +39,7 @@ Wonderland（项目内部也称 *Wonderful World*）是一款基于 **Unity 6** 
 - **蘑菇种植** —— 点按种下 1 棵（土系魔法飞行 1.55 秒落地）；长按蓄力 ≥ 0.65 秒再松开，则在落点 4 米半径环形生成 5–8 棵。对已有蘑菇再次扣扳机即可"培育"使其长大（每次 +0.35×，上限 2.4×）。
 - **烟花终章** —— 瞄准魔法迫击炮（识别距离 36 米），发射螺旋火带沿三次贝塞尔曲线飞向装置，触发整段点云烟花表演。
 - **樱花水晶球** —— 樱花树上方 1.05 米半径的发光水晶（由 `CherryGardenCrystalOrbTrigger` 生成），右扳机激活后 0.72 秒内收束，触发四段树木生长动画与花瓣漩涡。
+- **木质秋千** —— 在公园里坐上木质秋千（`TFF_Wooden_Swing_01A`，挂在 `Decorations/Swings` 下）：右手射线对准**坐板** + 右扳机即可坐下；左摇杆前/后摆动来"蹬"出更大的摆幅（围绕坐板局部 Z 轴，最大 ±60°）；右手 A 起身。视角水平锁定在坐板初始朝向，仅有平移、不带翻滚 / 俯仰。骑乘中长按右手 B（0.40 秒）即可重新归中到坐板上。**仅普通尺度可用。** 驱动脚本：[`QuestSwingRideController`](Assets/_Project/Features/Mounts/Runtime/QuestSwingRideController.cs)。
 - **Quest 3 Link 舒适层** —— 专门的 `QuestLocomotionComfortProfile`、右手 B 长按 0.40 秒归中、骑乘感知的视角归中、按模式切换的隧道晕影。
 
 ---
@@ -166,6 +167,7 @@ wc -c < Assets/_Project/World/Persistent/World_WonderlandPark.unity
 | 烟花迫击炮 | 发射火带，触发整段烟花表演 |
 | 樱花水晶 | 收束水晶球，触发树木生长与花瓣漩涡 |
 | 坐骑 | 右手扳机上马（依各动物的尺度门槛），右手 A 下马；左摇杆移动，右摇杆转向 |
+| 秋千坐板 | 右扳机坐上去（仅普通尺度，射线需命中坐板）；左摇杆前/后蹬（±60° 摆幅）；右手 A 起身 |
 
 完整对照见 [`Docs/InteractionBindings.md`](Docs/InteractionBindings.md)。
 

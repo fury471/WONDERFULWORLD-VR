@@ -49,7 +49,7 @@ flow driven by [`WelcomeFlowController`](../Assets/_Project/UI/Scripts/WelcomeFl
 - Growth and mushroom planting: `Assets/_Project/Features/Growth`.
 - Particle vitality (crystal-driven petal/pollen magic): `Assets/_Project/Features/ParticleVitality`.
 - Lotus pond music sequencer: `Assets/_Project/Features/LotusPond`.
-- Mount system (cat / dog / horse) + guide butterflies: `Assets/_Project/Features/Mounts`.
+- Mount system (cat / dog / horse) + guide butterflies + wooden swing: `Assets/_Project/Features/Mounts` (the swing driver is `QuestSwingRideController.cs`; its in-scene instance `TFF_Wooden_Swing_01A` lives under `Decorations/Swings`, not under a `Region_*` root).
 - Fireworks interaction and showcase: `Assets/_Project/Features/Fireworks`.
 - Cherry garden crystal orb and tree growth: `Assets/_Project/Features/CherryGarden`.
 - World-space UI, welcome panel, notice boards, localisation (EN/ZH/SV), VR system menu: `Assets/_Project/UI`.

@@ -58,7 +58,7 @@ Run this after every cleanup or optimization batch:
 3. Confirm the XR Origin tracks head and hands correctly.
 4. Test teleport, snap turn, recenter, and the VR system menu.
 5. Walk through the Welcome flow (`WelcomePanel`) and visit the six region roots under `World_Regions/`: `Region_FlowerGarden`, `Region_LotusPond`, `Region_CatGarden`, `Region_FireworksClearing`, `Region_MushroomGrowth`, `Region_CherryGarden`.
-6. Test notice boards, audio, major animations, the Flower Garden particle crystal, lotus notes, the three Cat Garden mounts (cat/dog at Small scale, horse at Normal scale), horse summon, mushroom planting + cultivation, the fireworks mortar, the cherry orb, and the left-Menu system menu.
+6. Test notice boards, audio, major animations, the Flower Garden particle crystal, lotus notes, the three Cat Garden mounts (cat/dog at Small scale, horse at Normal scale), horse summon, mushroom planting + cultivation, the fireworks mortar, the cherry orb, the wooden swing in `Decorations/Swings` (right trigger on the seat at Normal scale, left-stick pump, right A to step off), and the left-Menu system menu.
 7. Watch for black flicker, tearing, jitter, delayed head rotation, missing materials, missing scripts, or console errors.
 
 ## Validation Tools

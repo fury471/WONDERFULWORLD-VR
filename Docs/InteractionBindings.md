@@ -402,58 +402,135 @@ activated.
 
 ---
 
-## 9. Passive UI Hints
+## 9. Park Decorations — Wooden Swing
+
+Path: `Decorations/Swings/TFF_Wooden_Swing_01A`.
+
+The wooden swing is **not** part of any `Region_*` root — it lives under the
+scene's `Decorations` layer alongside other park dressing. Driver:
+[`QuestSwingRideController`](../Assets/_Project/Features/Mounts/Runtime/QuestSwingRideController.cs)
+on the swing prefab. The seat (`TFF_Wooden_Swing_Seat_01A`) hangs below the
+crossbar; while the player rides, the **frame stays still** and only the seat
+pivots, so other riders in the scene see a real pendulum.
+
+### 9.1 Scale gate (verified from script default)
+
+`mountScaleRequirement` defaults to `SwingScaleRequirement.NormalOnly` and is
+not overridden in the scene instance.
+
+| Enum value | Required scale |
+|---|---|
+| `Any` | any |
+| `SmallOnly` | Small |
+| **`NormalOnly` (default in scene)** | **Normal** |
+| `LargeOnly` | Large |
+
+Mid scale-transition the swing refuses mount so the rig is never left in a
+half-scaled state (`scaleManager.IsTransitioning` check).
+
+### 9.2 Mount / dismount
+
+| Action | Input | Conditions |
+|---|---|---|
+| **Sit** | Right-hand ray on the **seat** + **right trigger** | Player must be in **Normal** scale; ray distance ≤ `rayDistance = 7 m`; head-to-seat horizontal distance ≤ `mountDistance = 2.4 m`. With `restrictRayToSeatOnly = true`, pointing at the frame, ropes, or posts does **not** trigger a hover or mount. |
+| **Dismount** | **Right A (`primaryButton`)** | No conditions other than being currently seated. Drop-off position is `dismountSideDistance = 1.15 m` to the seat's local side + `dismountBackDistance = 0.45 m` back, projected to ground via `groundProbeDistance = 5 m`. |
+| **Recenter (mid-ride)** | Hold right B (via `RecenterController`) | Routes to `QuestSwingRideController.RecenterMountedView()`: yaw-only re-align to the seat's initial forward, head XZ snapped to the swing seat centre, head Y preserved. |
+
+Hover feedback: outline colour `(0.78, 0.94, 1, 0.62)` plus right-hand haptic.
+
+Locomotion lock: while seated, the player's `CharacterController` is disabled,
+every `LocomotionProvider` under `locomotionRoot` is disabled, the comfort
+profile is runtime-locked, and the swing's idle `Animator` is disabled so the
+script can drive the seat directly. All of these are restored on dismount.
+
+### 9.3 Pendulum physics (scene values vs. script defaults)
+
+The script implements a simple gravity-restoring pendulum with damping; the
+scene instance overrides a few values to give the wooden swing a livelier feel
+than the script default:
+
+| Parameter | Script default | **Scene value** | Meaning |
+|---|---|---|---|
+| `swingLength` | 1.10 m | 1.10 m | Rider sits this far below the pivot. |
+| `maxAngleDegrees` | 22° | **60°** | Hard clamp on the local-Z swing angle; at the clamp the angular velocity is mirrored with `× -0.12`. |
+| `pumpAcceleration` | 26 | **36** | How hard the left-stick pump impulse pushes the swing. |
+| `gravityAcceleration` | 9.5 | 9.5 | Restoring force coefficient. |
+| `angularDamping` | 1.15 | 1.15 | Continuous air damping. |
+| `autoSettleDamping` | 0.5 | 0.5 | Extra damping while the player isn't pumping. |
+| `mountedEyeHeight` | 0.62 m | 0.62 m | Sitting eye height above the rider's seated position. |
+
+Pump input: **left thumbstick Y axis** (forward/back), dead zone `0.08`.
+
+View comfort: while mounted, `rideAnchor` is set every frame to the seat-local
+rider position, but the rig's **rotation** is locked to the seat's initial
+horizontal forward (`Quaternion.LookRotation(restRiderViewForward, Vector3.up)`).
+The rider feels horizontal translation only — no roll, no pitch — which is the
+standard VR pendulum-comfort trick.
+
+### 9.4 Swing comfort vignette
+
+The script ships a dynamic comfort vignette that closes the ring only when the
+rider is moving **backwards** (mapped to `swingVignetteFullSpeed = 0.55 m/s`,
+dead zone `0.08 m/s`, smoothstep eased toward `swingVignetteAperture = 0.58`).
+On the production scene's swing instance, however, the vignette is explicitly
+disabled (`enableSwingComfortVignette = 0`) — the global comfort profile still
+syncs via `syncSwingVignetteWithComfortProfile = 1` so the look stays
+consistent if the design re-enables it later.
+
+---
+
+## 10. Passive UI Hints
 
 | # | Element | Script | Trigger |
 |---|---|---|---|
-| 9.1 | Static `InteractionPrompt` instance | [`InteractionPrompt`](../Assets/_Project/UI/Scripts/InteractionPrompt.cs) | Player walks into the prompt's trigger collider |
-| 9.2 | Floating gaze prompt | [`FloatingInteractionPrompt`](../Assets/_Project/UI/Scripts/FloatingInteractionPrompt.cs) | Player's head is within `triggerDistance = 20 m` and gaze alignment ≥ `gazeThreshold = 0.85` for ≥ `delayTime = 3 s` |
+| 10.1 | Static `InteractionPrompt` instance | [`InteractionPrompt`](../Assets/_Project/UI/Scripts/InteractionPrompt.cs) | Player walks into the prompt's trigger collider |
+| 10.2 | Floating gaze prompt | [`FloatingInteractionPrompt`](../Assets/_Project/UI/Scripts/FloatingInteractionPrompt.cs) | Player's head is within `triggerDistance = 20 m` and gaze alignment ≥ `gazeThreshold = 0.85` for ≥ `delayTime = 3 s` |
 
 Neither consumes a controller button.
 
 ---
 
-## 10. Controller Button Reverse Lookup
+## 11. Controller Button Reverse Lookup
 
-### 10.1 Right Quest controller
+### 11.1 Right Quest controller
 
 | Button | Consumers (production scene) | Notes |
 |---|---|---|
-| **Trigger** | §3 petal/pollen crystal · §4 lotus notes (right hand) · §5.1 mount entry · §6.1 mushroom seed · §6.2 mushroom cultivate · §7.1 firework mortar · §8.3 cherry orb | All raycast-based and mutually exclusive — each tick the ray hits a single target. |
-| **A (`primaryButton`)** | §5.1 mount dismount | Only consumed while riding. |
-| **B (`secondaryButton`)** | §1.3 recenter | The only consumer. |
-| **Thumbstick push** | §1.1 L3 / L4 turn · §5.1 ride turn | Mutually exclusive: locomotion turn is disabled while mounted; ride turn replaces it. |
+| **Trigger** | §3 petal/pollen crystal · §4 lotus notes (right hand) · §5.1 mount entry · §6.1 mushroom seed · §6.2 mushroom cultivate · §7.1 firework mortar · §8.3 cherry orb · §9.2 wooden swing seat | All raycast-based and mutually exclusive — each tick the ray hits a single target. |
+| **A (`primaryButton`)** | §5.1 mount dismount · §9.2 wooden swing dismount | Only consumed while riding (mount) or seated (swing). |
+| **B (`secondaryButton`)** | §1.3 recenter (also re-routed mid-swing via `QuestSwingRideController.RecenterMountedView`) | The only consumer. |
+| **Thumbstick push** | §1.1 L3 / L4 turn · §5.1 ride turn | Mutually exclusive: locomotion turn is disabled while mounted/seated; ride turn replaces it. |
 | **Thumbstick click** | §1.2 scale shift | Disabled while riding. |
 | **Menu** | — | ⚠ Reserved by the Oculus system shell. Do not bind. |
 
-### 10.2 Left Quest controller
+### 11.2 Left Quest controller
 
 | Button | Consumers (production scene) | Notes |
 |---|---|---|
 | **Trigger** | §1.1 L1 teleport confirm (teleport mode) · §4 lotus notes (left hand) | ⚠ Possible overlap: in teleport mode the player could aim a teleport arc at a lotus pad. Mitigation: exclude the lotus layer from `QuestLocomotionComfortProfile.teleportRaycastMask`. |
 | **X (`primaryButton`)** | §1.4 horse summon | Single consumer. |
 | **Y (`secondaryButton`)** | — | Free. |
-| **Thumbstick push** | §1.1 L1 teleport aim · L2 smooth move · §5.1 ride move | Mutually exclusive by locomotion mode and ride state. |
+| **Thumbstick push** | §1.1 L1 teleport aim · L2 smooth move · §5.1 ride move · §9.3 swing pump | Mutually exclusive by locomotion mode, ride state, and swing-seated state. |
 | **Thumbstick click** | — | Free. |
 | **Menu** | §1.5 system menu | Bound by `VRSystemMenuController` (`useLeftHandMenuFallback = true`). |
 
-### 10.3 Head / proximity / posture
+### 11.3 Head / proximity / posture
 
 | Input | Consumers |
 |---|---|
-| Head pose (gaze + distance) | §9.2 floating gaze prompt |
-| Entering a trigger collider | §5.3 Kitty auto-route (only while mounted) · §5.5 guide butterflies · §5.4 animal voice · §9.1 static prompt |
+| Head pose (gaze + distance) | §10.2 floating gaze prompt |
+| Entering a trigger collider | §5.3 Kitty auto-route (only while mounted) · §5.5 guide butterflies · §5.4 animal voice · §10.1 static prompt |
 | Hand pose | Not consumed in this scene. The `HandProxy` / `LandingTarget` butterfly-landing-on-palm system from `Assets/Scripts/Interaction/` is **not** wired into the production scene. |
 
 ---
 
-## 11. Known Conflicts and Open Items
+## 12. Known Conflicts and Open Items
 
 | # | Concern | Recommended action |
 |---|---|---|
-| 11.1 | **Left-trigger overlap** between teleport confirm and lotus pad activation. In teleport mode, aiming a teleport arc that grazes a lotus pad could double-fire. | Put `LotusNoteTrigger` colliders on a dedicated layer and exclude that layer from `QuestLocomotionComfortProfile.teleportRaycastMask`. |
-| 11.2 | **Right-trigger raycast ordering.** Multiple features (firework mortar, lotus, cherry orb, mount, petal-pollen, mushroom seed) all listen for right trigger on right-hand raycast. They each do their own raycast with their own `LayerMask`. | Audit each feature's `LayerMask` so the colliders for each interaction live on a unique layer. All features currently use a non-default mask, but layer assignment on the scene objects should be spot-checked before submission. |
-| 11.3 | **Right A** is shared by mount-dismount only. The pause menu binding lives on **left Menu**, so there is no dismount-while-paused edge case. Keep it that way. | — |
+| 12.1 | **Left-trigger overlap** between teleport confirm and lotus pad activation. In teleport mode, aiming a teleport arc that grazes a lotus pad could double-fire. | Put `LotusNoteTrigger` colliders on a dedicated layer and exclude that layer from `QuestLocomotionComfortProfile.teleportRaycastMask`. |
+| 12.2 | **Right-trigger raycast ordering.** Multiple features (firework mortar, lotus, cherry orb, mount, petal-pollen, mushroom seed, wooden swing) all listen for right trigger on right-hand raycast. They each do their own raycast with their own `LayerMask`. | Audit each feature's `LayerMask` so the colliders for each interaction live on a unique layer. All features currently use a non-default mask, but layer assignment on the scene objects should be spot-checked before submission. The swing additionally hard-restricts hits to the seat collider via `restrictRayToSeatOnly`. |
+| 12.3 | **Right A** is shared between §5.1 mount dismount and §9.2 swing dismount, but mount and swing are mutually exclusive states (you can't be on a mount and the swing at the same time). The pause menu binding lives on **left Menu**, so there is no dismount-while-paused edge case. Keep it that way. | — |
 
 ---
 
@@ -467,6 +544,7 @@ Neither consumes a controller button.
 | `Region_CherryGarden` | `HeroCherryTree_GrowthRig` (passive), runtime-spawned `CherryGarden_CrystalOrb` | `TreeGrowthController`, `FlowerVortexEffect`, `CherryGardenCrystalOrbTrigger` |
 | `Region_LotusPond` | `LotusPad_A..G` (7), score starter (1), `LotusMusicUI` | `LotusNoteTrigger` ×8, `LotusEitherHandDriver`, `LotusSongManager`, `LotusSongUIController` |
 | `Region_MushroomGrowth` | `GrowthSeedZone`, `GrowthPlant_01..11`, `growth_energy` | `GrowthSeedZoneDriver`, `GrowthController`, `GrowthDriver`, `GrowthPlant` ×11 |
+| `Decorations / Swings` | `TFF_Wooden_Swing_01A` (and its `TFF_Wooden_Swing_Seat_01A` child as the mount target) | `QuestSwingRideController` |
 | Global / system | `WonderlandXROrigin`, `ScaleShiftSystem`, `GlobalSystem`, `WW_UI_System`, `WelcomePanel` | `QuestLocomotionComfortProfile`, `QuestInteractableFeedback`, `QuestRayVisualBroker`, `QuestRayVisualLengthProfile`, `ScaleManager`, `ScaleTransitionController`, `RecenterController`, `VRSystemMenuController`, `WelcomeFlowController`, `UILanguageService` |
 
 The production scene does **not** have a `Region_HumanEntry` root — the entry
@@ -499,6 +577,9 @@ Mounts (v2)
 - [`ButterflyFlightControllerV2.cs`](../Assets/_Project/Features/Mounts/Runtime/v2/ButterflyFlightControllerV2.cs)
 - [`ButterflyAutoTriggerV2.cs`](../Assets/_Project/Features/Mounts/Runtime/v2/ButterflyAutoTriggerV2.cs)
 - [`AnimalVoiceProximityPlayer.cs`](../Assets/_Project/Features/Mounts/Runtime/v2/AnimalVoiceProximityPlayer.cs)
+
+Decorations — Wooden Swing
+- [`QuestSwingRideController.cs`](../Assets/_Project/Features/Mounts/Runtime/QuestSwingRideController.cs)
 
 Lotus Pond
 - [`LotusEitherHandDriver.cs`](../Assets/_Project/Features/LotusPond/Runtime/LotusEitherHandDriver.cs)

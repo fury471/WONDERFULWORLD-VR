@@ -27,6 +27,7 @@ Recommended root grouping:
 - `Lighting`: directional light, sky, probes, volumes, and time-of-day atmosphere.
 - `Terrain`: terrain tiles, terrain data instances, and terrain-only colliders.
 - `World_Regions`: Flower Garden (pink crystal), Lotus Pond, Cat Garden (3 mounts), Fireworks Clearing (with waterfall), Mushroom Growth, Cherry Garden. The entry experience is delivered via `UI/WelcomePanel`, not as a separate region root.
+- `Decorations` also hosts the wooden swing (`TFF_Wooden_Swing_01A` under `Decorations/Swings`), an interactable driven by `QuestSwingRideController` that sits outside the region taxonomy.
 - `Decorations`: world art that is not owned by a specific region.
 - `UI`: world-space UI, welcome boards, notice board overlay, and system menu.
 - `Debug`: temporary disabled helpers only; delete it when empty.

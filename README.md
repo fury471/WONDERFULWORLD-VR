@@ -39,6 +39,7 @@ The production scene is [`Assets/_Project/World/Persistent/World_WonderlandPark.
 - **Mushroom planting** — tap to seed a single mushroom (1.55 s earth-magic projectile flight). Hold ≥ 0.65 s and release for a charged ring of 5–8 mushrooms within a 4 m radius. Tap an existing mushroom to cultivate it (+0.35× scale, capped at 2.4×).
 - **Fireworks mortar** — aim at the magic mortar (range 36 m); a spiral fire ribbon flies along a cubic-Bezier arc to the device, then triggers the point-cloud firework showcase.
 - **Cherry crystal orb** — a glowing crystal floats above the cherry tree (radius 1.05 m, spawned by `CherryGardenCrystalOrbTrigger`). Right trigger collapses it in 0.72 s and plays the four-phase tree growth animation and a petal vortex.
+- **Wooden swing** — sit on the wooden swing in the park (`TFF_Wooden_Swing_01A` under `Decorations/Swings`): aim the right ray at the **seat** + right trigger to sit down; pump the left thumbstick forward/back to build the pendulum arc (clamped to ±60° around the seat's local Z axis); right A to step off. View stays horizontally locked to the seat's initial forward — translation only, no roll. Right-B hold (0.40 s) re-centers you on the seat mid-ride. **Normal scale only.** Driven by [`QuestSwingRideController`](Assets/_Project/Features/Mounts/Runtime/QuestSwingRideController.cs).
 - **Quest 3 Link comfort layer** — purpose-built `QuestLocomotionComfortProfile`, hold-to-recenter on right B (0.40 s), mount-aware recenter, and a per-mode tunneling vignette.
 
 ---
@@ -166,6 +167,7 @@ The repo does not ship a prebuilt binary (`Builds/` is gitignored). To produce o
 | Firework mortar | Sends a fire ribbon into the device and triggers the showcase |
 | Cherry crystal | Collapses the orb and plays tree growth + petal vortex |
 | Mount | Right trigger to mount (per-animal scale gate); right A to dismount; left stick moves, right stick turns |
+| Wooden swing seat | Right trigger to sit (Normal scale only, ray must hit the seat board); left thumbstick forward/back to pump (±60° pendulum); right A to step off |
 
 Full reference: [`Docs/InteractionBindings.md`](Docs/InteractionBindings.md).
 

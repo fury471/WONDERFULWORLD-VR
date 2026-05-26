@@ -39,6 +39,7 @@ Produktionsscenen är [`Assets/_Project/World/Persistent/World_WonderlandPark.un
 - **Svampplantering** — tryck för att så en svamp (jordmagi-projektil med flygtid 1,55 s). Håll inne ≥ 0,65 s och släpp för en laddad ring med 5–8 svampar inom 4 m radie. Tryck på en befintlig svamp för att kultivera den (+0,35× storlek, max 2,4×).
 - **Fyrverkerimörsare** — sikta på den magiska mörsaren (räckvidd 36 m); ett spiralformat eldband flyger längs en kubisk Bézier-båge till enheten och drar igång punktmolns-fyrverkeriet.
 - **Körsbärs-kristallkula** — en lysande kristall svävar ovanför körsbärsträdet (radie 1,05 m, spawnad av `CherryGardenCrystalOrbTrigger`). Höger avtryckare kollapsar den på 0,72 s och spelar den fyrfasiga tillväxtanimationen och en kronbladsvirvel.
+- **Trägunga** — sätt dig på trägungan i parken (`TFF_Wooden_Swing_01A` under `Decorations/Swings`): sikta höger stråle på **sittbrädan** + höger avtryckare för att sätta dig; pumpa vänster spak fram/tillbaka för att bygga upp pendelns amplitud (klampad till ±60° kring sätets lokala Z-axel); höger A för att kliva av. Vyn är horisontellt låst till sätets ursprungliga riktning — endast translation, ingen roll/pitch. Långtryck på höger B (0,40 s) återcentrerar dig på sätet mitt under turen. **Endast Normal skala.** Drivs av [`QuestSwingRideController`](Assets/_Project/Features/Mounts/Runtime/QuestSwingRideController.cs).
 - **Komfortlager för Quest 3 Link** — specialbyggd `QuestLocomotionComfortProfile`, håll-för-centrering på höger B (0,40 s), montering-medveten vyåtercentrering, och en tunneleringsvinjett per rörelseläge.
 
 ---
@@ -166,6 +167,7 @@ Repot levereras inte med någon färdigbyggd binär (`Builds/` ligger i `.gitign
 | Fyrverkerimörsare | Skickar ett eldband in i enheten och drar igång showen |
 | Körsbärskristall | Kollapsar kulan och spelar trädets tillväxt + kronbladsvirveln |
 | Riddjur | Höger avtryckare för att montera (skalkrav per djur); höger A för att avmontera; vänster spak rör sig, höger spak vrider |
+| Trägungans sittbräda | Höger avtryckare för att sätta sig (endast Normal skala, strålen måste träffa sittbrädan); vänster spak fram/tillbaka för att pumpa (±60° pendel); höger A för att kliva av |
 
 Fullständig referens: [`Docs/InteractionBindings.md`](Docs/InteractionBindings.md).
 

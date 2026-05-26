@@ -10,6 +10,10 @@ using UnityEngine.XR.Interaction.Toolkit.Locomotion.Gravity;
 public sealed class RecenterController : MonoBehaviour
 {
     private const float ReferenceRefreshSeconds = 0.5f;
+    private const float MinCharacterControllerHeight = 0.01f;
+    private const float CharacterControllerStepOffsetEpsilon = 0.001f;
+    private const float CharacterControllerRadiusEpsilon = 0.001f;
+    private const float MaxStepOffsetScaledHeightFraction = 0.45f;
 
     [Header("Targets")]
     [SerializeField] private XROrigin xrOrigin;
@@ -247,7 +251,7 @@ public sealed class RecenterController : MonoBehaviour
 
         Vector3 currentNeutralForward = ResolveCurrentNeutralForward();
         Quaternion yawDelta = Quaternion.FromToRotation(currentNeutralForward, desiredForward);
-        bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
+        CharacterControllerDisableState characterControllerState = DisableCharacterControllerSafely();
 
         Transform originTransform = xrOrigin.transform;
         originTransform.SetPositionAndRotation(
@@ -257,7 +261,7 @@ public sealed class RecenterController : MonoBehaviour
         xrOrigin.MoveCameraToWorldLocation(targetCameraPosition);
         Physics.SyncTransforms();
 
-        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
+        RestoreCharacterControllerSafely(characterControllerState);
         RecoverOriginIfBelowGround();
 
         if (gravityProvider != null)
@@ -265,7 +269,7 @@ public sealed class RecenterController : MonoBehaviour
             gravityProvider.ResetFallForce();
         }
 
-        if (characterController != null && characterController.enabled)
+        if (characterController != null && characterController.enabled && characterController.gameObject.activeInHierarchy)
         {
             characterController.Move(Vector3.zero);
         }
@@ -305,24 +309,151 @@ public sealed class RecenterController : MonoBehaviour
         return forward.normalized;
     }
 
-    private bool SetCharacterControllerEnabled(bool enabled)
+    private CharacterControllerDisableState DisableCharacterControllerSafely()
     {
         if (characterController == null)
         {
-            return false;
+            return default;
         }
 
-        bool wasEnabled = characterController.enabled;
-        characterController.enabled = enabled;
-        return wasEnabled;
+        CharacterControllerDisableState state = new CharacterControllerDisableState
+        {
+            hasController = true,
+            wasEnabled = characterController.enabled,
+            height = characterController.height,
+            radius = characterController.radius,
+            stepOffset = characterController.stepOffset
+        };
+
+        PrepareCharacterControllerForStepOffsetWrite();
+        ForceCharacterControllerStepOffsetZero();
+        RestoreCharacterControllerShape(state);
+
+        if (characterController.enabled)
+        {
+            characterController.enabled = false;
+        }
+
+        return state;
     }
 
-    private void RestoreCharacterControllerEnabled(bool wasEnabled)
+    private void RestoreCharacterControllerSafely(CharacterControllerDisableState state)
     {
-        if (characterController != null)
+        if (!state.hasController || characterController == null)
         {
-            characterController.enabled = wasEnabled;
+            return;
         }
+
+        PrepareCharacterControllerForStepOffsetWrite();
+        ForceCharacterControllerStepOffsetZero();
+        RestoreCharacterControllerShape(state);
+
+        if (state.wasEnabled)
+        {
+            characterController.enabled = true;
+            Physics.SyncTransforms();
+            ApplySafeCharacterControllerStepOffset(state.stepOffset);
+        }
+    }
+
+    private void ForceCharacterControllerStepOffsetZero()
+    {
+        if (characterController == null)
+        {
+            return;
+        }
+
+        if (characterController.stepOffset != 0f)
+        {
+            characterController.stepOffset = 0f;
+        }
+    }
+
+    private void PrepareCharacterControllerForStepOffsetWrite()
+    {
+        if (characterController == null)
+        {
+            return;
+        }
+
+        float currentStepOffset = Mathf.Max(0f, characterController.stepOffset);
+        float currentRadius = Mathf.Max(0f, characterController.radius);
+        Vector3 lossyScale = characterController.transform.lossyScale;
+        float scaleY = Mathf.Max(0.0001f, Mathf.Abs(lossyScale.y));
+        float scaleH = GetHorizontalScale(lossyScale);
+        float scaledRadius = currentRadius * scaleH;
+        float requiredHeightForScaledStep = Mathf.Max(
+            0f,
+            (currentStepOffset + CharacterControllerStepOffsetEpsilon * 2f - scaledRadius * 2f) / scaleY);
+        float requiredHeight = Mathf.Max(
+            MinCharacterControllerHeight,
+            characterController.height,
+            currentStepOffset + CharacterControllerStepOffsetEpsilon * 2f,
+            currentRadius * 2f + CharacterControllerRadiusEpsilon * 2f,
+            requiredHeightForScaledStep);
+
+        if (characterController.height < requiredHeight)
+        {
+            characterController.height = requiredHeight;
+        }
+
+        float maxRadius = Mathf.Max(0f, requiredHeight * 0.5f - CharacterControllerRadiusEpsilon);
+        if (characterController.radius > maxRadius)
+        {
+            characterController.radius = maxRadius;
+        }
+    }
+
+    private void RestoreCharacterControllerShape(CharacterControllerDisableState state)
+    {
+        if (!state.hasController || characterController == null)
+        {
+            return;
+        }
+
+        float restoredRadius = Mathf.Max(0f, state.radius);
+        float restoredHeight = Mathf.Max(
+            MinCharacterControllerHeight,
+            state.height,
+            restoredRadius * 2f + CharacterControllerRadiusEpsilon);
+
+        characterController.height = restoredHeight;
+        characterController.radius = restoredRadius;
+    }
+
+    private void ApplySafeCharacterControllerStepOffset(float targetStepOffset)
+    {
+        if (characterController == null)
+        {
+            return;
+        }
+
+        float maxAllowedStepOffset = GetMaxAllowedStepOffset(
+            characterController.height,
+            characterController.radius,
+            characterController.transform.lossyScale);
+        float safeStepOffset = Mathf.Clamp(targetStepOffset, 0f, maxAllowedStepOffset);
+        if (safeStepOffset > CharacterControllerStepOffsetEpsilon)
+        {
+            characterController.stepOffset = safeStepOffset;
+        }
+    }
+
+    private static float GetMaxAllowedStepOffset(float controllerHeight, float controllerRadius, Vector3 controllerLossyScale)
+    {
+        float scaleY = Mathf.Max(0.0001f, Mathf.Abs(controllerLossyScale.y));
+        float scaleH = GetHorizontalScale(controllerLossyScale);
+        float scaledHeight = controllerHeight * scaleY;
+        float scaledRadius = controllerRadius * scaleH;
+        float scaledExtentLimit = Mathf.Max(0f, scaledHeight + 2f * scaledRadius - CharacterControllerStepOffsetEpsilon);
+        float scaledComfortLimit = Mathf.Max(0f, scaledHeight * MaxStepOffsetScaledHeightFraction);
+        float safeLocalLimit = Mathf.Max(0f, controllerHeight - CharacterControllerStepOffsetEpsilon);
+        return Mathf.Max(0f, Mathf.Min(scaledExtentLimit, scaledComfortLimit, safeLocalLimit));
+    }
+
+    private static float GetHorizontalScale(Vector3 scale)
+    {
+        return Mathf.Max(0.0001f, Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z)));
     }
 
     private bool RecoverOriginIfBelowGround()
@@ -345,10 +476,10 @@ public sealed class RecenterController : MonoBehaviour
             return false;
         }
 
-        bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
+        CharacterControllerDisableState characterControllerState = DisableCharacterControllerSafely();
         xrOrigin.transform.position += Vector3.up * liftAmount;
         Physics.SyncTransforms();
-        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
+        RestoreCharacterControllerSafely(characterControllerState);
         return true;
     }
 
@@ -754,5 +885,14 @@ public sealed class RecenterController : MonoBehaviour
                 characterController = xrOrigin.GetComponentInChildren<CharacterController>(true);
             }
         }
+    }
+
+    private struct CharacterControllerDisableState
+    {
+        public bool hasController;
+        public bool wasEnabled;
+        public float height;
+        public float radius;
+        public float stepOffset;
     }
 }
