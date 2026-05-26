@@ -369,6 +369,23 @@ public class ScaleManager : MonoBehaviour
             }
         }
 
+        // Treat an active swing the same as a cat ride for scale purposes: no thumbstick gesture,
+        // no SetScale call slips through, no half-scaled body locked to a swing.
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+        QuestSwingRideController[] swingControllers = FindObjectsByType<QuestSwingRideController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+#pragma warning disable CS0618
+        QuestSwingRideController[] swingControllers = FindObjectsOfType<QuestSwingRideController>(true);
+#pragma warning restore CS0618
+#endif
+        for (int i = 0; i < swingControllers.Length; i++)
+        {
+            if (swingControllers[i] != null && swingControllers[i].IsMounted)
+            {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -464,6 +481,18 @@ public class ScaleManager : MonoBehaviour
 
         if (Time.time < lastChangeTime + settings.cooldown)
             return;
+
+        // Hard guard: no scale changes while the player is mounted on a cat or seated on a swing.
+        // The Update() loop already early-outs on the thumbstick path, but this also blocks
+        // external scripts (UI menus, debug actions, etc.) from sneaking a SetScale through.
+        if (IsAnyRideActive())
+        {
+            if (logDebug)
+            {
+                Debug.Log($"[ScaleShift] Rejected SetScale({newState}) — player is on a mount/swing.", this);
+            }
+            return;
+        }
 
         WonderfulWorld.Audio.WonderlandAudioOneShotPlayer.Play2D("WW_SFX_ScaleShift", volumeScale: 1f, maxVoices: 3);
         StartCoroutine(SetScaleRoutine(newState));

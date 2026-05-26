@@ -1,0 +1,44 @@
+MIT License
+
+Copyright (c) 2026 The Wonderland Team
+(MAMF45 — Virtual Reality in Theory and Practice)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+THIRD-PARTY NOTICE
+
+This repository bundles third-party assets and Unity package samples that are
+NOT covered by the MIT License above. Each remains under its original license,
+including but not limited to:
+
+  - Toon Fantasy Nature        (Assets/Toon Fantasy Nature/)
+  - NamuFX – Stylized Water    (Assets/NamuFX/)
+  - ithappy – Animals FREE     (Assets/ithappy/)
+  - Unity XR Interaction Toolkit Samples (Assets/Samples/)
+  - VR Template Assets         (Assets/VRTemplateAssets/)
+  - TextMesh Pro / Liberation Sans (Assets/TextMesh Pro/)
+  - Ulysses Butterfly          (Assets/butterfly/)
+  - freesound.org sound samples by jaz_the_man_2
+    (Assets/_Project/Audio/Music/Music Note/)
+
+Refer to each vendor folder and to Docs/Asset_Reference_Audit.md for the
+current dependency snapshot. The MIT grant in this file applies only to the
+team-authored source code and team-authored assets in this repository.

@@ -184,8 +184,8 @@ namespace Wonderland.UI.Editor
             TMP_Text languageLabel = CreateText("LanguageLabel", settingsPanel.transform, "Language", 24f, FontStyles.Normal, new Vector2(-205f, 104f), new Vector2(200f, 42f), new Color(0.82f, 0.88f, 0.86f, 1f));
 
             Button englishButton = CreateButton("EnglishButton", settingsPanel.transform, "English", new Vector2(440f, 58f), new Vector2(80f, 78f), new Color(0.90f, 0.95f, 0.94f, 1f), new Color(0.08f, 0.12f, 0.14f, 1f), 1);
-            Button chineseButton = CreateButton("ChineseButton", settingsPanel.transform, "Chinese", new Vector2(440f, 58f), new Vector2(80f, 8f), new Color(0.90f, 0.95f, 0.94f, 1f), new Color(0.08f, 0.12f, 0.14f, 1f), 1);
-            Button swedishButton = CreateButton("SwedishButton", settingsPanel.transform, "Swedish", new Vector2(440f, 58f), new Vector2(80f, -62f), new Color(0.90f, 0.95f, 0.94f, 1f), new Color(0.08f, 0.12f, 0.14f, 1f), 1);
+            Button chineseButton = CreateButton("ChineseButton", settingsPanel.transform, "\u4e2d\u6587", new Vector2(440f, 58f), new Vector2(80f, 8f), new Color(0.90f, 0.95f, 0.94f, 1f), new Color(0.08f, 0.12f, 0.14f, 1f), 1);
+            Button swedishButton = CreateButton("SwedishButton", settingsPanel.transform, "Svenska", new Vector2(440f, 58f), new Vector2(80f, -62f), new Color(0.90f, 0.95f, 0.94f, 1f), new Color(0.08f, 0.12f, 0.14f, 1f), 1);
             Button backButton = CreateButton("BackButton", settingsPanel.transform, "Back", new Vector2(260f, 58f), new Vector2(0f, -160f), new Color(0.90f, 0.95f, 0.94f, 1f), new Color(0.08f, 0.12f, 0.14f, 1f), 1);
 
             AddLocalizedText(mainTitle, "Menu", "菜单", "Meny");
@@ -194,9 +194,9 @@ namespace Wonderland.UI.Editor
             AddLocalizedText(exitButton.GetComponentInChildren<TMP_Text>(true), "Exit", "退出", "Avsluta");
             AddLocalizedText(settingsTitle, "Settings", "设置", "Inställningar");
             AddLocalizedText(languageLabel, "Language", "语言", "Språk");
-            AddLocalizedText(englishButton.GetComponentInChildren<TMP_Text>(true), "English", "英语", "Engelska");
-            AddLocalizedText(chineseButton.GetComponentInChildren<TMP_Text>(true), "Chinese", "中文", "Kinesiska");
-            AddLocalizedText(swedishButton.GetComponentInChildren<TMP_Text>(true), "Swedish", "瑞典语", "Svenska");
+            AddLocalizedText(englishButton.GetComponentInChildren<TMP_Text>(true), "English", "English", "English");
+            AddLocalizedText(chineseButton.GetComponentInChildren<TMP_Text>(true), "\u4e2d\u6587", "\u4e2d\u6587", "\u4e2d\u6587");
+            AddLocalizedText(swedishButton.GetComponentInChildren<TMP_Text>(true), "Svenska", "Svenska", "Svenska");
             AddLocalizedText(backButton.GetComponentInChildren<TMP_Text>(true), "Back", "返回", "Tillbaka");
 
             VRSettingsMenuView settingsView = settingsPanel.AddComponent<VRSettingsMenuView>();

@@ -2,10 +2,10 @@
 
 ## Required Unity Version
 
-Open the project with:
+Open the project with the version recorded in `ProjectSettings/ProjectVersion.txt`:
 
 ```text
-Unity 6000.3.11f1
+Unity 6000.3.12f1
 ```
 
 Do not upgrade packages or migrate the project during production closeout unless the team explicitly schedules that as a separate task.
@@ -57,8 +57,8 @@ Run this after every cleanup or optimization batch:
 2. Enter Play Mode through Quest 3 Link.
 3. Confirm the XR Origin tracks head and hands correctly.
 4. Test teleport, snap turn, recenter, and the VR system menu.
-5. Visit the major regions: Human Entry, Flower Garden, Lotus Pond, Cat Garden, Fireworks Clearing, Mushroom Growth, and Cherry Garden.
-6. Test notice boards, audio, major animations, magic interactions, lotus notes, cat ride, and fireworks.
+5. Walk through the Welcome flow (`WelcomePanel`) and visit the six region roots under `World_Regions/`: `Region_FlowerGarden`, `Region_LotusPond`, `Region_CatGarden`, `Region_FireworksClearing`, `Region_MushroomGrowth`, `Region_CherryGarden`.
+6. Test notice boards, audio, major animations, the Flower Garden particle crystal, lotus notes, the three Cat Garden mounts (cat/dog at Small scale, horse at Normal scale), horse summon, mushroom planting + cultivation, the fireworks mortar, the cherry orb, the wooden swing in `Decorations/Swings` (right trigger on the seat at Normal scale, left-stick pump, right A to step off), and the left-Menu system menu.
 7. Watch for black flicker, tearing, jitter, delayed head rotation, missing materials, missing scripts, or console errors.
 
 ## Validation Tools

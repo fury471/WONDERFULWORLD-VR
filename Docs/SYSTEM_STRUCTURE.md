@@ -40,18 +40,21 @@ The current static audit found an inactive empty `Debug` root and both `UI` and 
 ## Core Runtime Systems
 
 - `WonderlandXROrigin.prefab`: production XR rig.
-- `QuestLocomotionComfortProfile`: teleport and snap-turn comfort profile.
-- `RecenterController`: right-hand recenter flow and mount-aware recenter handling.
-- `QuestRayVisualLengthProfile`: short, comfort-safe controller ray visuals.
-- `QuestInteractionUtils`: shared cached lookup helpers for head, controller, and haptic references.
-- `ScaleManager` and `ScaleTransitionController`: player scale state and blink transition support.
+- `QuestLocomotionComfortProfile`: teleport (default) / smooth move, snap (default, 30°) / smooth turn, per-mode comfort vignette.
+- `RecenterController`: right-hand B-hold recenter flow (0.40 s) with mount-aware routing to `CatRideControllerV2.RecenterMountedView()`.
+- `QuestRayVisualBroker` / `QuestRayVisualLengthProfile`: shared ownership and length-tuning for controller ray visuals.
+- `QuestInteractionUtils`: cached lookup helpers for head, controller, haptic references — used by every feature instead of per-frame `Find`/`Camera.main`.
+- `QuestHapticsInteractionProfile`: shared hover-pulse cadence.
+- `PCVRPerformanceBootstrap`: pre-scene frame-pacing setup (Low quality, VSync off, eye texture scale clamped to 1.0).
+- `ScaleManager` + `ScaleTransitionController`: Normal / Small (0.25×) / Large (1.75×), right-thumbstick-click gestures, blink transition.
 
 ## UI Systems
 
+- `WelcomePanel` (driven by `WelcomeFlowController`): the entry panel shown on scene load and after restart. Offers a **Start** button and three language buttons (English / 中文 / Svenska).
 - `WW_UI_System`: shared world-space UI system in the production scene.
-- `WW_VRSystemMenu.prefab`: runtime menu for settings and exit.
+- `WW_VRSystemMenu.prefab` (driven by `VRSystemMenuController`): runtime menu bound to the **left Menu** button (`XRCommonUsages.menuButton` on `XRNode.LeftHand`); offers Settings, Tutorial, Restart, and Exit.
 - `WW_NoticeBoardOverlayPanel.prefab`: shared notice board popup.
-- `LocalizedNoticeBoardContent`: per-board localized content assets.
+- `LocalizedNoticeBoardContent`: per-board localised content assets (EN/ZH/SV).
 - `UILanguageService`: global language state and UI update dispatch.
 
 ## Production Editor Tools

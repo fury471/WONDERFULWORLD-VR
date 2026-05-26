@@ -10,6 +10,10 @@ using UnityEngine.XR.Interaction.Toolkit.Locomotion.Gravity;
 public sealed class RecenterController : MonoBehaviour
 {
     private const float ReferenceRefreshSeconds = 0.5f;
+    private const float MinCharacterControllerHeight = 0.01f;
+    private const float CharacterControllerStepOffsetEpsilon = 0.001f;
+    private const float CharacterControllerRadiusEpsilon = 0.001f;
+    private const float MaxStepOffsetScaledHeightFraction = 0.45f;
 
     [Header("Targets")]
     [SerializeField] private XROrigin xrOrigin;
@@ -60,6 +64,7 @@ public sealed class RecenterController : MonoBehaviour
     private HapticImpulsePlayer rightHaptics;
     private Transform rightControllerOrigin;
     private CatRideControllerV2[] cachedRideControllers;
+    private QuestSwingRideController[] cachedSwingControllers;
     private ScaleManager cachedScaleManager;
     private bool actionHeldLastFrame;
     private bool secondaryHeldLastFrame;
@@ -165,14 +170,15 @@ public sealed class RecenterController : MonoBehaviour
         CacheReferences(force: true);
 
         CatRideControllerV2 activeRide = routeToMountWhileRiding ? GetActiveRide() : null;
+        QuestSwingRideController activeSwing = routeToMountWhileRiding ? GetActiveSwing() : null;
 
         if (useBlink && transitionController != null)
         {
-            yield return StartCoroutine(BlinkAndApply(activeRide));
+            yield return StartCoroutine(BlinkAndApply(activeRide, activeSwing));
         }
         else
         {
-            ApplyRecenter(activeRide);
+            ApplyRecenter(activeRide, activeSwing);
         }
 
         isRecentering = false;
@@ -180,15 +186,29 @@ public sealed class RecenterController : MonoBehaviour
         ResetPressState();
     }
 
-    private IEnumerator BlinkAndApply(CatRideControllerV2 activeRide)
+    private IEnumerator BlinkAndApply(CatRideControllerV2 activeRide, QuestSwingRideController activeSwing)
     {
         float outAndHold = Mathf.Max(0.05f, blinkDuration * 0.45f);
         yield return StartCoroutine(transitionController.PlayBlink(outAndHold, targetCamera));
-        ApplyRecenter(activeRide);
+        ApplyRecenter(activeRide, activeSwing);
     }
 
-    private void ApplyRecenter(CatRideControllerV2 activeRide)
+    private void ApplyRecenter(CatRideControllerV2 activeRide, QuestSwingRideController activeSwing)
     {
+        // Swing takes precedence: while the player is on the swing, the cat-ride routing must
+        // NOT fire ApplyRecenterPose — that path lifts the rig because the capsule-recovery
+        // raycast sees the swing's frame collider as "ground" and treats the seated player as
+        // sunk into geometry.
+        if (activeSwing != null)
+        {
+            activeSwing.RecenterMountedView();
+            if (logDebug)
+            {
+                Debug.Log($"[Recenter] Routed to swing: {activeSwing.name}", this);
+            }
+            return;
+        }
+
         if (activeRide != null)
         {
             activeRide.RecenterMountedView();
@@ -231,7 +251,7 @@ public sealed class RecenterController : MonoBehaviour
 
         Vector3 currentNeutralForward = ResolveCurrentNeutralForward();
         Quaternion yawDelta = Quaternion.FromToRotation(currentNeutralForward, desiredForward);
-        bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
+        CharacterControllerDisableState characterControllerState = DisableCharacterControllerSafely();
 
         Transform originTransform = xrOrigin.transform;
         originTransform.SetPositionAndRotation(
@@ -241,7 +261,7 @@ public sealed class RecenterController : MonoBehaviour
         xrOrigin.MoveCameraToWorldLocation(targetCameraPosition);
         Physics.SyncTransforms();
 
-        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
+        RestoreCharacterControllerSafely(characterControllerState);
         RecoverOriginIfBelowGround();
 
         if (gravityProvider != null)
@@ -249,7 +269,7 @@ public sealed class RecenterController : MonoBehaviour
             gravityProvider.ResetFallForce();
         }
 
-        if (characterController != null && characterController.enabled)
+        if (characterController != null && characterController.enabled && characterController.gameObject.activeInHierarchy)
         {
             characterController.Move(Vector3.zero);
         }
@@ -289,24 +309,151 @@ public sealed class RecenterController : MonoBehaviour
         return forward.normalized;
     }
 
-    private bool SetCharacterControllerEnabled(bool enabled)
+    private CharacterControllerDisableState DisableCharacterControllerSafely()
     {
         if (characterController == null)
         {
-            return false;
+            return default;
         }
 
-        bool wasEnabled = characterController.enabled;
-        characterController.enabled = enabled;
-        return wasEnabled;
+        CharacterControllerDisableState state = new CharacterControllerDisableState
+        {
+            hasController = true,
+            wasEnabled = characterController.enabled,
+            height = characterController.height,
+            radius = characterController.radius,
+            stepOffset = characterController.stepOffset
+        };
+
+        PrepareCharacterControllerForStepOffsetWrite();
+        ForceCharacterControllerStepOffsetZero();
+        RestoreCharacterControllerShape(state);
+
+        if (characterController.enabled)
+        {
+            characterController.enabled = false;
+        }
+
+        return state;
     }
 
-    private void RestoreCharacterControllerEnabled(bool wasEnabled)
+    private void RestoreCharacterControllerSafely(CharacterControllerDisableState state)
     {
-        if (characterController != null)
+        if (!state.hasController || characterController == null)
         {
-            characterController.enabled = wasEnabled;
+            return;
         }
+
+        PrepareCharacterControllerForStepOffsetWrite();
+        ForceCharacterControllerStepOffsetZero();
+        RestoreCharacterControllerShape(state);
+
+        if (state.wasEnabled)
+        {
+            characterController.enabled = true;
+            Physics.SyncTransforms();
+            ApplySafeCharacterControllerStepOffset(state.stepOffset);
+        }
+    }
+
+    private void ForceCharacterControllerStepOffsetZero()
+    {
+        if (characterController == null)
+        {
+            return;
+        }
+
+        if (characterController.stepOffset != 0f)
+        {
+            characterController.stepOffset = 0f;
+        }
+    }
+
+    private void PrepareCharacterControllerForStepOffsetWrite()
+    {
+        if (characterController == null)
+        {
+            return;
+        }
+
+        float currentStepOffset = Mathf.Max(0f, characterController.stepOffset);
+        float currentRadius = Mathf.Max(0f, characterController.radius);
+        Vector3 lossyScale = characterController.transform.lossyScale;
+        float scaleY = Mathf.Max(0.0001f, Mathf.Abs(lossyScale.y));
+        float scaleH = GetHorizontalScale(lossyScale);
+        float scaledRadius = currentRadius * scaleH;
+        float requiredHeightForScaledStep = Mathf.Max(
+            0f,
+            (currentStepOffset + CharacterControllerStepOffsetEpsilon * 2f - scaledRadius * 2f) / scaleY);
+        float requiredHeight = Mathf.Max(
+            MinCharacterControllerHeight,
+            characterController.height,
+            currentStepOffset + CharacterControllerStepOffsetEpsilon * 2f,
+            currentRadius * 2f + CharacterControllerRadiusEpsilon * 2f,
+            requiredHeightForScaledStep);
+
+        if (characterController.height < requiredHeight)
+        {
+            characterController.height = requiredHeight;
+        }
+
+        float maxRadius = Mathf.Max(0f, requiredHeight * 0.5f - CharacterControllerRadiusEpsilon);
+        if (characterController.radius > maxRadius)
+        {
+            characterController.radius = maxRadius;
+        }
+    }
+
+    private void RestoreCharacterControllerShape(CharacterControllerDisableState state)
+    {
+        if (!state.hasController || characterController == null)
+        {
+            return;
+        }
+
+        float restoredRadius = Mathf.Max(0f, state.radius);
+        float restoredHeight = Mathf.Max(
+            MinCharacterControllerHeight,
+            state.height,
+            restoredRadius * 2f + CharacterControllerRadiusEpsilon);
+
+        characterController.height = restoredHeight;
+        characterController.radius = restoredRadius;
+    }
+
+    private void ApplySafeCharacterControllerStepOffset(float targetStepOffset)
+    {
+        if (characterController == null)
+        {
+            return;
+        }
+
+        float maxAllowedStepOffset = GetMaxAllowedStepOffset(
+            characterController.height,
+            characterController.radius,
+            characterController.transform.lossyScale);
+        float safeStepOffset = Mathf.Clamp(targetStepOffset, 0f, maxAllowedStepOffset);
+        if (safeStepOffset > CharacterControllerStepOffsetEpsilon)
+        {
+            characterController.stepOffset = safeStepOffset;
+        }
+    }
+
+    private static float GetMaxAllowedStepOffset(float controllerHeight, float controllerRadius, Vector3 controllerLossyScale)
+    {
+        float scaleY = Mathf.Max(0.0001f, Mathf.Abs(controllerLossyScale.y));
+        float scaleH = GetHorizontalScale(controllerLossyScale);
+        float scaledHeight = controllerHeight * scaleY;
+        float scaledRadius = controllerRadius * scaleH;
+        float scaledExtentLimit = Mathf.Max(0f, scaledHeight + 2f * scaledRadius - CharacterControllerStepOffsetEpsilon);
+        float scaledComfortLimit = Mathf.Max(0f, scaledHeight * MaxStepOffsetScaledHeightFraction);
+        float safeLocalLimit = Mathf.Max(0f, controllerHeight - CharacterControllerStepOffsetEpsilon);
+        return Mathf.Max(0f, Mathf.Min(scaledExtentLimit, scaledComfortLimit, safeLocalLimit));
+    }
+
+    private static float GetHorizontalScale(Vector3 scale)
+    {
+        return Mathf.Max(0.0001f, Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z)));
     }
 
     private bool RecoverOriginIfBelowGround()
@@ -329,10 +476,10 @@ public sealed class RecenterController : MonoBehaviour
             return false;
         }
 
-        bool characterControllerWasEnabled = SetCharacterControllerEnabled(false);
+        CharacterControllerDisableState characterControllerState = DisableCharacterControllerSafely();
         xrOrigin.transform.position += Vector3.up * liftAmount;
         Physics.SyncTransforms();
-        RestoreCharacterControllerEnabled(characterControllerWasEnabled);
+        RestoreCharacterControllerSafely(characterControllerState);
         return true;
     }
 
@@ -528,6 +675,25 @@ public sealed class RecenterController : MonoBehaviour
         return null;
     }
 
+    private QuestSwingRideController GetActiveSwing()
+    {
+        if (cachedSwingControllers == null || cachedSwingControllers.Length == 0)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < cachedSwingControllers.Length; i++)
+        {
+            QuestSwingRideController controller = cachedSwingControllers[i];
+            if (controller != null && controller.IsMounted)
+            {
+                return controller;
+            }
+        }
+
+        return null;
+    }
+
     private bool IsScaleTransitionActive()
     {
         return cachedScaleManager != null && cachedScaleManager.IsTransitioning;
@@ -641,6 +807,17 @@ public sealed class RecenterController : MonoBehaviour
 #endif
         }
 
+        if (cachedSwingControllers == null || cachedSwingControllers.Length == 0)
+        {
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+            cachedSwingControllers = FindObjectsByType<QuestSwingRideController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+#pragma warning disable CS0618
+            cachedSwingControllers = FindObjectsOfType<QuestSwingRideController>(true);
+#pragma warning restore CS0618
+#endif
+        }
+
         if (cachedScaleManager == null)
         {
 #if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
@@ -665,6 +842,8 @@ public sealed class RecenterController : MonoBehaviour
             rightHaptics == null ||
             cachedRideControllers == null ||
             cachedRideControllers.Length == 0 ||
+            cachedSwingControllers == null ||
+            cachedSwingControllers.Length == 0 ||
             cachedScaleManager == null;
 
         if (!needsRefresh)
@@ -706,5 +885,14 @@ public sealed class RecenterController : MonoBehaviour
                 characterController = xrOrigin.GetComponentInChildren<CharacterController>(true);
             }
         }
+    }
+
+    private struct CharacterControllerDisableState
+    {
+        public bool hasController;
+        public bool wasEnabled;
+        public float height;
+        public float radius;
+        public float stepOffset;
     }
 }

@@ -47,6 +47,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     [SerializeField] private ContinuousMoveProvider continuousMove = null;
     [SerializeField] private ContinuousTurnProvider continuousTurn = null;
     [SerializeField] private SnapTurnProvider snapTurn = null;
+    [SerializeField] private CharacterController characterController = null;
 
     [Header("Teleport rays")]
     [SerializeField] private XRRayInteractor leftTeleportInteractor = null;
@@ -72,6 +73,15 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     [SerializeField] private bool ignoreDynamicRigidbodies = true;
     [SerializeField, Min(0f)] private float minimumSurfaceFootprint = 0.45f;
     [SerializeField, Range(5f, 60f)] private float maxTeleportSlopeDegrees = 38f;
+    [SerializeField] private bool useNaturalSurfaceSlopeProfile = true;
+    [SerializeField, Range(5f, 75f)] private float naturalSurfaceTeleportSlopeDegrees = 52f;
+    [SerializeField] private string[] naturalSurfaceNameContains = { "rock", "stone", "slab" };
+    [SerializeField] private bool requireTeleportLandingClearance = true;
+    [SerializeField] private LayerMask teleportLandingBlockMask = ~0;
+    [SerializeField, Min(0.05f)] private float teleportLandingClearanceRadius = 0.24f;
+    [SerializeField, Min(0.5f)] private float teleportLandingClearanceHeight = 1.45f;
+    [SerializeField, Min(0f)] private float teleportLandingClearanceSkin = 0.03f;
+    [SerializeField] private bool logTeleportSurfaceDiagnostics;
 
     [Header("Comfort timings")]
     [SerializeField, Min(0f)] private float teleportDelayTime = 0.08f;
@@ -319,6 +329,15 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
             snapTurn = GetComponentInChildren<SnapTurnProvider>(true);
         }
 
+        if (characterController == null)
+        {
+            characterController = GetComponent<CharacterController>();
+            if (characterController == null)
+            {
+                characterController = GetComponentInParent<CharacterController>();
+            }
+        }
+
         if (leftTeleportInteractor == null || rightTeleportInteractor == null)
         {
             var rays = GetComponentsInChildren<XRRayInteractor>(true);
@@ -485,7 +504,8 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private bool TryInstallTeleportArea(Collider surfaceCollider)
     {
-        if (!IsTeleportSurfaceCandidate(surfaceCollider))
+        QuestTeleportSurfacePolicy surfacePolicy = QuestTeleportSurfacePolicy.FindFor(surfaceCollider);
+        if (!IsTeleportSurfaceCandidate(surfaceCollider, surfacePolicy))
         {
             return false;
         }
@@ -493,7 +513,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
         var existingTeleportInteractable = surfaceCollider.GetComponent<BaseTeleportationInteractable>();
         if (existingTeleportInteractable != null)
         {
-            ConfigureTeleportInteractable(existingTeleportInteractable);
+            ConfigureTeleportInteractable(existingTeleportInteractable, surfaceCollider, surfacePolicy);
             return false;
         }
 
@@ -503,14 +523,20 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
         }
 
         var area = surfaceCollider.gameObject.AddComponent<TeleportationArea>();
-        ConfigureTeleportInteractable(area);
+        ConfigureTeleportInteractable(area, surfaceCollider, surfacePolicy);
         return true;
     }
 
-    private bool IsTeleportSurfaceCandidate(Collider surfaceCollider)
+    private bool IsTeleportSurfaceCandidate(Collider surfaceCollider, QuestTeleportSurfacePolicy surfacePolicy)
     {
         if (surfaceCollider == null || !surfaceCollider.enabled || !surfaceCollider.gameObject.activeInHierarchy)
         {
+            return false;
+        }
+
+        if (surfacePolicy != null && surfacePolicy.Permission == QuestTeleportSurfacePolicy.TeleportPermission.Block)
+        {
+            LogTeleportSurfaceRejection(surfaceCollider, "blocked by QuestTeleportSurfacePolicy");
             return false;
         }
 
@@ -527,6 +553,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
         var surfaceLayerMask = 1 << surfaceCollider.gameObject.layer;
         if ((teleportSurfaceMask.value & surfaceLayerMask) == 0)
         {
+            LogTeleportSurfaceRejection(surfaceCollider, "layer is outside teleportSurfaceMask");
             return false;
         }
 
@@ -535,15 +562,19 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
             var attachedBody = surfaceCollider.attachedRigidbody;
             if (attachedBody != null && !attachedBody.isKinematic)
             {
+                LogTeleportSurfaceRejection(surfaceCollider, "dynamic Rigidbody");
                 return false;
             }
         }
 
-        if (minimumSurfaceFootprint > 0f)
+        bool allowByPolicy = surfacePolicy != null &&
+                             surfacePolicy.Permission == QuestTeleportSurfacePolicy.TeleportPermission.Allow;
+        if (!allowByPolicy && minimumSurfaceFootprint > 0f)
         {
             var size = surfaceCollider.bounds.size;
             if (size.x < minimumSurfaceFootprint && size.z < minimumSurfaceFootprint)
             {
+                LogTeleportSurfaceRejection(surfaceCollider, "surface footprint is too small");
                 return false;
             }
         }
@@ -579,7 +610,10 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
         return false;
     }
 
-    private void ConfigureTeleportInteractable(BaseTeleportationInteractable teleportInteractable)
+    private void ConfigureTeleportInteractable(
+        BaseTeleportationInteractable teleportInteractable,
+        Collider surfaceCollider,
+        QuestTeleportSurfacePolicy surfacePolicy)
     {
         if (teleportInteractable == null)
         {
@@ -592,8 +626,113 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
         teleportInteractable.matchDirectionalInput = false;
         teleportInteractable.teleportTrigger = BaseTeleportationInteractable.TeleportTrigger.OnSelectExited;
         teleportInteractable.filterSelectionByHitNormal = true;
-        teleportInteractable.upNormalToleranceDegrees = maxTeleportSlopeDegrees;
+        teleportInteractable.upNormalToleranceDegrees = ResolveTeleportSlopeDegrees(surfaceCollider, surfacePolicy);
         teleportInteractable.interactionLayers = teleportInteractionLayers;
+        ConfigureLandingClearanceFilter(teleportInteractable, surfaceCollider, surfacePolicy);
+    }
+
+    private float ResolveTeleportSlopeDegrees(Collider surfaceCollider, QuestTeleportSurfacePolicy surfacePolicy)
+    {
+        if (surfacePolicy != null && surfacePolicy.OverrideNormalTolerance)
+        {
+            return surfacePolicy.NormalToleranceDegrees;
+        }
+
+        if (useNaturalSurfaceSlopeProfile && IsNaturalTeleportSurface(surfaceCollider))
+        {
+            return naturalSurfaceTeleportSlopeDegrees;
+        }
+
+        return maxTeleportSlopeDegrees;
+    }
+
+    private bool IsNaturalTeleportSurface(Collider surfaceCollider)
+    {
+        if (surfaceCollider == null || naturalSurfaceNameContains == null)
+        {
+            return false;
+        }
+
+        string path = GetHierarchyPath(surfaceCollider.transform);
+        for (int i = 0; i < naturalSurfaceNameContains.Length; i++)
+        {
+            string token = naturalSurfaceNameContains[i];
+            if (!string.IsNullOrWhiteSpace(token) && ContainsToken(path, token))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void ConfigureLandingClearanceFilter(
+        BaseTeleportationInteractable teleportInteractable,
+        Collider surfaceCollider,
+        QuestTeleportSurfacePolicy surfacePolicy)
+    {
+        bool requireClearance = surfacePolicy != null && surfacePolicy.OverrideLandingClearance
+            ? surfacePolicy.RequireLandingClearance
+            : requireTeleportLandingClearance;
+
+        QuestTeleportLandingClearanceFilter clearanceFilter =
+            teleportInteractable.GetComponent<QuestTeleportLandingClearanceFilter>();
+
+        if (!requireClearance)
+        {
+            if (clearanceFilter != null)
+            {
+                clearanceFilter.enabled = false;
+            }
+            return;
+        }
+
+        if (clearanceFilter == null)
+        {
+            clearanceFilter = teleportInteractable.gameObject.AddComponent<QuestTeleportLandingClearanceFilter>();
+        }
+
+        clearanceFilter.Configure(
+            characterController,
+            teleportLandingBlockMask,
+            teleportLandingClearanceRadius,
+            teleportLandingClearanceHeight,
+            teleportLandingClearanceSkin,
+            surfaceCollider,
+            logTeleportSurfaceDiagnostics);
+        clearanceFilter.enabled = true;
+        AddSelectFilterOnce(teleportInteractable, clearanceFilter);
+    }
+
+    private static void AddSelectFilterOnce(
+        BaseTeleportationInteractable teleportInteractable,
+        QuestTeleportLandingClearanceFilter clearanceFilter)
+    {
+        if (teleportInteractable == null || clearanceFilter == null)
+        {
+            return;
+        }
+
+        var filters = teleportInteractable.selectFilters;
+        for (int i = 0; i < filters.count; i++)
+        {
+            if (ReferenceEquals(filters.GetAt(i), clearanceFilter))
+            {
+                return;
+            }
+        }
+
+        filters.Add(clearanceFilter);
+    }
+
+    private void LogTeleportSurfaceRejection(Collider surfaceCollider, string reason)
+    {
+        if (!logTeleportSurfaceDiagnostics || surfaceCollider == null)
+        {
+            return;
+        }
+
+        Debug.Log($"[Locomotion] Teleport surface rejected: {GetHierarchyPath(surfaceCollider.transform)} ({reason}).", this);
     }
 
     private void ConfigureTunnelingVignettes()

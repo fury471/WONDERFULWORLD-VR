@@ -31,6 +31,8 @@ namespace WonderfulWorld.Audio
         private float nextAllowedPlayTime;
         private float activeClipStopTime;
         private bool hasLastPosition;
+        private MonoBehaviour footstepMotionProvider;
+        private PropertyInfo footstepMotionActiveProperty;
         private MonoBehaviour rideStateProvider;
         private PropertyInfo rideActiveProperty;
         private FieldInfo rideStateField;
@@ -73,11 +75,11 @@ namespace WonderfulWorld.Audio
             {
                 case MountFootstepProfile.Horse:
                     minimumSpeed = 0.12f;
-                    walkStepInterval = 0.46f;
-                    runStepInterval = 0.28f;
-                    speedForRunInterval = 4.8f;
-                    volumeScale = 0.78f;
-                    footstepClipWindowSeconds = 0.28f;
+                    walkStepInterval = 0.3f;
+                    runStepInterval = 0.18f;
+                    speedForRunInterval = 7.5f;
+                    volumeScale = 1f;
+                    footstepClipWindowSeconds = 0.15f;
                     break;
                 case MountFootstepProfile.Dog:
                     minimumSpeed = 0.1f;
@@ -223,8 +225,14 @@ namespace WonderfulWorld.Audio
                 return;
             }
 
-            audioSource.pitch = cue.ResolvePitch();
-            float speedScale = Mathf.Lerp(0.82f, 1f, Mathf.InverseLerp(minimumSpeed, speedForRunInterval, speed));
+            float speedT = Mathf.InverseLerp(minimumSpeed, speedForRunInterval, speed);
+            float pitchScale = profileOverride == MountFootstepProfile.Horse
+                ? Mathf.Lerp(1.04f, 1.1f, speedT)
+                : 1f;
+            audioSource.pitch = cue.ResolvePitch() * pitchScale;
+            float speedScale = profileOverride == MountFootstepProfile.Horse
+                ? Mathf.Lerp(1.08f, 1.3f, speedT)
+                : Mathf.Lerp(0.82f, 1f, speedT);
             float windowSeconds = ResolveClipWindow(clip);
             audioSource.clip = clip;
             audioSource.volume = cue.ResolveVolume(volumeScale * speedScale);
@@ -278,6 +286,11 @@ namespace WonderfulWorld.Audio
                 CacheRideStateProvider();
             }
 
+            if (footstepMotionProvider != null && footstepMotionActiveProperty != null)
+            {
+                return (bool)footstepMotionActiveProperty.GetValue(footstepMotionProvider);
+            }
+
             if (rideStateProvider == null)
             {
                 return false;
@@ -302,9 +315,29 @@ namespace WonderfulWorld.Audio
             rideStateProvider = null;
             rideActiveProperty = null;
             rideStateField = null;
+            footstepMotionProvider = null;
+            footstepMotionActiveProperty = null;
 
             Transform root = movementRoot != null ? movementRoot : transform;
             MonoBehaviour[] behaviours = root.GetComponentsInChildren<MonoBehaviour>(true);
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                MonoBehaviour behaviour = behaviours[i];
+                if (behaviour == null)
+                {
+                    continue;
+                }
+
+                System.Type type = behaviour.GetType();
+                PropertyInfo footstepProperty = type.GetProperty("IsFootstepMotionActive", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (footstepProperty != null && footstepProperty.PropertyType == typeof(bool))
+                {
+                    footstepMotionProvider = behaviour;
+                    footstepMotionActiveProperty = footstepProperty;
+                    return;
+                }
+            }
+
             for (int i = 0; i < behaviours.Length; i++)
             {
                 MonoBehaviour behaviour = behaviours[i];

@@ -58,7 +58,7 @@ public class CatRideControllerV2 : MonoBehaviour
     [SerializeField] private int mountedRaycastIgnoreLayer = 2;
 
     [Header("Manual Ride")]
-    [SerializeField] private float manualMoveSpeed = 4f;
+    [SerializeField] private float manualMoveSpeed = 6.25f;
     [SerializeField] private float manualTurnSpeed = 120f;
     [SerializeField] private InputActionReference mountAction;
     [SerializeField] private InputActionReference dismountAction;
@@ -110,14 +110,22 @@ public class CatRideControllerV2 : MonoBehaviour
     [SerializeField] private bool projectRideMotionToGround = true;
     [SerializeField] private LayerMask rideGroundMask = ~0;
     [SerializeField] private float rideGroundProbeHeight = 3f;
-    [SerializeField] private float rideGroundProbeDistance = 8f;
+    [SerializeField] private float rideGroundProbeDistance = 12f;
     [SerializeField] private float rideGroundOffset = 0f;
     [SerializeField] private float rideMaxStepUp = 1.5f;
-    [SerializeField] private float rideMaxStepDown = 3f;
+    [SerializeField] private float rideMaxStepDown = 5f;
     [SerializeField] private bool alignRideToGroundNormal = true;
     [SerializeField] private Transform rideVisualTiltRoot;
     [SerializeField] private float rideGroundAlignSpeed = 240f;
     [SerializeField] private float rideMaxGroundTiltAngle = 32f;
+
+    [Header("Mounted Rider Slope Pose")]
+    [SerializeField] private bool tiltMountedRiderWithSlope = true;
+    [SerializeField, Range(0f, 1f)] private float riderSlopePitchMultiplier = 0.18f;
+    [SerializeField, Range(0f, 1f)] private float riderSlopeRollMultiplier = 0.08f;
+    [SerializeField] private float riderMaxSlopePitch = 4f;
+    [SerializeField] private float riderMaxSlopeRoll = 1.5f;
+    [SerializeField] private float riderSlopeTiltSpeed = 6f;
 
 
     [Header("Debug")]
@@ -161,8 +169,13 @@ public class CatRideControllerV2 : MonoBehaviour
     private TunnelingVignetteController[] rideVignetteControllers;
     private RideVignetteProvider rideVignetteProvider;
     private bool rideVignetteActive;
+    private Vector3 mountedRigNeutralLocalPosition;
+    private Quaternion mountedRigNeutralLocalRotation = Quaternion.identity;
+    private Quaternion mountedRiderSlopeOffset = Quaternion.identity;
+    private bool hasMountedRigNeutralLocalRotation;
 
     public bool IsRideActive => currentState != RideState.Idle;
+    public bool IsAutoRideActive => currentState == RideState.MountedAuto;
 
     public IReadOnlyList<Transform> AutoRoutePoints => autoRoutePoints;
 
@@ -179,6 +192,7 @@ public class CatRideControllerV2 : MonoBehaviour
         CacheQuestInteractionReferences();
         CacheScaleManagerReference();
         CacheRideVignetteReferences();
+        AutoAssignRideVisualTiltRoot();
         SyncRideVignetteFromComfortProfile();
     }
 
@@ -217,6 +231,7 @@ public class CatRideControllerV2 : MonoBehaviour
         if (currentState == RideState.MountedManual)
         {
             HandleManualRide();
+            ApplyMountedRiderSlopePose(false);
 
             if (WasPressed(dismountAction, dismountKey))
             {
@@ -229,6 +244,7 @@ public class CatRideControllerV2 : MonoBehaviour
         if (currentState == RideState.MountedAuto)
         {
             HandleAutoRide();
+            ApplyMountedRiderSlopePose(false);
 
             if (WasPressed(dismountAction, dismountKey))
             {
@@ -866,8 +882,19 @@ public class CatRideControllerV2 : MonoBehaviour
         {
             if (playerCharacterController != null)
             {
+                playerCharacterController.enabled = false;
+                ClampCharacterControllerStepOffsetForScale();
+
+                bool shouldRestoreController =
+                    playerCharacterControllerWasEnabled &&
+                    playerCharacterController.gameObject.activeInHierarchy;
+
+                if (shouldRestoreController)
+                {
+                    playerCharacterController.enabled = true;
+                }
+
                 playerCharacterController.detectCollisions = playerCharacterControllerDetectCollisionsWasEnabled;
-                playerCharacterController.enabled = playerCharacterControllerWasEnabled;
             }
 
             if (locomotionRoot != null)
@@ -1023,6 +1050,9 @@ public class CatRideControllerV2 : MonoBehaviour
             rig.localRotation = targetLocalRotation;
         }
 
+        SetMountedRigNeutralPose(rig);
+        ApplyMountedRiderSlopePose(true);
+
         currentAutoIndex = 0;
         currentState = RideState.MountedManual;
         UpdateKittyAnimation(0f, false);
@@ -1110,8 +1140,10 @@ public class CatRideControllerV2 : MonoBehaviour
         }
 
         Transform rig = playerRigRoot.transform;
+        mountedRiderSlopeOffset = Quaternion.identity;
         AlignMountedViewToSeatForward(rig, true);
         SnapHeadToMountedViewAnchor(rig);
+        SetMountedRigNeutralPose(rig);
         Physics.SyncTransforms();
 
         if (debugLogs)
@@ -1215,7 +1247,7 @@ public class CatRideControllerV2 : MonoBehaviour
         PlaceRigForDismountCameraPose(rig, targetCameraWorldPosition, targetWorldRotation);
         Physics.SyncTransforms();
 
-        if (playerCharacterController != null && playerCharacterController.enabled)
+        if (IsCharacterControllerReady())
         {
             playerCharacterController.Move(Vector3.zero);
             PlaceRigForDismountCameraPose(rig, targetCameraWorldPosition, targetWorldRotation);
@@ -1239,6 +1271,8 @@ public class CatRideControllerV2 : MonoBehaviour
         currentAutoIndex = 0;
         currentState = RideState.Idle;
         hasRigOriginalParent = false;
+        hasMountedRigNeutralLocalRotation = false;
+        mountedRiderSlopeOffset = Quaternion.identity;
         SetMountCollidersIgnoredForRaycasts(false);
         UpdateKittyAnimation(0f, false);
         stateRoutine = null;
@@ -1359,17 +1393,74 @@ public class CatRideControllerV2 : MonoBehaviour
             headLocalPosition.z);
     }
 
+    private void ClampCharacterControllerStepOffsetForScale()
+    {
+        if (playerCharacterController == null)
+        {
+            return;
+        }
+
+        Transform controllerTransform = playerCharacterController.transform;
+        Vector3 lossyScale = controllerTransform != null ? controllerTransform.lossyScale : Vector3.one;
+        float verticalScale = Mathf.Max(0.0001f, Mathf.Abs(lossyScale.y));
+        float horizontalScale = Mathf.Max(0.0001f, Mathf.Max(Mathf.Abs(lossyScale.x), Mathf.Abs(lossyScale.z)));
+        float localHeight = Mathf.Max(0f, playerCharacterController.height);
+        float localRadius = Mathf.Max(0f, playerCharacterController.radius);
+        float scaledHeight = Mathf.Max(0f, localHeight * verticalScale);
+        float scaledRadius = Mathf.Max(0f, localRadius * horizontalScale);
+        float scaledMaxStepOffset = Mathf.Max(0f, scaledHeight + scaledRadius * 2f - 0.001f);
+        float scaledStepOffset = playerCharacterController.stepOffset * verticalScale;
+        float maxLocalStepOffset = Mathf.Min(
+            Mathf.Max(0f, localHeight - 0.001f),
+            Mathf.Max(0f, localHeight + localRadius * 2f - 0.001f),
+            Mathf.Max(0f, scaledMaxStepOffset / verticalScale));
+
+        if (scaledStepOffset <= scaledMaxStepOffset && playerCharacterController.stepOffset <= maxLocalStepOffset)
+        {
+            return;
+        }
+
+        playerCharacterController.stepOffset = maxLocalStepOffset;
+    }
+
+    private bool IsCharacterControllerReady()
+    {
+        return playerCharacterController != null &&
+               playerCharacterController.enabled &&
+               playerCharacterController.gameObject.activeInHierarchy;
+    }
+
     private void ResolveDismountPose(Quaternion currentRigRotation, out Vector3 targetWorldPosition, out Quaternion targetWorldRotation)
     {
-        targetWorldRotation = currentRigRotation;
+        targetWorldRotation = GetFlattenedRotation(currentRigRotation, ResolveMountForward());
 
         if (useAuthoredDismountPoint && dismountPoint != null)
         {
             targetWorldPosition = dismountPoint.position;
+            targetWorldRotation = GetFlattenedRotation(dismountPoint.rotation, ResolveMountForward());
             return;
         }
 
         targetWorldPosition = ResolveWorldDismountPosition();
+    }
+
+    private static Quaternion GetFlattenedRotation(Quaternion rotation, Vector3 fallbackForward)
+    {
+        Vector3 forward = rotation * Vector3.forward;
+        forward.y = 0f;
+
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = fallbackForward;
+            forward.y = 0f;
+        }
+
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = Vector3.forward;
+        }
+
+        return Quaternion.LookRotation(forward.normalized, Vector3.up);
     }
 
     private Vector3 ResolveWorldDismountPosition()
@@ -1638,6 +1729,7 @@ public class CatRideControllerV2 : MonoBehaviour
         if (moveDirection.sqrMagnitude > 0.0001f)
         {
             MoveRideRoot(moveDirection.normalized * (moveInput * manualMoveSpeed * Time.deltaTime));
+            AlignRideToGround();
         }
 
         UpdateKittyAnimation(Mathf.Abs(moveInput), false);
@@ -1854,6 +1946,170 @@ public class CatRideControllerV2 : MonoBehaviour
             tiltRoot.rotation,
             targetRotation,
             Mathf.Max(0f, rideGroundAlignSpeed) * Time.deltaTime);
+    }
+
+    private void SetMountedRigNeutralPose(Transform rig)
+    {
+        if (rig == null)
+        {
+            return;
+        }
+
+        mountedRigNeutralLocalPosition = rig.localPosition;
+        mountedRigNeutralLocalRotation = rig.localRotation;
+        mountedRiderSlopeOffset = Quaternion.identity;
+        hasMountedRigNeutralLocalRotation = true;
+    }
+
+    private void ApplyMountedRiderSlopePose(bool immediate)
+    {
+        if (!tiltMountedRiderWithSlope || playerRigRoot == null)
+        {
+            return;
+        }
+
+        Transform rig = playerRigRoot.transform;
+        if (!hasMountedRigNeutralLocalRotation)
+        {
+            SetMountedRigNeutralPose(rig);
+        }
+
+        Quaternion targetOffset = Quaternion.identity;
+        if (hasRideGroundNormal)
+        {
+            Vector3 forward = transform.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.0001f)
+            {
+                forward = Vector3.forward;
+            }
+
+            forward.Normalize();
+            Vector3 slopeForward = Vector3.ProjectOnPlane(forward, lastRideGroundNormal);
+            if (slopeForward.sqrMagnitude > 0.0001f)
+            {
+                slopeForward.Normalize();
+                float slopePitch = Mathf.Asin(Mathf.Clamp(slopeForward.y, -1f, 1f)) * Mathf.Rad2Deg;
+                float riderPitch = Mathf.Clamp(
+                    slopePitch * Mathf.Clamp01(riderSlopePitchMultiplier),
+                    -Mathf.Abs(riderMaxSlopePitch),
+                    Mathf.Abs(riderMaxSlopePitch));
+
+                Vector3 right = transform.right;
+                right.y = 0f;
+                if (right.sqrMagnitude < 0.0001f)
+                {
+                    right = Vector3.right;
+                }
+
+                right.Normalize();
+                Vector3 slopeRight = Vector3.ProjectOnPlane(right, lastRideGroundNormal);
+                float riderRoll = 0f;
+                if (slopeRight.sqrMagnitude > 0.0001f)
+                {
+                    slopeRight.Normalize();
+                    float sideSlope = Mathf.Asin(Mathf.Clamp(slopeRight.y, -1f, 1f)) * Mathf.Rad2Deg;
+                    riderRoll = Mathf.Clamp(
+                        -sideSlope * Mathf.Clamp01(riderSlopeRollMultiplier),
+                        -Mathf.Abs(riderMaxSlopeRoll),
+                        Mathf.Abs(riderMaxSlopeRoll));
+                }
+
+                targetOffset = Quaternion.Euler(riderPitch, 0f, riderRoll);
+            }
+        }
+
+        if (immediate)
+        {
+            mountedRiderSlopeOffset = targetOffset;
+        }
+        else
+        {
+            float t = 1f - Mathf.Exp(-Mathf.Max(0f, riderSlopeTiltSpeed) * Time.deltaTime);
+            mountedRiderSlopeOffset = Quaternion.Slerp(mountedRiderSlopeOffset, targetOffset, t);
+        }
+
+        ApplyMountedRigSlopePose(rig, mountedRigNeutralLocalRotation * mountedRiderSlopeOffset);
+    }
+
+    private void ApplyMountedRigSlopePose(Transform rig, Quaternion localRotation)
+    {
+        if (rig == null)
+        {
+            return;
+        }
+
+        Vector3 targetLocalPosition = mountedRigNeutralLocalPosition;
+        if (TryResolveMountedViewSlopeDelta(out Vector3 slopeDeltaWorld))
+        {
+            targetLocalPosition += rig.parent != null
+                ? rig.parent.InverseTransformVector(slopeDeltaWorld)
+                : slopeDeltaWorld;
+        }
+
+        rig.localPosition = targetLocalPosition;
+        rig.localRotation = localRotation;
+    }
+
+    private bool TryResolveMountedViewSlopeDelta(out Vector3 deltaWorld)
+    {
+        deltaWorld = Vector3.zero;
+
+        Transform anchor = mountedViewAnchor != null ? mountedViewAnchor : seatAnchor;
+        if (anchor == null || !hasRideGroundNormal || !TryResolveRideGroundRotation(out Quaternion slopeWorldRotation))
+        {
+            return false;
+        }
+
+        Quaternion localSlopeRotation = Quaternion.Inverse(transform.rotation) * slopeWorldRotation;
+        Vector3 anchorLocalPosition = transform.InverseTransformPoint(anchor.position);
+        Vector3 slopeAnchorWorldPosition = transform.TransformPoint(localSlopeRotation * anchorLocalPosition);
+        deltaWorld = slopeAnchorWorldPosition - anchor.position;
+        return deltaWorld.sqrMagnitude > 0.000001f;
+    }
+
+    private bool TryResolveRideGroundRotation(out Quaternion slopeWorldRotation)
+    {
+        slopeWorldRotation = transform.rotation;
+        if (!hasRideGroundNormal)
+        {
+            return false;
+        }
+
+        Vector3 forward = Vector3.ProjectOnPlane(transform.forward, lastRideGroundNormal);
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = transform.forward;
+            forward.y = 0f;
+        }
+
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            return false;
+        }
+
+        slopeWorldRotation = Quaternion.LookRotation(forward.normalized, lastRideGroundNormal);
+        return true;
+    }
+
+    private void AutoAssignRideVisualTiltRoot()
+    {
+        if (rideVisualTiltRoot != null)
+        {
+            return;
+        }
+
+        if (kittyAnimator != null && kittyAnimator.transform != transform)
+        {
+            rideVisualTiltRoot = kittyAnimator.transform;
+            return;
+        }
+
+        Renderer renderer = GetComponentInChildren<Renderer>(true);
+        if (renderer != null && renderer.transform != transform)
+        {
+            rideVisualTiltRoot = renderer.transform;
+        }
     }
 
     private bool IsIgnoredRideGroundCollider(Collider candidate)

@@ -16,7 +16,7 @@ Use this checklist for the last Unity and Quest 3 Link pass. Items marked "local
 
 ## Unity Editor Pass
 
-1. Open the project in Unity `6000.3.11f1`.
+1. Open the project in Unity `6000.3.12f1`.
 2. Confirm there are no compile errors.
 3. Open `Assets/_Project/World/Persistent/World_WonderlandPark.unity`.
 4. Run `Wonderful World > Production > Generate Production Audit`.
@@ -34,8 +34,8 @@ Use this checklist for the last Unity and Quest 3 Link pass. Items marked "local
 
 1. Start Play Mode with Quest 3 Link active.
 2. Verify head tracking, hand tracking, teleport, snap turn, recenter, scale shift, and system menu.
-3. Visit Human Entry, Flower Garden, Lotus Pond, Cat Garden, Fireworks Clearing, Mushroom Growth, and Cherry Garden.
-4. Test notice boards, lotus notes, petal/pollen magic, mushroom growth, mount interactions, fireworks, cherry orb, audio, and major animations.
+3. Walk through `WelcomePanel` and visit the six region roots: `Region_FlowerGarden`, `Region_LotusPond`, `Region_CatGarden`, `Region_FireworksClearing`, `Region_MushroomGrowth`, `Region_CherryGarden`.
+4. Test notice boards, lotus notes (either hand), the Flower Garden pink crystal (petal/pollen magic), mushroom seeding + cultivation, the three Cat Garden mounts (cat/dog at Small scale, horse at Normal scale), horse summon (left X), fireworks mortar, cherry orb, the wooden swing in `Decorations/Swings` at **Normal scale** (ray + right trigger on the seat, left-stick pump, right A to step off, right B hold to recenter on the seat), the **left Menu** system menu, audio, and major animations.
 5. Confirm no blocking console errors appear.
 
 ## Quest 3 Link Performance Signoff

@@ -138,17 +138,24 @@ namespace Wonderland.UI
                 return;
             }
 
+            ApplyLocalizedFontToChildren();
+
             pageIndex = Mathf.Clamp(pageIndex, 0, pages.Length - 1);
             TutorialPage page = pages[pageIndex];
+            string selectedTitle = Select(language, page.englishTitle, page.chineseTitle, page.swedishTitle);
+            string selectedBody = Select(language, page.englishBody, page.chineseBody, page.swedishBody);
+
+            EnsureCharacters(selectedTitle);
+            EnsureCharacters(selectedBody);
 
             if (titleText != null)
             {
-                titleText.text = Select(language, page.englishTitle, page.chineseTitle, page.swedishTitle);
+                titleText.text = selectedTitle;
             }
 
             if (bodyText != null)
             {
-                bodyText.text = Select(language, page.englishBody, page.chineseBody, page.swedishBody);
+                bodyText.text = selectedBody;
             }
 
             if (pageCounterText != null)
@@ -158,6 +165,17 @@ namespace Wonderland.UI
 
             RefreshButtonState(previousButton, pageIndex > 0);
             RefreshButtonState(nextButton, pageIndex < pages.Length - 1);
+        }
+
+        private static void EnsureCharacters(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return;
+            }
+
+            TMP_FontAsset localizedFont = LocalizedUIFontProvider.GetBestLocalizedFont();
+            localizedFont?.TryAddCharacters(value, out _, false);
         }
 
         private static string Select(UILanguage language, string english, string chinese, string swedish)

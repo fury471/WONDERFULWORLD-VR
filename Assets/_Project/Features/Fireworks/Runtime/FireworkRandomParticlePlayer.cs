@@ -15,6 +15,7 @@ namespace WonderfulWorld.Features.Fireworks
         [SerializeField] private float effectLocalHeightOffset = 8f;
 
         [Header("Presentation Scale")]
+        [SerializeField, Min(0.1f)] private float effectLayoutScale = 1.0f;
         [SerializeField, Min(0.1f)] private float effectVisualScale = 1.35f;
         [SerializeField, Min(0.1f)] private float effectRangeScale = 1.35f;
 
@@ -42,11 +43,38 @@ namespace WonderfulWorld.Features.Fireworks
 
         private void Awake()
         {
+            // Decouple transform scale from particle size.
+            // Bake the transform scale into the local positions and reset the transform scale to 1.
+            Vector3 initScale = transform.localScale;
+            if (initScale != Vector3.one)
+            {
+                foreach (Transform child in transform)
+                {
+                    child.localPosition = Vector3.Scale(child.localPosition, initScale);
+                }
+                transform.localScale = Vector3.one;
+            }
+
             EnsureGroups();
 
             if (resetEffectsOnAwake)
             {
                 StopAllEffects(clearParticles: true, deactivateGroups: true);
+            }
+
+            DisablePlaceholderRenderers();
+        }
+
+        private void DisablePlaceholderRenderers()
+        {
+            // Optimization: Remove placeholder visualizers like the semi-transparent white quad
+            Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] is MeshRenderer || renderers[i] is SpriteRenderer)
+                {
+                    renderers[i].enabled = false;
+                }
             }
         }
 
@@ -181,7 +209,7 @@ namespace WonderfulWorld.Features.Fireworks
 
             activeGroupCount++;
             CacheOriginalLocalPosition(groupObject);
-            groupObject.transform.localPosition = originalLocalPositions[groupObject] + Vector3.up * effectLocalHeightOffset;
+            groupObject.transform.localPosition = (originalLocalPositions[groupObject] * effectLayoutScale) + Vector3.up * effectLocalHeightOffset;
             groupObject.SetActive(true);
             if (activateChildObjectsOnPlay)
             {
@@ -191,7 +219,21 @@ namespace WonderfulWorld.Features.Fireworks
             ParticleSystemRenderer[] renderers = groupObject.GetComponentsInChildren<ParticleSystemRenderer>(true);
             for (int i = 0; i < renderers.Length; i++)
             {
-                renderers[i].enabled = true;
+                string objName = renderers[i].gameObject.name.ToLower();
+                Material mat = renderers[i].sharedMaterial;
+                bool isBrokenQuad = objName.Contains("flash") || 
+                                    objName.Contains("quad") || 
+                                    mat == null || 
+                                    mat.name.ToLower().Contains("default");
+
+                if (isBrokenQuad)
+                {
+                    renderers[i].enabled = false;
+                }
+                else
+                {
+                    renderers[i].enabled = true;
+                }
             }
 
             ParticleSystem[] particles = groupObject.GetComponentsInChildren<ParticleSystem>(true);

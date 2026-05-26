@@ -8,7 +8,7 @@
 
 > *Utforska här och ha det trevligt.*
 
-En handgjord PC VR-sagopark — en förstapersons, komfortinriktad underbar värld med fjärilar, lotusmusik, blommagi, vänliga riddjur, växande svampar och ett blommande körsbärsträd.
+En PC VR-sagopark — en förstapersons, komfortinriktad upplevelse med fjärilar, en musikplattform i lotusdammen, partikelmagi, riddjur, en handplanterad svamplund, ett blommande körsbärsträd och fyrverkerier.
 
 **Språk:** [English](README.md) · [中文](README.zh-CN.md) · **Svenska**
 
@@ -16,30 +16,31 @@ En handgjord PC VR-sagopark — en förstapersons, komfortinriktad underbar vär
 
 ## Om projektet
 
-Wonderland (internt även känt som *Butterfly House* / *Wonderful World*) är en utforskningsinriktad VR-upplevelse för en spelare, byggd i **Unity 6** med **OpenXR** och **Universal Render Pipeline**. Spelaren vandrar genom en park-skiva som upplevs som sömlös, uppbyggd av sju sammanlänkade attraktionszoner — där varje zon är en liten magisk händelse i sig, inte ett uppdrag att checka av.
+Wonderland (internt namn: *Wonderful World*) är en VR-utforskningsupplevelse för en spelare, byggd i **Unity 6** med **OpenXR** och **Universal Render Pipeline**. Spelaren vandrar genom en parkdel som upplevs som sömlös, uppbyggd av sju sammanlänkade attraktionszoner — där varje zon är en liten magisk händelse i sig, inte ett uppdrag att checka av.
 
-Designprinciperna är tydliga och oförändrade:
+Designprinciperna är:
 
-1. **Komfort först.** Stabil bildtakt, tunneleringsvinjett, teleport som standard, blink-övergångar vid skalbyte, ingen påtvingad rörelse.
-2. **Upptäcktsbar förundran.** Varje region är en självständig interaktion som är värd att hitta — inte en kontrollpunkt att klara av.
-3. **Stiliserat, inte fotorealistiskt.** Cel-shading (Toon Fantasy Nature + egna shaders) ovanpå Single Pass Instanced URP, finjusterat för Quest 3 Link.
+1. **Komfort först.** Stabil bildtakt, tunneleringsvinjett per läge, teleport som standard, blink-övergångar vid skalbyte, ingen påtvingad rörelse.
+2. **Upptäcktsbar förundran.** Varje zon är en självständig interaktion som är värd att hitta — inte en kontrollpunkt att klara av.
+3. **Stiliserat, inte fotorealistiskt.** Cel-shading (Toon Fantasy Nature) ovanpå Single Pass Instanced URP.
 
-Den aktuella produktionsscenen är [`Assets/_Project/World/Persistent/World_WonderlandPark.unity`](Assets/_Project/World/Persistent/World_WonderlandPark.unity) och levereras som **v1.0.0**.
+Produktionsscenen är [`Assets/_Project/World/Persistent/World_WonderlandPark.unity`](Assets/_Project/World/Persistent/World_WonderlandPark.unity), släppt som **v1.0.0**.
 
 ---
 
 ## Höjdpunkter
 
-- **Sju tematiska regioner i en sammanhängande park** — Människans entré, Blomsterträdgården, Lotusdammen, Kattträdgården, Fyrverkeriplatsen, Svamptillväxten, Körsbärsträdgården.
-- **Tre olika spelarstorlekar** — växla mellan Normal, Liten (0,25×) och Stor (1,75×) med en 0,4 s blink-övergång; ögonhöjd, rörelsehastighet och interaktionsräckvidd anpassas automatiskt.
-- **Musiksequenser i lotusdammen** — sju flytande lotusblad stämda till den diatoniska dur-skalan *do · re · mi · fa · sol · la · si*, spelas genom att skjuta kurvade vatten-magi-projektiler från handkontrollen. En låtväljare lottar fram en melodi att spela efter.
-- **Riddjurssystem i Kattträdgården** — tre oberoende riddjur (Kissen, Hunden, Hästen), var och en med egen ridrutt, idle-vandring, hover-kontur och röst när man närmar sig. Ridning kräver **Liten** skala. Hästen kan kallas på från valfri plats med vänster X; katten monterar du automatiskt när du går fram.
-- **Vägledningsfjärilar** — tre realtids-fjärilar som lyfter längs splined flygbanor när spelaren rider i närheten.
-- **Kronblad- & pollenmagi** — håll in höger avtryckare riktat mot den stora blomman för att dra partiklar längs en kvadratisk Bézier-båge in i en svävande sfär framför ansiktet. Släpp för en av sex procedurella utbrott: `SpiralBloom`, `MathRibbon`, `TornadoVortex`, `AizawaFountain`, `DreamAttractor`, `GalaxyVeil`.
-- **Svampplantering** — tryck för att så en enskild svamp, eller håll inne och släpp för en ring av 5–8. Kultivera valfri befintlig svamp med ytterligare ett avtryck.
-- **Fyrverkerifinal** — sikta på den magiska mörsaren för att skicka iväg ett spiralformat eldband längs en kubisk Bézier-båge, och se sedan punktmolns-fyrverkeriet ta vid.
-- **Körsbärskula** — en kristallkula som spawnar i runtime ovanför körsbärsträdet; när du aktiverar den spelas den fyrfasiga tillväxtanimationen och en virvel av kronblad upp.
-- **Komfortlager för Quest 3 Link** — specialbyggd komfortprofil för förflyttning, hold-to-recenter, montering-medveten vyåtercentrering och en tunneleringsvinjett per rörelseläge.
+- **Sju zoner i en sammanhängande park** — Välkomstingång, Magisk partikelträdgård, Lotusdamm, Djurskog (Kattträdgård), Vattenfall & fyrverkeriplats, Svamptillväxt, Körsbärsträdgård.
+- **Tre spelarstorlekar** — växla mellan Normal, Liten (0,25×) och Stor (1,75×) via en gest på höger spaktryck (dubbelklick inom 0,32 s eller långtryck i 0,45 s); ögonhöjd, rörelsehastighet och interaktionsräckvidd anpassas automatiskt via en 0,4 s blink-övergång.
+- **Musiksequenser i lotusdammen** — sju flytande lotusblad stämda till den diatoniska dur-skalan *do · re · mi · fa · sol · la · si*, spelas genom att skjuta kurvade vatten-magi-projektiler från valfri handkontroll. Ett åttonde blad är en låt-startare som slumpvis väljer en melodi att spela efter.
+- **Riddjurssystem i Djurskogen** — tre oberoende riddjur (Kissen, Hunden, Hästen), var och en med idle-vandring, hover-kontur och en röst när man närmar sig. Skalkrav per djur: **katten och hunden kräver Liten skala, hästen kräver Normal skala**. Hästen kan kallas på från valfri plats med **vänster X**.
+- **Vägledningsfjärilar** — tre realtids-fjärilar som lyfter längs splined flygbanor när spelaren närmar sig **medan hen rider på katten**.
+- **Rosa kristall — kronblads- & pollenmagi** — håll in höger avtryckare riktat mot den magiska kristallen i Partikelträdgården; partiklar flödar in i en sfär framför ansiktet. Efter 3 s blir frisläppandet "laddat". Släpp för en av sex procedurella utbrott: `SpiralBloom`, `MathRibbon`, `TornadoVortex`, `AizawaFountain`, `DreamAttractor`, `GalaxyVeil`.
+- **Svampplantering** — tryck för att så en svamp (jordmagi-projektil med flygtid 1,55 s). Håll inne ≥ 0,65 s och släpp för en laddad ring med 5–8 svampar inom 4 m radie. Tryck på en befintlig svamp för att kultivera den (+0,35× storlek, max 2,4×).
+- **Fyrverkerimörsare** — sikta på den magiska mörsaren (räckvidd 36 m); ett spiralformat eldband flyger längs en kubisk Bézier-båge till enheten och drar igång punktmolns-fyrverkeriet.
+- **Körsbärs-kristallkula** — en lysande kristall svävar ovanför körsbärsträdet (radie 1,05 m, spawnad av `CherryGardenCrystalOrbTrigger`). Höger avtryckare kollapsar den på 0,72 s och spelar den fyrfasiga tillväxtanimationen och en kronbladsvirvel.
+- **Trägunga** — sätt dig på trägungan i parken (`TFF_Wooden_Swing_01A` under `Decorations/Swings`): sikta höger stråle på **sittbrädan** + höger avtryckare för att sätta dig; pumpa vänster spak fram/tillbaka för att bygga upp pendelns amplitud (klampad till ±60° kring sätets lokala Z-axel); höger A för att kliva av. Vyn är horisontellt låst till sätets ursprungliga riktning — endast translation, ingen roll/pitch. Långtryck på höger B (0,40 s) återcentrerar dig på sätet mitt under turen. **Endast Normal skala.** Drivs av [`QuestSwingRideController`](Assets/_Project/Features/Mounts/Runtime/QuestSwingRideController.cs).
+- **Komfortlager för Quest 3 Link** — specialbyggd `QuestLocomotionComfortProfile`, håll-för-centrering på höger B (0,40 s), montering-medveten vyåtercentrering, och en tunneleringsvinjett per rörelseläge.
 
 ---
 
@@ -61,36 +62,81 @@ Den aktuella produktionsscenen är [`Assets/_Project/World/Persistent/World_Wond
 
 ## Snabbstart
 
-### Förutsättningar
+> **Läs detta först.** Det här repot lagrar alla binära resurser (scener `.unity`, prefabs, material, texturer, ljud, FBX-modeller, `.asset`-filer) i **Git LFS**. En vanlig `git clone` lämnar kvar dem som ~100 byte stora pekarfiler och Unity kommer inte att kunna öppna projektet. Följ stegen nedan i ordning.
 
-- Windows 10/11 med VR-kapabelt grafikkort
-- Meta Quest 3 + Link-kabel (eller kompatibel USB-C-kabel med stöd för Quest Link)
-- Skrivbordsappen [Meta Quest Link](https://www.meta.com/quest/setup/)
-- Unity `6000.3.12f1` (installera via Unity Hub)
-- Git med [Git LFS](https://git-lfs.com/) rekommenderat för grafiska resurser
+### Steg 0 — Installera förutsättningar (engångsinstallation)
 
-### Klona
+| Vad | Var / Hur |
+| --- | --- |
+| Hårdvara | Windows 10/11-PC med VR-kapabelt grafikkort + Meta Quest 3 + Link-kabel (eller en USB-C 3.0+-kabel som stödjer Quest Link) |
+| Unity Hub | <https://unity.com/download> |
+| Unity Editor `6000.3.12f1` | Installera via Unity Hub → **Installs → Install Editor**. I modulsteget, **bocka i `Windows Build Support (IL2CPP)`**. (Du kan också bocka i *Documentation* och din favorit-IDE.) |
+| Git for Windows | <https://git-scm.com/download/win> |
+| Git LFS | <https://git-lfs.com/> — efter installationen, öppna valfri terminal och kör `git lfs install` en gång. |
+| Meta Quest Link desktop | <https://www.meta.com/quest/setup/> |
+
+### Steg 1 — Klona repot *med LFS-innehåll*
+
+Öppna en terminal (PowerShell, Git Bash eller Windows Terminal) i mappen där du vill att projektet ska ligga, och kör:
 
 ```bash
+git lfs install                                              # en gång per maskin; säkert att köra om
 git clone https://github.com/fury471/WONDERFULWORLD-VR.git
 cd WONDERFULWORLD-VR
+git lfs pull                                                 # hämtar alla LFS-spårade binära resurser
 ```
 
-### Öppna i Unity
+Förväntad nedladdning: **~2–3 GB**. Själva `git clone` är snabbt; `git lfs pull` är det långa steget.
 
-1. Starta **Unity Hub** → *Lägg till projekt från disk* → välj den här mappen.
-2. Öppna med Unity `6000.3.12f1`. Låt editorn importera vid första körningen (`Library/` byggs lokalt).
-3. Säkerställ att det inte finns några kompileringsfel i Console.
-4. Öppna scenen **[`Assets/_Project/World/Persistent/World_WonderlandPark.unity`](Assets/_Project/World/Persistent/World_WonderlandPark.unity)**.
+**Kontroll.** När `git lfs pull` är klart ska produktionsscenen vara en riktig binärfil, inte en pekare:
 
-### Kör på Quest 3 (Link)
+```bash
+# PowerShell
+(Get-Item Assets/_Project/World/Persistent/World_WonderlandPark.unity).Length
+# Git Bash / WSL
+wc -c < Assets/_Project/World/Persistent/World_WonderlandPark.unity
+```
 
-1. Anslut Quest 3 med en Link-kabel och kontrollera att headsetet hittas av *Meta Quest Link*-appen.
-2. Aktivera **Quest Link** inifrån headsetet.
-3. Tryck **Play** i Unity. XR Origin ska följa ditt huvud och dina händer.
-4. Du kan också köra den färdigbyggda Windows-binären på [`Builds/Windows/WONDERFULWORLD.exe`](Builds/Windows/WONDERFULWORLD.exe).
+Ett friskt resultat är flera **megabyte**. Om du bara ser några hundra byte hämtades inte LFS — kör `git lfs pull` igen.
 
-> Slutleveransens byggmål är **Windows / x86_64 / IL2CPP / Linear färgrymd / Single Pass Instanced**.
+> Har du redan klonat utan LFS? Du behöver inte klona om. Gå in i mappen och kör `git lfs install && git lfs pull`.
+
+### Steg 2 — Öppna projektet i Unity
+
+1. Starta **Unity Hub** → **Add** → **Add project from disk** → välj `WONDERFULWORLD-VR`-mappen.
+2. Projektkortet visar editorversionen `6000.3.12f1`. Om den inte är installerad erbjuder sig Unity Hub att installera den — acceptera, och **se till att `Windows Build Support (IL2CPP)` är ibockat** i modullistan.
+3. Klicka på projektet för att öppna det. Förstaimporten bygger det lokala `Library/` från grunden och **tar typiskt 10–30 minuter** beroende på disk- och CPU-hastighet. **Stäng inte Unity under importen.**
+4. När importen är klar, titta på **Console** — det ska **inte finnas några kompileringsfel**.
+5. I **Project**-fönstret, dubbelklicka på [`Assets/_Project/World/Persistent/World_WonderlandPark.unity`](Assets/_Project/World/Persistent/World_WonderlandPark.unity) för att läsa in produktionsscenen.
+
+### Steg 3 — Spela på Quest 3 via Link
+
+1. Anslut din Quest 3 till PC:n med en Link-kabel (eller en USB-C 3.0+-kabel som stödjer Quest Link).
+2. Öppna skrivbordsappen **Meta Quest Link** i Windows och bekräfta att headsetet hittas (status: *Connected*).
+3. Ta på dig headsetet. Acceptera dialogrutan **"Enable Quest Link?"**, eller öppna headsetets universalmeny → **Snabbinställningar → Quest Link** och starta en session.
+4. Gå tillbaka till Unity på PC:n och tryck **▶ Play**. Ta på dig headsetet inom några sekunder — XR Origin ska följa ditt huvud och båda händer.
+
+### (Valfritt) Bygg en Windows-version själv
+
+Repot levereras inte med någon färdigbyggd binär (`Builds/` ligger i `.gitignore`). Så här gör du en själv:
+
+1. I Unity, öppna **File → Build Profiles** (eller **Build Settings**).
+2. Välj **Windows, Mac, Linux** med Target Platform **Windows** och arkitektur **x86_64**.
+3. Bekräfta **Scripting Backend = IL2CPP** och **Color Space = Linear** under *Project Settings → Player*.
+4. Klicka **Build** och välj en utdatamapp (förslag: `Builds/Windows/`).
+
+> Byggmål: **Windows / x86_64 / IL2CPP / Linear färgrymd / Single Pass Instanced**.
+
+### Felsökning
+
+| Symtom | Trolig orsak | Åtgärd |
+| --- | --- | --- |
+| Rosa/magenta material, saknade skript, "Could not extract GUID"-fel | LFS-objekten hämtades inte | Kör `git lfs install` och sedan `git lfs pull` inne i repot; högerklicka sedan `Assets/` → *Reimport* i Unity |
+| Unity Hub säger att editorversionen saknas | `6000.3.12f1` är inte installerad | Installera den via Unity Hub → **Installs → Install Editor**, bocka i **Windows Build Support (IL2CPP)** |
+| Headsetet upptäcks inte av Quest Link | Kabeln är USB-C 2.0, Link är avstängt eller en drivrutinsstrul | Använd en Quest Link- eller USB-C 3.0+-kabel; i headsetet, slå på *Inställningar → System → Quest Link*; starta om Meta Quest Link-appen |
+| Många kompileringsfel direkt efter första öppning | Skadat eller halvimporterat `Library/` | Stäng Unity, ta bort `Library/`, `Temp/`, `obj/`, öppna projektet igen och låt det importera färdigt |
+| Svart flimmer, tearing eller låg bildfrekvens i headsetet | Prestanda- / inställningsproblem | Följ triageflödet i [`Docs/VR_PERFORMANCE_GUIDE.md`](Docs/VR_PERFORMANCE_GUIDE.md) |
+| `git lfs pull` är långsam eller låser sig | LFS-bandbredd eller nätverksproblem | Kör `git lfs pull` igen; LFS återupptar där den slutade |
 
 ---
 
@@ -101,26 +147,27 @@ cd WONDERFULWORLD-VR
 | Handling | Indata |
 | --- | --- |
 | Teleport (standard) | Tryck **vänster spak** framåt → släpp |
-| Mjuk förflyttning (alt.) | Tryck **vänster spak** |
-| Snäpp-vridning (standard) | **Höger spak** vänster/höger (30° per steg) |
-| Mjuk vridning (alt.) | **Höger spak** vänster/höger |
-| Skala: Normal ↔ Liten | **Höger spak — dubbelklick på spaktryck** |
-| Skala: Normal ↔ Stor | **Höger spak — håll spaktrycket inne i 0,45 s** |
+| Mjuk förflyttning (alt.) | Tryck **vänster spak** (`smoothMoveSpeed = 1,6 m/s`) |
+| Snäpp-vridning (standard) | **Höger spak** vänster/höger (`snapTurnAmount = 30°`) |
+| Mjuk vridning (alt.) | **Höger spak** vänster/höger (`smoothTurnSpeed = 45°/s`) |
+| Skala: Normal ↔ Liten | **Höger spaktryck — dubbelklick inom 0,32 s** |
+| Skala: Normal ↔ Stor | **Höger spaktryck — långtryck ≥ 0,45 s** |
 | Centrera vyn | **Håll höger B** i 0,40 s |
 | Kalla på hästen | Tryck **vänster X** |
-| Paus / systemmeny | Reserverad för **vänster Menu** (höger Menu ägs av Oculus-skalet) |
+| Systemmeny | Tryck **vänster Menu** (höger Menu ägs av Oculus-skalet) |
 
-### Interaktioner (höger avtryckare med kontrollerns stråle)
+### Zonsinteraktioner (kontrollerstråle + höger avtryckare)
 
-| Plats | Effekt |
+| Mål | Effekt |
 | --- | --- |
 | Lotusblad | Spelar en av sju toner; bladet vaggar och vattnet får ringar |
-| Blomma (håll) | Laddar en partikelsfär; släpp för en procedurell blomning |
-| Svampzon | Tryck för en svamp; håll och släpp för en ring av 5–8 |
-| Befintlig svamp | Tryck för att kultivera (+0,35× storlek, upp till 2,4×) |
+| Partikelkristall (tryck eller håll) | Laddar en partikelsfär; släpp för ett procedurellt utbrott |
+| Svampzon-mark | Tryck för 1 svamp; håll och släpp för en ring med 5–8 |
+| Befintlig svamp | Tryck för att kultivera (+0,35× storlek, max 2,4×) |
 | Fyrverkerimörsare | Skickar ett eldband in i enheten och drar igång showen |
-| Körsbärskula | Kollapsar kulan och spelar trädets tillväxt + kronbladsvirveln |
-| Riddjur (endast Liten skala) | Höger A för avmontering; vänster spak rör sig, höger spak vrider |
+| Körsbärskristall | Kollapsar kulan och spelar trädets tillväxt + kronbladsvirveln |
+| Riddjur | Höger avtryckare för att montera (skalkrav per djur); höger A för att avmontera; vänster spak rör sig, höger spak vrider |
+| Trägungans sittbräda | Höger avtryckare för att sätta sig (endast Normal skala, strålen måste träffa sittbrädan); vänster spak fram/tillbaka för att pumpa (±60° pendel); höger A för att kliva av |
 
 Fullständig referens: [`Docs/InteractionBindings.md`](Docs/InteractionBindings.md).
 
@@ -134,23 +181,32 @@ Assets/
     Art/                 # Shaders, material, texturer, props
     Audio/               # Musik, ljudeffekter, ambient loops
     Characters/          # Resurser för specifika varelser
-    Core/                # Delade runtime-system (XR-rigg, komfortprofil, recenter)
+    Core/                # Delade runtime-system
+      Runtime/           #   - GameFlowManager, ParkAttractionState
+      XR/                #   - XR-rigg, komfortprofil, recenter, ray-broker, haptics, performance-bootstrap
     Editor/              # Verktyg i editorn för produktion
     Features/            # Modulära spelsystem (en mapp per system)
       CherryGarden/      #   - runtime-kristallkula + trädtillväxt + kronbladsvirvel
-      Fireworks/         #   - magisk mörsare + uppskjutningsplatta + show
+      Fireworks/         #   - magisk mörsare + uppskjutningsplatta + punktmolns-show
       Growth/            #   - svampsåningszon + kultivering
-      LotusPond/         #   - 7-tons musiksequenser
-      Mounts/            #   - katt/hund/häst-ridkontroller + vägledningsfjärilar
-      ParticleVitality/  #   - kronblads-/pollenmagi
+      LotusPond/         #   - 7-tons diatonisk musiksequenser
+      Mounts/            #   - katt/hund/häst-ridkontroller, häst-kallelse, vägledningsfjärilar
+      ParticleVitality/  #   - rosa kristall: kronblads-/pollenmagi
       ScaleShift/        #   - skalning Normal/Liten/Stor
       Weather/           #   - väderförinställningar + regional respons
-    UI/                  # World-space-UI, anslagstavlor, lokalisering, systemmeny
+    UI/                  # World-space-UI: WelcomePanel, systemmeny, anslagstavlor, lokalisering (EN/ZH/SV)
     World/               # Mästerscen, terräng, regioner, delad världsgrafik
       Persistent/        #   - World_WonderlandPark.unity (produktionsscenen)
-      Regions/           #   - Innehåll per region (FlowerField, LotusPond, ...)
+      Regions/           #   - Innehåll per region
+        CatRoute/        #     (scenens root: Region_CatGarden)
+        FireworksClearing/  #  (scenens root: Region_FireworksClearing — vattenfall + fyrverkerier)
+        FlowerField/     #     (scenens root: Region_FlowerGarden — rosa kristall)
+        HumanEntry/      #     (staging-innehåll; entrén realiseras via UI/WelcomePanel)
+        LotusPond/       #     (scenens root: Region_LotusPond)
+        MushroomGrove/   #     (scenens root: Region_MushroomGrowth)
+        Terrain/         #     (terrängdelar)
       Shared/            #   - Belysning/ljud/material som återanvänds över parken
-Builds/Windows/          # Senast levererad Windows-build
+Builds/Windows/          # Senast levererad Windows-build (WONDERFULWORLD.exe)
 Docs/                    # Produktionsdokumentation (engelska)
 Packages/                # Unitys paketmanifest
 ProjectSettings/         # Unity-projektinställningar (Linear, SPI, IL2CPP m.m.)
@@ -162,7 +218,7 @@ Tredjepartsinnehåll (Toon Fantasy Nature, NamuFX, ithappy, XR Interaction Toolk
 
 ## Prestandamål
 
-Runtime-målet är Quest 3 över Link-kabel. **Bildtakt är viktigare än genomsnittlig FPS** — tappade bilder, tearing, svart flimmer eller skakighet behandlas som blockerande för release.
+Runtime-målet är Quest 3 över Link-kabel.
 
 | Mått | Minimum | Mål |
 | --- | --- | --- |
@@ -182,11 +238,11 @@ Arbetsflöde för profilering och triage: [`Docs/VR_PERFORMANCE_GUIDE.md`](Docs/
 
 All underhållen dokumentation ligger i [`Docs/`](Docs/) och är endast på engelska enligt teamets policy:
 
-- [Project Overview](Docs/PROJECT_OVERVIEW.md) — produktinramning, målplattform, aktuell scen, funktionsinventering
+- [Project Overview](Docs/PROJECT_OVERVIEW.md) — produktinramning, målplattform, aktuell scen, regioninventering
 - [Build & Run](Docs/BUILD_AND_RUN.md) — Unity-version, Quest 3 Link-arbetsflöde, smoke test-steg
 - [System Structure](Docs/SYSTEM_STRUCTURE.md) — mappstruktur, scenhierarki, kärnprefabs, runtime-system
-- [Interaction Bindings](Docs/InteractionBindings.md) — varje spelarvänd interaktion i produktionsscenen
-- [Cleanup & Standardization](Docs/CLEANUP_AND_STANDARDIZATION.md) — regler för hierarki, resurser, namngivning och dokumentation
+- [Interaction Bindings](Docs/InteractionBindings.md) — varje spelarvänd interaktion i produktionsscenen, korsverifierad mot skripten
+- [Cleanup & Standardisation](Docs/CLEANUP_AND_STANDARDIZATION.md) — regler för hierarki, resurser, namngivning och dokumentation
 - [Asset Reference Audit](Docs/Asset_Reference_Audit.md) — aktuell ögonblicksbild av externa beroenden
 - [VR Performance Guide](Docs/VR_PERFORMANCE_GUIDE.md) — profileringsflöde, målbudgetar, triage-steg
 - [Scale Shift Controller Flow](Docs/ScaleShiftCharacterControllerFlow.md) — säker `CharacterController`-mutationsordning vid skalbyte
@@ -238,8 +294,4 @@ Detta repo är produktionskällan för v1.0.0-leveransen. Innan du öppnar en pu
 
 ## Licens
 
-Projektets källkod och teamskapade resurser ägs av Wonderland-teamet. Tredjepartsresurser omfattas av sina respektive licenser — se varje leverantörsmapp under `Assets/` samt [Asset Reference Audit](Docs/Asset_Reference_Audit.md).
-
----
-
-*Skapat med omsorg för headsetet.*
+Släppt under [MIT-licensen](LICENSE). Tredjepartsresurser omfattas av sina respektive licenser — se varje leverantörsmapp under `Assets/` samt [Asset Reference Audit](Docs/Asset_Reference_Audit.md).

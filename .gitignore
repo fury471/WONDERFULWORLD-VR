@@ -23,6 +23,7 @@
 ExportedObj/
 .consulo/
 *.app/
+.claude/
 
 # Temp art browsing area (Sketchfab downloads to evaluate; cleaned up after final selection)
 [Aa]ssets/_TempArt/

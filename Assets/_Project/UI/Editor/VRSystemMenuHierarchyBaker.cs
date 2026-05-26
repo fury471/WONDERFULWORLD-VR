@@ -187,9 +187,9 @@ namespace Wonderland.UI.Editor
         private static void BuildLanguagePage(RectTransform page)
         {
             AddText(page, "LanguageTitle", "Language", "\u8bed\u8a00", "Spr\u00e5k", 34f, new Vector2(-250f, 170f), new Vector2(220f, 50f), TextAlignmentOptions.Left);
-            AddButton(page, "EnglishButton", "English", "\u82f1\u8bed", "Engelska", new Vector2(80f, 84f), new Vector2(440f, 54f), out _);
-            AddButton(page, "ChineseButton", "Chinese", "\u4e2d\u6587", "Kinesiska", new Vector2(80f, 18f), new Vector2(440f, 54f), out _);
-            AddButton(page, "SwedishButton", "Svenska", "\u745e\u5178\u8bed", "Svenska", new Vector2(80f, -48f), new Vector2(440f, 54f), out _);
+            AddButton(page, "EnglishButton", "English", "English", "English", new Vector2(80f, 84f), new Vector2(440f, 54f), out _);
+            AddButton(page, "ChineseButton", "\u4e2d\u6587", "\u4e2d\u6587", "\u4e2d\u6587", new Vector2(80f, 18f), new Vector2(440f, 54f), out _);
+            AddButton(page, "SwedishButton", "Svenska", "Svenska", "Svenska", new Vector2(80f, -48f), new Vector2(440f, 54f), out _);
             AddButton(page, "LanguageBackButton", "Back", "\u8fd4\u56de", "Tillbaka", new Vector2(80f, -152f), new Vector2(210f, 48f));
             AddButton(page, "LanguageCancelButton", "Cancel", "\u53d6\u6d88", "Avbryt", new Vector2(310f, -152f), new Vector2(210f, 48f));
         }
