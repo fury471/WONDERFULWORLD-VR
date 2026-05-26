@@ -16,8 +16,9 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
     private const float TargetFixedDeltaTime = 1f / 90f;
     private const float MaximumDeltaTime = 1f / 30f;
     private const float PreferredRefreshRate = 90f;
-    private const float MaximumEyeTextureScale = 1f;
+    private const float MaximumEyeTextureScale = 0.9f;
     private const int RefreshRateRetryFrames = 180;
+    private const float FoveatedRenderingLevel = 0.85f;
 
     private static readonly List<XRDisplaySubsystem> xrDisplays = new List<XRDisplaySubsystem>(2);
     private static readonly MethodInfo requestDisplayRefreshRateMethod = typeof(XRDisplaySubsystem).GetMethod(
@@ -161,6 +162,25 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
         if (XRSettings.eyeTextureResolutionScale > MaximumEyeTextureScale)
         {
             XRSettings.eyeTextureResolutionScale = MaximumEyeTextureScale;
+        }
+
+        ApplyFoveatedRenderingLevel();
+    }
+
+    private static void ApplyFoveatedRenderingLevel()
+    {
+        xrDisplays.Clear();
+        SubsystemManager.GetSubsystems(xrDisplays);
+        for (int i = 0; i < xrDisplays.Count; i++)
+        {
+            XRDisplaySubsystem display = xrDisplays[i];
+            if (display == null || !display.running)
+            {
+                continue;
+            }
+
+            display.foveatedRenderingLevel = FoveatedRenderingLevel;
+            display.foveatedRenderingFlags = XRDisplaySubsystem.FoveatedRenderingFlags.GazeAllowed;
         }
     }
 
