@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
@@ -6,6 +7,7 @@ using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 using UnityEngine.XR;
+using UnityEngine.XR.Management;
 
 public sealed class PCVRPerformanceBootstrap : MonoBehaviour
 {
@@ -28,6 +30,7 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
 
     private static bool initialized;
     private static bool logged;
+    private static bool xrInitialized;
 
     private int refreshRateAttempts;
 
@@ -64,6 +67,35 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
     private void Start()
     {
         ApplySceneCameraSettings();
+        StartCoroutine(InitializeXRDeferred());
+    }
+
+    private IEnumerator InitializeXRDeferred()
+    {
+        if (xrInitialized)
+        {
+            yield break;
+        }
+        xrInitialized = true;
+
+        // Defer one frame so splash + first-scene Awake finish before OpenXR
+        // session transitions. Initializing alongside them caused UnityPlayer
+        // to crash on cold-start when the headset was already worn.
+        yield return null;
+
+        XRManagerSettings manager = XRGeneralSettings.Instance != null
+            ? XRGeneralSettings.Instance.Manager
+            : null;
+        if (manager != null && manager.activeLoader == null)
+        {
+            manager.InitializeLoaderSync();
+            if (manager.activeLoader != null)
+            {
+                manager.StartSubsystems();
+            }
+        }
+
+        ApplyXRRuntimeSettings();
     }
 
     private void Update()
@@ -89,6 +121,7 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
     {
         ApplyFramePacingSettings();
         ApplySceneCameraSettings();
+        ApplyXRRuntimeSettings();
     }
 
     private static void ApplyFramePacingSettings()
@@ -105,11 +138,6 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
             Time.maximumDeltaTime = MaximumDeltaTime;
         }
 
-        if (XRSettings.eyeTextureResolutionScale > MaximumEyeTextureScale)
-        {
-            XRSettings.eyeTextureResolutionScale = MaximumEyeTextureScale;
-        }
-
         if (!logged)
         {
             logged = true;
@@ -118,6 +146,21 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
                 $"Quality={QualitySettings.names[QualitySettings.GetQualityLevel()]}, " +
                 "vSync=0, targetFrameRate=-1, renderFrameInterval=1, " +
                 $"fixedDeltaTime={Time.fixedDeltaTime:0.0000}, maxDeltaTime={Time.maximumDeltaTime:0.0000}.");
+        }
+    }
+
+    private static void ApplyXRRuntimeSettings()
+    {
+        // Only touch XRSettings after the loader is active. Writing to
+        // eyeTextureResolutionScale during the OpenXR session cold-start
+        // (UNKNOWN->FOCUSED) is the race that crashed UnityPlayer.
+        if (!XRSettings.isDeviceActive)
+        {
+            return;
+        }
+        if (XRSettings.eyeTextureResolutionScale > MaximumEyeTextureScale)
+        {
+            XRSettings.eyeTextureResolutionScale = MaximumEyeTextureScale;
         }
     }
 
