@@ -115,14 +115,14 @@ namespace Wonderland.UI.Editor
             AddLabel(labels, languageLabel, "Language", "\u8bed\u8a00", "Spr\u00e5k");
 
             englishButton = CreateButton("EnglishButton", root, "English", NormalButtonColor, DarkTextColor, 22f);
-            chineseButton = CreateButton("ChineseButton", root, "Chinese", NormalButtonColor, DarkTextColor, 22f);
+            chineseButton = CreateButton("ChineseButton", root, "\u4e2d\u6587", NormalButtonColor, DarkTextColor, 22f);
             swedishButton = CreateButton("SwedishButton", root, "Svenska", NormalButtonColor, DarkTextColor, 22f);
             SetAnchored(englishButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(-128f, 132f), new Vector2(150f, 42f));
             SetAnchored(chineseButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(38f, 132f), new Vector2(150f, 42f));
             SetAnchored(swedishButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(204f, 132f), new Vector2(150f, 42f));
-            AddLabel(labels, englishButton.GetComponentInChildren<TMP_Text>(true), "English", "\u82f1\u8bed", "Engelska");
-            AddLabel(labels, chineseButton.GetComponentInChildren<TMP_Text>(true), "Chinese", "\u4e2d\u6587", "Kinesiska");
-            AddLabel(labels, swedishButton.GetComponentInChildren<TMP_Text>(true), "Svenska", "\u745e\u5178\u8bed", "Svenska");
+            AddLabel(labels, englishButton.GetComponentInChildren<TMP_Text>(true), "English", "English", "English");
+            AddLabel(labels, chineseButton.GetComponentInChildren<TMP_Text>(true), "\u4e2d\u6587", "\u4e2d\u6587", "\u4e2d\u6587");
+            AddLabel(labels, swedishButton.GetComponentInChildren<TMP_Text>(true), "Svenska", "Svenska", "Svenska");
 
             startButton = CreateButton("StartButton", root, "Start Exploring", PrimaryButtonColor, Color.white, 28f);
             SetAnchored(startButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0f, 58f), new Vector2(330f, 58f));

@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
+using UnityEngine.SceneManagement;
 
 [DefaultExecutionOrder(-50)]
 [DisallowMultipleComponent]
@@ -123,6 +124,70 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
         CacheTargets();
         PrepareCherryGarden();
         CreateOrbIfNeeded();
+        ResetRuntimeState();
+    }
+
+    public void ResetRuntimeState()
+    {
+        StopAllCoroutines();
+        growthAudioRoutine = null;
+        StopGrowthAudio(true);
+
+        activated = false;
+        hovering = false;
+        rightTriggerLastFrame = false;
+
+        CacheTargets();
+        PrepareCherryGarden();
+        CreateOrbIfNeeded();
+
+        if (orbRoot == null)
+        {
+            return;
+        }
+
+        orbRoot.SetActive(true);
+        baseOrbPosition = ResolveOrbPosition();
+        baseOrbScale = Vector3.one * (orbRadius * 2f);
+        orbRoot.transform.position = baseOrbPosition;
+        orbRoot.transform.localScale = baseOrbScale;
+
+        SetMaterialColor(orbMaterial, orbColor, emissionIntensity);
+        SetMaterialColor(haloMaterial, new Color(1f, 0.78f, 0.94f, 0.52f), emissionIntensity * 2.85f);
+
+        if (orbLight != null)
+        {
+            orbLight.color = emissionColor;
+            orbLight.intensity = pointLightIntensity;
+            orbLight.range = pointLightRange;
+        }
+
+        orbRenderers = orbRoot.GetComponentsInChildren<Renderer>(true);
+        orbColliders = orbRoot.GetComponentsInChildren<Collider>(true);
+        if (orbRenderers != null)
+        {
+            for (int i = 0; i < orbRenderers.Length; i++)
+            {
+                if (orbRenderers[i] != null)
+                {
+                    orbRenderers[i].enabled = true;
+                }
+            }
+        }
+
+        if (orbColliders != null)
+        {
+            for (int i = 0; i < orbColliders.Length; i++)
+            {
+                if (orbColliders[i] != null)
+                {
+                    orbColliders[i].enabled = true;
+                }
+            }
+        }
+
+        interactionFeedback?.SetInteractable(true);
+        interactionFeedback?.SetHovered(false, null, false);
     }
 
     public void Activate()
@@ -662,11 +727,37 @@ public sealed class CherryGardenCrystalOrbTrigger : MonoBehaviour
 
 public static class CherryGardenCrystalOrbBootstrap
 {
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void Install()
+    private static bool sceneLoadHookRegistered;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void RegisterSceneLoadedHook()
     {
-        if (Object.FindFirstObjectByType<CherryGardenCrystalOrbTrigger>() != null)
+        if (sceneLoadHookRegistered)
         {
+            return;
+        }
+
+        SceneManager.sceneLoaded += HandleSceneLoaded;
+        sceneLoadHookRegistered = true;
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void InstallAfterInitialSceneLoad()
+    {
+        InstallOrReset();
+    }
+
+    private static void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        InstallOrReset();
+    }
+
+    private static void InstallOrReset()
+    {
+        CherryGardenCrystalOrbTrigger existing = Object.FindFirstObjectByType<CherryGardenCrystalOrbTrigger>(FindObjectsInactive.Include);
+        if (existing != null)
+        {
+            existing.ResetRuntimeState();
             return;
         }
 

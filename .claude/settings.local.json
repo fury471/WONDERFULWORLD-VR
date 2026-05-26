@@ -8,7 +8,21 @@
       "Bash(xargs grep -l \"UniversalRendererData\\\\|UniversalAdditionalCameraData\\\\|RenderFeature\\\\|m_RendererFeatures\\\\|ScriptableRendererData\")",
       "Bash(git -C E:/Projects/WONDERFULWORLD remote -v)",
       "Bash(git -C E:/Projects/WONDERFULWORLD tag --sort=-creatordate)",
-      "Bash(git -C E:/Projects/WONDERFULWORLD show --stat f4b24c3)"
+      "Bash(git -C E:/Projects/WONDERFULWORLD show --stat f4b24c3)",
+      "Bash(awk 'NR==110980,NR==111100' E:/Projects/WONDERFULWORLD/Assets/_Project/World/Persistent/World_WonderlandPark.unity)",
+      "Bash(awk 'NR==125890,NR==125930' E:/Projects/WONDERFULWORLD/Assets/_Project/World/Persistent/World_WonderlandPark.unity)",
+      "Bash(awk 'NR==111060,NR==111100' E:/Projects/WONDERFULWORLD/Assets/_Project/World/Persistent/World_WonderlandPark.unity)",
+      "Bash(awk 'NR==30398,NR==30450' E:/Projects/WONDERFULWORLD/Assets/_Project/World/Persistent/World_WonderlandPark.unity)",
+      "Bash(awk 'NR==30364,NR==30400' E:/Projects/WONDERFULWORLD/Assets/_Project/World/Persistent/World_WonderlandPark.unity)",
+      "Bash(git -C E:/Projects/WONDERFULWORLD lfs ls-files)",
+      "PowerShell($path='E:\\\\Projects\\\\WONDERFULWORLD\\\\Assets\\\\Toon Fantasy Nature\\\\Models\\\\TFF_Wooden_Bridge_01A.fbx'; [System.IO.FileInfo]::new\\($path\\).Length)",
+      "Bash(grep -cE \"^\\\\s*\\\\{$\" \"E:/Projects/WONDERFULWORLD/Assets/_Project/Features/Mounts/Runtime/QuestSwingRideController.cs\")",
+      "Bash(grep -cE \"^\\\\s*\\\\}$\" \"E:/Projects/WONDERFULWORLD/Assets/_Project/Features/Mounts/Runtime/QuestSwingRideController.cs\")",
+      "Bash(python -c \"from PIL import Image; img=Image.open\\('Assets/_Project/Sandbox/Wenao/firework/KTK_FireWorks_Effects_Volume1/Textures/par_1.tga'\\); print\\('par_1.tga:',img.size, img.mode\\)\")",
+      "Bash(python -c \"from PIL import Image; img=Image.open\\('Assets/_Project/Sandbox/Wenao/firework/KTK_FireWorks_Effects_Volume1/Textures/par_2.png'\\); print\\('par_2.png:',img.size, img.mode\\)\")",
+      "Bash(python -c \"from PIL import Image; img=Image.open\\('Assets/_Project/Sandbox/Wenao/firework/KTK_FireWorks_Effects_Volume1/Textures/par_3.tga'\\); print\\('par_3.tga:',img.size, img.mode\\)\")",
+      "Bash(python -m pip install Pillow)",
+      "Bash(python -c ' *)"
     ]
   }
 }

@@ -11,6 +11,12 @@ public class ButterflyAutoTriggerV2 : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        if (isInside && !triggerOnlyOnce && butterflyFlight != null && butterflyFlight.IsReadyForTrigger)
+        {
+            isInside = false;
+            hasTriggered = false;
+        }
+
         if (isInside)
         {
             return;

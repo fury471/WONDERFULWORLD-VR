@@ -4,7 +4,7 @@ using UnityEngine;
 public class MountSettings_SO : ScriptableObject
 {
     [Header("Movement")]
-    public float autoRideSpeed = 2.0f;
+    public float autoRideSpeed = 3.125f;
     public float rotateSpeed = 180f;
     public float reachDistance = 0.25f;
 

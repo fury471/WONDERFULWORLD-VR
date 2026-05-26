@@ -1,8 +1,8 @@
 ﻿# Production Audit
 
-- Project: Butterfly House / Wonderful World
+- Project: Wonderland (internal name *Wonderful World*)
 - Main scene: `Assets/_Project/World/Persistent/World_WonderlandPark.unity`
-- Unity version: `6000.3.11f1`
+- Unity version: `6000.3.12f1`
 - Target runtime: PC VR through Quest 3 Link, OpenXR, URP
 
 ## Scene Hierarchy
@@ -26,7 +26,7 @@ Recommended root grouping:
 - `XR`: the production XR Origin and controller rig only.
 - `Lighting`: directional light, sky, probes, volumes, and time-of-day atmosphere.
 - `Terrain`: terrain tiles, terrain data instances, and terrain-only colliders.
-- `World_Regions`: Human Entry, Flower Garden, Lotus Pond, Cat Garden, Fireworks Clearing, Mushroom Growth, Cherry Garden.
+- `World_Regions`: Flower Garden (pink crystal), Lotus Pond, Cat Garden (3 mounts), Fireworks Clearing (with waterfall), Mushroom Growth, Cherry Garden. The entry experience is delivered via `UI/WelcomePanel`, not as a separate region root.
 - `Decorations`: world art that is not owned by a specific region.
 - `UI`: world-space UI, welcome boards, notice board overlay, and system menu.
 - `Debug`: temporary disabled helpers only; delete it when empty.
@@ -252,7 +252,7 @@ Run this checklist after each cleanup or optimization batch:
 
 1. Open `World_WonderlandPark.unity` in Unity with no missing-script warnings.
 2. Enter Play Mode and confirm XR Origin, teleport, snap turn, recenter, system menu, notice boards, audio, and onboarding still work.
-3. Walk each region: Human Entry, Flower Garden, Lotus Pond, Cat Garden, Fireworks Clearing, Mushroom Growth, Cherry Garden.
+3. Walk through `WelcomePanel`, then the six region roots: `Region_FlowerGarden`, `Region_LotusPond`, `Region_CatGarden`, `Region_FireworksClearing`, `Region_MushroomGrowth`, `Region_CherryGarden`.
 4. Use Unity Profiler and Frame Debugger in a headset-linked Play Mode session.
 5. Use OVR Metrics Tool or OpenXR Toolkit to confirm stable 72/90 Hz frame pacing through Quest 3 Link.
 6. Specifically inspect skybox, camera clear flags, near/far clipping, transparent effects, render textures, post volumes, and custom shaders if black blocks or flicker are visible.

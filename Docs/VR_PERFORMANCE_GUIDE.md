@@ -14,7 +14,7 @@ Frame pacing matters more than average FPS. Any dropped frames, compositor misse
 
 Static project audit found:
 
-- Unity version: `6000.3.11f1`.
+- Unity version: `6000.3.12f1`.
 - URP version: `17.3.0`.
 - Active build scene: `World_WonderlandPark.unity`.
 - Project stereo rendering path: Single Pass Instanced.

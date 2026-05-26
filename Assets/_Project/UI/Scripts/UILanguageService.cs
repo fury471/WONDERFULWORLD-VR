@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 
 namespace Wonderland.UI
@@ -13,6 +14,9 @@ namespace Wonderland.UI
 
         [SerializeField] private UILanguage defaultLanguage = UILanguage.English;
         [SerializeField] private bool persistSelection = true;
+
+        private Coroutine deferredSaveCoroutine;
+        private bool hasPendingSave;
 
         public UILanguage CurrentLanguage { get; private set; }
 
@@ -31,6 +35,28 @@ namespace Wonderland.UI
         private void Start()
         {
             LanguageChanged?.Invoke(CurrentLanguage);
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+            {
+                FlushPendingSave();
+                Instance = null;
+            }
+        }
+
+        private void OnApplicationPause(bool pauseStatus)
+        {
+            if (pauseStatus)
+            {
+                FlushPendingSave();
+            }
+        }
+
+        private void OnApplicationQuit()
+        {
+            FlushPendingSave();
         }
 
         public void SetEnglish()
@@ -60,7 +86,7 @@ namespace Wonderland.UI
             if (persistSelection)
             {
                 PlayerPrefs.SetInt(PlayerPrefsKey, (int)CurrentLanguage);
-                PlayerPrefs.Save();
+                ScheduleDeferredSave();
             }
 
             LanguageChanged?.Invoke(CurrentLanguage);
@@ -80,6 +106,34 @@ namespace Wonderland.UI
 
             int saved = PlayerPrefs.GetInt(PlayerPrefsKey, (int)defaultLanguage);
             return Enum.IsDefined(typeof(UILanguage), saved) ? (UILanguage)saved : defaultLanguage;
+        }
+
+        private void ScheduleDeferredSave()
+        {
+            hasPendingSave = true;
+            if (deferredSaveCoroutine == null && isActiveAndEnabled)
+            {
+                deferredSaveCoroutine = StartCoroutine(SaveAfterInteractionSettles());
+            }
+        }
+
+        private IEnumerator SaveAfterInteractionSettles()
+        {
+            yield return null;
+            yield return new WaitForSecondsRealtime(0.25f);
+            FlushPendingSave();
+            deferredSaveCoroutine = null;
+        }
+
+        private void FlushPendingSave()
+        {
+            if (!persistSelection || !hasPendingSave)
+            {
+                return;
+            }
+
+            PlayerPrefs.Save();
+            hasPendingSave = false;
         }
     }
 }

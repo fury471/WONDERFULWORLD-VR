@@ -18,10 +18,10 @@ public class CatIdlePaceV2 : MonoBehaviour
     [SerializeField] private bool projectMotionToGround = true;
     [SerializeField] private LayerMask groundMask = ~0;
     [SerializeField] private float groundProbeHeight = 3f;
-    [SerializeField] private float groundProbeDistance = 8f;
+    [SerializeField] private float groundProbeDistance = 12f;
     [SerializeField] private float groundOffset = 0f;
     [SerializeField] private float maxStepUp = 1.5f;
-    [SerializeField] private float maxStepDown = 3f;
+    [SerializeField] private float maxStepDown = 5f;
     [SerializeField] private bool alignToGroundNormal = true;
     [SerializeField] private Transform visualTiltRoot;
     [SerializeField] private float groundAlignSpeed = 240f;
@@ -38,6 +38,7 @@ public class CatIdlePaceV2 : MonoBehaviour
 
     private void Start()
     {
+        AutoAssignVisualTiltRoot();
         currentTarget = pointA;
     }
 
@@ -230,6 +231,26 @@ public class CatIdlePaceV2 : MonoBehaviour
             tiltRoot.rotation,
             targetRotation,
             Mathf.Max(0f, groundAlignSpeed) * Time.deltaTime);
+    }
+
+    private void AutoAssignVisualTiltRoot()
+    {
+        if (visualTiltRoot != null)
+        {
+            return;
+        }
+
+        if (kittyAnimator != null && kittyAnimator.transform != transform)
+        {
+            visualTiltRoot = kittyAnimator.transform;
+            return;
+        }
+
+        Renderer renderer = GetComponentInChildren<Renderer>(true);
+        if (renderer != null && renderer.transform != transform)
+        {
+            visualTiltRoot = renderer.transform;
+        }
     }
 
     private static float HorizontalDistance(Vector3 a, Vector3 b)

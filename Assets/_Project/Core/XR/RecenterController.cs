@@ -60,6 +60,7 @@ public sealed class RecenterController : MonoBehaviour
     private HapticImpulsePlayer rightHaptics;
     private Transform rightControllerOrigin;
     private CatRideControllerV2[] cachedRideControllers;
+    private QuestSwingRideController[] cachedSwingControllers;
     private ScaleManager cachedScaleManager;
     private bool actionHeldLastFrame;
     private bool secondaryHeldLastFrame;
@@ -165,14 +166,15 @@ public sealed class RecenterController : MonoBehaviour
         CacheReferences(force: true);
 
         CatRideControllerV2 activeRide = routeToMountWhileRiding ? GetActiveRide() : null;
+        QuestSwingRideController activeSwing = routeToMountWhileRiding ? GetActiveSwing() : null;
 
         if (useBlink && transitionController != null)
         {
-            yield return StartCoroutine(BlinkAndApply(activeRide));
+            yield return StartCoroutine(BlinkAndApply(activeRide, activeSwing));
         }
         else
         {
-            ApplyRecenter(activeRide);
+            ApplyRecenter(activeRide, activeSwing);
         }
 
         isRecentering = false;
@@ -180,15 +182,29 @@ public sealed class RecenterController : MonoBehaviour
         ResetPressState();
     }
 
-    private IEnumerator BlinkAndApply(CatRideControllerV2 activeRide)
+    private IEnumerator BlinkAndApply(CatRideControllerV2 activeRide, QuestSwingRideController activeSwing)
     {
         float outAndHold = Mathf.Max(0.05f, blinkDuration * 0.45f);
         yield return StartCoroutine(transitionController.PlayBlink(outAndHold, targetCamera));
-        ApplyRecenter(activeRide);
+        ApplyRecenter(activeRide, activeSwing);
     }
 
-    private void ApplyRecenter(CatRideControllerV2 activeRide)
+    private void ApplyRecenter(CatRideControllerV2 activeRide, QuestSwingRideController activeSwing)
     {
+        // Swing takes precedence: while the player is on the swing, the cat-ride routing must
+        // NOT fire ApplyRecenterPose — that path lifts the rig because the capsule-recovery
+        // raycast sees the swing's frame collider as "ground" and treats the seated player as
+        // sunk into geometry.
+        if (activeSwing != null)
+        {
+            activeSwing.RecenterMountedView();
+            if (logDebug)
+            {
+                Debug.Log($"[Recenter] Routed to swing: {activeSwing.name}", this);
+            }
+            return;
+        }
+
         if (activeRide != null)
         {
             activeRide.RecenterMountedView();
@@ -528,6 +544,25 @@ public sealed class RecenterController : MonoBehaviour
         return null;
     }
 
+    private QuestSwingRideController GetActiveSwing()
+    {
+        if (cachedSwingControllers == null || cachedSwingControllers.Length == 0)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < cachedSwingControllers.Length; i++)
+        {
+            QuestSwingRideController controller = cachedSwingControllers[i];
+            if (controller != null && controller.IsMounted)
+            {
+                return controller;
+            }
+        }
+
+        return null;
+    }
+
     private bool IsScaleTransitionActive()
     {
         return cachedScaleManager != null && cachedScaleManager.IsTransitioning;
@@ -641,6 +676,17 @@ public sealed class RecenterController : MonoBehaviour
 #endif
         }
 
+        if (cachedSwingControllers == null || cachedSwingControllers.Length == 0)
+        {
+#if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
+            cachedSwingControllers = FindObjectsByType<QuestSwingRideController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+#pragma warning disable CS0618
+            cachedSwingControllers = FindObjectsOfType<QuestSwingRideController>(true);
+#pragma warning restore CS0618
+#endif
+        }
+
         if (cachedScaleManager == null)
         {
 #if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
@@ -665,6 +711,8 @@ public sealed class RecenterController : MonoBehaviour
             rightHaptics == null ||
             cachedRideControllers == null ||
             cachedRideControllers.Length == 0 ||
+            cachedSwingControllers == null ||
+            cachedSwingControllers.Length == 0 ||
             cachedScaleManager == null;
 
         if (!needsRefresh)

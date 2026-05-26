@@ -167,14 +167,14 @@ namespace WonderfulWorld.Audio.Editor
                     priority: 188),
                 HorseFootsteps = CreateCue(
                     $"{CueRoot}/WW_Footsteps_Horse.asset",
-                    new[] { LoadClip(HorseWalkClip), LoadClip(HorseConcreteClip) },
-                    volume: 0.25f,
+                    new[] { LoadClip(HorseWalkClip), LoadClip(HorseConcreteClip), LoadClip(HorseConcreteClip) },
+                    volume: 0.4f,
                     loop: false,
                     spatialBlend: 1f,
                     minDistance: 1.6f,
                     maxDistance: 28f,
-                    randomPitchRange: 0.05f,
-                    randomVolumeRange: 0.12f,
+                    randomPitchRange: 0.035f,
+                    randomVolumeRange: 0.08f,
                     priority: 185),
                 CatVoice = CreateCue(
                     $"{CueRoot}/WW_Voice_Cat.asset",
@@ -651,11 +651,11 @@ namespace WonderfulWorld.Audio.Editor
             {
                 case MountProfile.Horse:
                     serializedFootstep.FindProperty("minimumSpeed").floatValue = 0.12f;
-                    serializedFootstep.FindProperty("walkStepInterval").floatValue = 0.46f;
-                    serializedFootstep.FindProperty("runStepInterval").floatValue = 0.28f;
-                    serializedFootstep.FindProperty("speedForRunInterval").floatValue = 4.8f;
-                    serializedFootstep.FindProperty("volumeScale").floatValue = 0.78f;
-                    serializedFootstep.FindProperty("footstepClipWindowSeconds").floatValue = 0.28f;
+                    serializedFootstep.FindProperty("walkStepInterval").floatValue = 0.3f;
+                    serializedFootstep.FindProperty("runStepInterval").floatValue = 0.18f;
+                    serializedFootstep.FindProperty("speedForRunInterval").floatValue = 7.5f;
+                    serializedFootstep.FindProperty("volumeScale").floatValue = 1f;
+                    serializedFootstep.FindProperty("footstepClipWindowSeconds").floatValue = 0.15f;
                     break;
                 case MountProfile.Dog:
                     serializedFootstep.FindProperty("minimumSpeed").floatValue = 0.1f;

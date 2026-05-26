@@ -26,17 +26,13 @@ public class CatRideAutoTriggerV2 : MonoBehaviour
             return;
         }
 
-        if (controller == null)
-        {
-            controller = hitController;
-        }
-
-        if (hitController != controller)
+        CatRideControllerV2 targetController = controller != null ? controller : hitController;
+        if (hitController != targetController)
         {
             return;
         }
 
-        bool started = controller.BeginAutoRide();
+        bool started = targetController.BeginAutoRide();
         if (!started)
         {
             return;
