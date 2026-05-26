@@ -16,7 +16,7 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
     private const float TargetFixedDeltaTime = 1f / 90f;
     private const float MaximumDeltaTime = 1f / 30f;
     private const float PreferredRefreshRate = 90f;
-    private const float MaximumEyeTextureScale = 0.9f;
+    private const float MaximumEyeTextureScale = 0.8f;
     private const int RefreshRateRetryFrames = 180;
     private const float FoveatedRenderingLevel = 0.85f;
 
