@@ -80,6 +80,7 @@ namespace Wonderland.UI
             }
 
             ApplyFont();
+            string selectedText = fallbackText;
 
             if (localizedTexts != null)
             {
@@ -88,13 +89,14 @@ namespace Wonderland.UI
                     LocalizedTextEntry entry = localizedTexts[i];
                     if (entry.language == language && !string.IsNullOrEmpty(entry.text))
                     {
-                        targetText.text = entry.text;
-                        return;
+                        selectedText = entry.text;
+                        break;
                     }
                 }
             }
 
-            targetText.text = fallbackText;
+            EnsureCharacters(selectedText);
+            targetText.text = selectedText;
         }
 
         private void ApplyFont()
@@ -113,6 +115,17 @@ namespace Wonderland.UI
             {
                 targetText.font = originalFont;
             }
+        }
+
+        private void EnsureCharacters(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return;
+            }
+
+            TMP_FontAsset font = targetText != null ? targetText.font : null;
+            font?.TryAddCharacters(value, out _, false);
         }
     }
 }

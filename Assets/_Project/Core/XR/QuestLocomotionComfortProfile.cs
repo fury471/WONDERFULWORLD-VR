@@ -16,6 +16,9 @@ using UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets;
 public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 {
     public static event System.Action<bool, float, float> ComfortVignetteChanged;
+    public const string LocomotionModePrefKey = "WW.Settings.LocomotionMode";
+    public const string TurnModePrefKey = "WW.Settings.TurnMode";
+    public const string VignetteLevelPrefKey = "WW.Settings.ComfortVignetteLevel";
 
     public enum MovementMode
     {
@@ -37,6 +40,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     [SerializeField] private TurnMode turnMode = TurnMode.Snap;
     [SerializeField, Min(0.1f)] private float smoothMoveSpeed = 1.6f;
     [SerializeField, Min(1f)] private float smoothTurnSpeed = 45f;
+    [SerializeField] private bool loadSavedPreferencesOnAwake = true;
 
     [Header("Controller ownership")]
     [SerializeField] private ControllerInputActionManager leftController = null;
@@ -110,6 +114,7 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     private int lastInstalledTeleportAreaCount;
     private float suppressRightHandTurnUntil;
     private bool runtimeLocomotionLocked;
+    private bool savedPreferencesLoaded;
 
     public int lastTeleportSurfaceInstallCount => lastInstalledTeleportAreaCount;
 
@@ -201,12 +206,14 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
 
     private void Awake()
     {
+        LoadSavedPreferences(applyProfile: false);
         ApplyProfile();
     }
 
     private void OnEnable()
     {
         SceneManager.sceneLoaded += OnSceneLoaded;
+        LoadSavedPreferences(applyProfile: false);
         ApplyProfile();
     }
 
@@ -223,6 +230,45 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     private void NotifyComfortVignetteChanged()
     {
         ComfortVignetteChanged?.Invoke(comfortVignetteEnabled, comfortVignetteStrength, ComfortVignetteAperture);
+    }
+
+    public bool LoadSavedPreferences(bool force = false, bool applyProfile = true)
+    {
+        if (!force && (!loadSavedPreferencesOnAwake || savedPreferencesLoaded))
+        {
+            return false;
+        }
+
+        savedPreferencesLoaded = true;
+        bool vignetteChanged = false;
+
+        if (TryReadEnumPref(LocomotionModePrefKey, out MovementMode savedMovementMode))
+        {
+            movementMode = savedMovementMode;
+        }
+
+        if (TryReadEnumPref(TurnModePrefKey, out TurnMode savedTurnMode))
+        {
+            turnMode = savedTurnMode;
+        }
+
+        if (PlayerPrefs.HasKey(VignetteLevelPrefKey))
+        {
+            int savedLevel = Mathf.Clamp(PlayerPrefs.GetInt(VignetteLevelPrefKey), 0, 3);
+            vignetteChanged = ApplySavedVignetteLevel(savedLevel);
+        }
+
+        if (applyProfile)
+        {
+            ApplyProfile();
+        }
+
+        if (vignetteChanged)
+        {
+            NotifyComfortVignetteChanged();
+        }
+
+        return true;
     }
 
     private void LateUpdate()
@@ -847,6 +893,45 @@ public sealed class QuestLocomotionComfortProfile : MonoBehaviour
     private static bool ContainsToken(string value, string token)
     {
         return value != null && value.IndexOf(token, System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool TryReadEnumPref<TEnum>(string key, out TEnum value)
+        where TEnum : struct, System.Enum
+    {
+        value = default;
+        if (!PlayerPrefs.HasKey(key))
+        {
+            return false;
+        }
+
+        int rawValue = PlayerPrefs.GetInt(key);
+        if (!System.Enum.IsDefined(typeof(TEnum), rawValue))
+        {
+            return false;
+        }
+
+        value = (TEnum)System.Enum.ToObject(typeof(TEnum), rawValue);
+        return true;
+    }
+
+    private bool ApplySavedVignetteLevel(int level)
+    {
+        bool previousEnabled = comfortVignetteEnabled;
+        float previousStrength = comfortVignetteStrength;
+
+        comfortVignetteEnabled = level > 0;
+        if (comfortVignetteEnabled)
+        {
+            comfortVignetteStrength = level == 1 ? 0.2f : level == 2 ? 0.5f : 0.85f;
+            float aperture = ComfortToVignetteAperture(comfortVignetteStrength);
+            teleportAperture = aperture;
+            turnAperture = aperture;
+            smoothMoveAperture = aperture;
+            smoothTurnAperture = aperture;
+        }
+
+        return previousEnabled != comfortVignetteEnabled ||
+               !Mathf.Approximately(previousStrength, comfortVignetteStrength);
     }
 
     private static string GetHierarchyPath(Transform target)

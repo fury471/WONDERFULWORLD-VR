@@ -26,6 +26,15 @@ public class CatIdlePaceV2 : MonoBehaviour
     [SerializeField] private Transform visualTiltRoot;
     [SerializeField] private float groundAlignSpeed = 240f;
     [SerializeField] private float maxGroundTiltAngle = 32f;
+    [SerializeField] private bool ignoreOtherRideablesForGroundProjection = true;
+
+    [Header("Crowd Avoidance")]
+    [SerializeField] private bool pauseWhenBlockedByOtherRideable = true;
+    [SerializeField] private LayerMask rideableAvoidanceMask = ~0;
+    [SerializeField, Min(0.05f)] private float rideableAvoidanceProbeRadius = 0.28f;
+    [SerializeField, Min(0f)] private float rideableAvoidanceProbeHeight = 0.35f;
+    [SerializeField, Min(0f)] private float rideableAvoidanceLookAhead = 0.35f;
+    [SerializeField, Min(0f)] private float rideableBlockedWaitSeconds = 0.2f;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = false;
@@ -33,6 +42,7 @@ public class CatIdlePaceV2 : MonoBehaviour
     private Transform currentTarget;
     private float waitTimer;
     private readonly RaycastHit[] groundHitBuffer = new RaycastHit[8];
+    private readonly RaycastHit[] avoidanceHitBuffer = new RaycastHit[8];
     private Vector3 lastGroundNormal = Vector3.up;
     private bool hasGroundNormal;
 
@@ -76,6 +86,14 @@ public class CatIdlePaceV2 : MonoBehaviour
         if (direction.sqrMagnitude > 0.0001f)
         {
             Vector3 horizontalStep = direction.normalized * Mathf.Min(paceSpeed * Time.deltaTime, direction.magnitude);
+            if (IsPathBlockedByOtherRideable(transform.position, horizontalStep))
+            {
+                hasGroundNormal = false;
+                waitTimer = Mathf.Max(waitTimer, rideableBlockedWaitSeconds);
+                SetIdleAnimation();
+                return;
+            }
+
             transform.position = ResolveGroundedPosition(transform.position + horizontalStep);
         }
 
@@ -156,7 +174,8 @@ public class CatIdlePaceV2 : MonoBehaviour
         {
             RaycastHit hit = groundHitBuffer[i];
             Collider hitCollider = hit.collider;
-            if (hitCollider == null || hitCollider.isTrigger || hitCollider.transform.IsChildOf(transform))
+            if (hitCollider == null || hitCollider.isTrigger || hitCollider.transform.IsChildOf(transform) ||
+                IsOtherRideableGroundCollider(hitCollider))
             {
                 continue;
             }
@@ -205,6 +224,76 @@ public class CatIdlePaceV2 : MonoBehaviour
         }
 
         return Vector3.Slerp(Vector3.up, normal, maxAngle / angle).normalized;
+    }
+
+    private bool IsPathBlockedByOtherRideable(Vector3 startPosition, Vector3 horizontalStep)
+    {
+        if (!pauseWhenBlockedByOtherRideable || horizontalStep.sqrMagnitude < 0.000001f)
+        {
+            return false;
+        }
+
+        Vector3 direction = horizontalStep;
+        direction.y = 0f;
+        if (direction.sqrMagnitude < 0.000001f)
+        {
+            return false;
+        }
+
+        float distance = direction.magnitude + rideableAvoidanceLookAhead;
+        Vector3 origin = startPosition + Vector3.up * rideableAvoidanceProbeHeight;
+        int hitCount = Physics.SphereCastNonAlloc(
+            origin,
+            rideableAvoidanceProbeRadius,
+            direction.normalized,
+            avoidanceHitBuffer,
+            distance,
+            rideableAvoidanceMask,
+            QueryTriggerInteraction.Ignore);
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider hitCollider = avoidanceHitBuffer[i].collider;
+            if (hitCollider == null || hitCollider.transform.IsChildOf(transform))
+            {
+                continue;
+            }
+
+            if (IsOtherRideableCollider(hitCollider))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsOtherRideableGroundCollider(Collider candidate)
+    {
+        return ignoreOtherRideablesForGroundProjection && IsOtherRideableCollider(candidate);
+    }
+
+    private bool IsOtherRideableCollider(Collider candidate)
+    {
+        if (candidate == null)
+        {
+            return false;
+        }
+
+        CatRideControllerV2 otherRideController = candidate.GetComponentInParent<CatRideControllerV2>();
+        if (otherRideController != null && otherRideController != rideController)
+        {
+            return true;
+        }
+
+        MountController legacyMount = candidate.GetComponentInParent<MountController>();
+        if (legacyMount != null && !candidate.transform.IsChildOf(transform))
+        {
+            return true;
+        }
+
+        QuestSwingRideController swingRide = candidate.GetComponentInParent<QuestSwingRideController>();
+        return swingRide != null && !candidate.transform.IsChildOf(transform);
     }
 
     private void AlignToGround()
