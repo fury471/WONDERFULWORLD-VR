@@ -89,10 +89,18 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
             : null;
         if (manager != null && manager.activeLoader == null)
         {
-            manager.InitializeLoaderSync();
-            if (manager.activeLoader != null)
+            try
             {
-                manager.StartSubsystems();
+                manager.InitializeLoaderSync();
+                if (manager.activeLoader != null)
+                {
+                    manager.StartSubsystems();
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[PCVR] XR initialization was skipped: {exception.Message}");
+                yield break;
             }
         }
 
@@ -169,6 +177,7 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
 
     private static void ApplyFoveatedRenderingLevel()
     {
+        bool canUseFoveatedRendering = CanUseFoveatedRendering();
         xrDisplays.Clear();
         SubsystemManager.GetSubsystems(xrDisplays);
         for (int i = 0; i < xrDisplays.Count; i++)
@@ -179,9 +188,23 @@ public sealed class PCVRPerformanceBootstrap : MonoBehaviour
                 continue;
             }
 
+            if (!canUseFoveatedRendering)
+            {
+                continue;
+            }
+
             display.foveatedRenderingLevel = FoveatedRenderingLevel;
             display.foveatedRenderingFlags = XRDisplaySubsystem.FoveatedRenderingFlags.GazeAllowed;
         }
+    }
+
+    private static bool CanUseFoveatedRendering()
+    {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+        return false;
+#else
+        return SystemInfo.foveatedRenderingCaps != FoveatedRenderingCaps.None;
+#endif
     }
 
     private static void ForcePerformanceQualityLevel()

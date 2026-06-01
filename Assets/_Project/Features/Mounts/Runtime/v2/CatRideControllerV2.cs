@@ -60,6 +60,8 @@ public class CatRideControllerV2 : MonoBehaviour
     [Header("Manual Ride")]
     [SerializeField] private float manualMoveSpeed = 6.25f;
     [SerializeField] private float manualTurnSpeed = 120f;
+    [SerializeField, Range(0.1f, 1.5f)] private float mountedCreatureSpeedScale = 0.85f;
+    [SerializeField, Range(0.1f, 1.5f)] private float mountedHorseSpeedScale = 0.7f;
     [SerializeField] private InputActionReference mountAction;
     [SerializeField] private InputActionReference dismountAction;
     [SerializeField] private InputActionReference moveAction;
@@ -114,6 +116,7 @@ public class CatRideControllerV2 : MonoBehaviour
     [SerializeField] private float rideGroundOffset = 0f;
     [SerializeField] private float rideMaxStepUp = 1.5f;
     [SerializeField] private float rideMaxStepDown = 5f;
+    [SerializeField] private bool ignoreOtherRideablesForGroundProjection = true;
     [SerializeField] private bool alignRideToGroundNormal = true;
     [SerializeField] private Transform rideVisualTiltRoot;
     [SerializeField] private float rideGroundAlignSpeed = 240f;
@@ -169,6 +172,7 @@ public class CatRideControllerV2 : MonoBehaviour
     private TunnelingVignetteController[] rideVignetteControllers;
     private RideVignetteProvider rideVignetteProvider;
     private bool rideVignetteActive;
+    private bool isHorseRide;
     private Vector3 mountedRigNeutralLocalPosition;
     private Quaternion mountedRigNeutralLocalRotation = Quaternion.identity;
     private Quaternion mountedRiderSlopeOffset = Quaternion.identity;
@@ -193,6 +197,7 @@ public class CatRideControllerV2 : MonoBehaviour
         CacheScaleManagerReference();
         CacheRideVignetteReferences();
         AutoAssignRideVisualTiltRoot();
+        isHorseRide = GetComponent<HorseSummonV2>() != null;
         SyncRideVignetteFromComfortProfile();
     }
 
@@ -1620,7 +1625,8 @@ public class CatRideControllerV2 : MonoBehaviour
         for (int i = 0; i < hitCount; i++)
         {
             Collider hitCollider = dismountGroundHitBuffer[i].collider;
-            if (hitCollider == null || IsSelfCollider(hitCollider) || hitCollider.transform.IsChildOf(transform))
+            if (hitCollider == null || IsSelfCollider(hitCollider) || hitCollider.transform.IsChildOf(transform) ||
+                IsOtherRideableCollider(hitCollider))
             {
                 continue;
             }
@@ -1728,7 +1734,7 @@ public class CatRideControllerV2 : MonoBehaviour
         moveDirection.y = 0f;
         if (moveDirection.sqrMagnitude > 0.0001f)
         {
-            MoveRideRoot(moveDirection.normalized * (moveInput * manualMoveSpeed * Time.deltaTime));
+            MoveRideRoot(moveDirection.normalized * (moveInput * ResolveRideSpeedScale() * manualMoveSpeed * Time.deltaTime));
             AlignRideToGround();
         }
 
@@ -1791,7 +1797,7 @@ public class CatRideControllerV2 : MonoBehaviour
         UpdateKittyAnimation(1f, true);
 
 
-        float autoSpeed = settings != null ? settings.autoRideSpeed : 2f;
+        float autoSpeed = (settings != null ? settings.autoRideSpeed : 2f) * ResolveRideSpeedScale();
         float rotateSpeed = settings != null ? settings.rotateSpeed : 180f;
         float reachDistance = settings != null ? settings.reachDistance : 0.25f;
 
@@ -2124,7 +2130,42 @@ public class CatRideControllerV2 : MonoBehaviour
             return true;
         }
 
-        return playerRigRoot != null && candidate.transform.IsChildOf(playerRigRoot.transform);
+        if (playerRigRoot != null && candidate.transform.IsChildOf(playerRigRoot.transform))
+        {
+            return true;
+        }
+
+        return ignoreOtherRideablesForGroundProjection && IsOtherRideableCollider(candidate);
+    }
+
+    private float ResolveRideSpeedScale()
+    {
+        return isHorseRide
+            ? Mathf.Max(0.1f, mountedHorseSpeedScale)
+            : Mathf.Max(0.1f, mountedCreatureSpeedScale);
+    }
+
+    private bool IsOtherRideableCollider(Collider candidate)
+    {
+        if (candidate == null)
+        {
+            return false;
+        }
+
+        CatRideControllerV2 rideController = candidate.GetComponentInParent<CatRideControllerV2>();
+        if (rideController != null && rideController != this)
+        {
+            return true;
+        }
+
+        MountController legacyMount = candidate.GetComponentInParent<MountController>();
+        if (legacyMount != null && !candidate.transform.IsChildOf(transform))
+        {
+            return true;
+        }
+
+        QuestSwingRideController swingRide = candidate.GetComponentInParent<QuestSwingRideController>();
+        return swingRide != null && !candidate.transform.IsChildOf(transform);
     }
 
     private static float HorizontalDistance(Vector3 a, Vector3 b)

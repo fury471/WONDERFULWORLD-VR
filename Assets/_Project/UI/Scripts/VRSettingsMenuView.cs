@@ -11,9 +11,9 @@ namespace Wonderland.UI
     [DisallowMultipleComponent]
     public sealed class VRSettingsMenuView : MonoBehaviour
     {
-        public const string LocomotionModePrefKey = "WW.Settings.LocomotionMode";
-        public const string TurnModePrefKey = "WW.Settings.TurnMode";
-        public const string VignetteLevelPrefKey = "WW.Settings.ComfortVignetteLevel";
+        public const string LocomotionModePrefKey = QuestLocomotionComfortProfile.LocomotionModePrefKey;
+        public const string TurnModePrefKey = QuestLocomotionComfortProfile.TurnModePrefKey;
+        public const string VignetteLevelPrefKey = QuestLocomotionComfortProfile.VignetteLevelPrefKey;
 
         private const string RuntimeRootName = "WW_RuntimeSettingsRoot";
         private const float ButtonHeight = 34f;
@@ -89,6 +89,7 @@ namespace Wonderland.UI
         private void OnEnable()
         {
             UILanguageService.LanguageChanged += RefreshLanguage;
+            ApplySavedPreferences();
             ShowSettingsPage();
         }
 
@@ -359,11 +360,7 @@ namespace Wonderland.UI
 
             if (locomotionProfile != null)
             {
-                locomotionProfile.SetMovementMode((QuestLocomotionComfortProfile.MovementMode)
-                    PlayerPrefs.GetInt(LocomotionModePrefKey, (int)locomotionProfile.CurrentMovementMode));
-                locomotionProfile.SetTurnMode((QuestLocomotionComfortProfile.TurnMode)
-                    PlayerPrefs.GetInt(TurnModePrefKey, (int)locomotionProfile.CurrentTurnMode));
-                ApplyVignetteLevel(PlayerPrefs.GetInt(VignetteLevelPrefKey, locomotionProfile.ComfortVignetteEnabled ? 2 : 0));
+                locomotionProfile.LoadSavedPreferences(force: true);
             }
 
             RefreshState();
